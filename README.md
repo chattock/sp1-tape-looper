@@ -116,16 +116,17 @@ whatever was there.
 
 ## 4. Audio quality, honestly
 
-- **Playback is full 48 kHz.** When you stack loops and play them back, they
-  play at full fidelity.
-- **Recording is mono and lo-fi-by-design.** The bottleneck is how fast the
-  SP-1's flash can be *written* while everything else is running, so the
-  recorder reduces the sample rate to stay reliable. It's plenty for sketching
-  ideas, layering parts, looping a podcast or a riff — think 4-track-cassette
-  character, not studio multitrack.
+- **Playback and recording are both 48 kHz, 16-bit.** Each track is recorded
+  and played at full rate — the only compromise versus the stock player is that
+  tracks are **mono** (the loop bus sums to mono before it's written).
+- **The mono-ness is a storage-bandwidth choice, not a quality cap.** Each loop
+  track is written to flash *independently* and in real time; mono keeps the
+  write rate well inside what the flash can sustain while it's also reading the
+  other three tracks back for playback. (Earlier RAM-only versions topped out
+  around 8 kHz — streaming straight to flash is what unlocked full rate.)
 - The flash occasionally pauses for its own internal housekeeping; the firmware
-  buffers ahead to hide this, so on a busy 4-track jam you may very rarely hear
-  a tiny hiccup. It is not damaging anything and the loops on disk are intact.
+  reads ahead to hide this, so on a busy 4-track jam you may very rarely hear a
+  tiny hiccup. Nothing is damaged and the loops on disk stay intact.
 
 ---
 
@@ -148,18 +149,30 @@ speaker and the headphones sound clean.
 
 **Threads (in priority order):**
 - **audio engine** — runs on every I2S block. It mixes the four playback tracks
-  plus the live USB input, and (when recording) decimates the live input into
-  the track being recorded. A soft limiter keeps stacked tracks from clipping.
+  plus the live USB input *for the output only*, and (when recording) writes the
+  live input into the one track being recorded. A soft limiter keeps stacked
+  tracks from clipping.
 - **streamer** — the only thing that touches the flash. It writes the
   in-progress recording out to flash and reads the playing tracks back into
   memory buffers, always staying ahead of the playhead.
 - **main loop** — reads the buttons and faders, drives the LEDs, handles power,
   and prints a one-line status to the USB-serial console.
 
-**Storage.** Loops live on the 4 GB flash, one region per track, laid out so
-writes line up with the flash's internal pages (much faster). The flash is
-driven through the nRF's hardware SPI engine at 16 MHz with a CRC check on every
-block — if a transfer is ever corrupted it's detected and retried automatically.
+**Storage — tracks are independent, there is no mixdown.** Each track gets its
+own fixed region on the flash (block 0 holds a small metadata header; then four
+regions per song, four songs). Recording a track writes **only that track's**
+audio to **its own** region; the other three are never rewritten — they're just
+being *read* for monitoring. Mixing happens live in the audio engine and is
+never stored. So an overdub is one region being written while three are read,
+all independent — no read-modify-write of a combined file. Each track is mono
+`int16` at 48 kHz. Regions are laid out so write bursts line up with the flash's
+8 KB internal pages, and the flash is driven through the nRF's hardware SPI
+engine at 16 MHz with a CRC check + retry on every block, so the bus is both
+fast and self-correcting.
+
+This is **not** the stock TE album/stem format — it's a simple purpose-built
+layout for live looping. (The 8 KB page-alignment trick was borrowed from TE's
+data-structure docs; the rest is its own thing.)
 
 **The status line.** If you open the SP-1's USB-serial port you'll see a line
 like:
