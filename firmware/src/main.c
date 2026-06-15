@@ -725,6 +725,11 @@ struct looptrk {
 	volatile uint8_t  starved;           /* ring underran; silent until half-refilled */
 	uint32_t flush_blk;                  /* streamer: next loop block to write */
 	uint32_t flush_mod;                  /* wrap the flush at this many blocks (overdub = loop len) */
+	/* AUTO-START-ON-SOUND: a take ARMS on the button hold and the recorder only
+	 * begins capturing at the first input past SOUND_THRESHOLD (or SOUND_WAIT_TICKS
+	 * as a fallback), so dead air before the first note never lands in the loop. */
+	volatile int32_t  wait_peak;
+	volatile uint32_t wait_ticks;
 };
 static struct looptrk trk[NTRK];
 
@@ -775,6 +780,72 @@ static volatile uint32_t g_play_speed_q16 = 65536; /* tape speed when playing (Q
 #define BPM_MIN 40
 #define BPM_MAX 120
 static volatile int g_play_bpm = 80;
+/* auto-start thresholds (loop-sample domain @ LOOP_RATE) */
+#define SOUND_THRESHOLD  1000              /* int16 level (~ -30 dBFS) */
+#define SOUND_WAIT_TICKS (LOOP_RATE * 4u)  /* ~4 s fallback */
+
+/* BEAT GRID for the LED pulse + MIDI clock — defaults to the nominal beat, but
+ * the first-track TEMPO ESTIMATOR replaces it with the detected beat period so
+ * the lights/clock track the music. It does NOT change playback speed/pitch
+ * (the rocker still does tape varispeed); it's the metronome grid only. */
+static volatile uint32_t g_beat_samples = BEAT_SAMPLES_L;
+static volatile int      g_det_bpm;       /* diag: last detected BPM (0 = none) */
+
+/* Lightweight integer onset/tempo estimator, run only over the FIRST take of an
+ * empty song. Envelope follower flags onsets (energy past half the running
+ * peak); the median inter-onset gap is the beat period, folded to a musical
+ * range. No FFT. */
+#define TEMPO_MAX_ONSETS 48u
+static struct {
+	int      active;
+	int32_t  env;
+	int32_t  peak;
+	int      above;
+	uint32_t last_onset;
+	uint32_t ioi[TEMPO_MAX_ONSETS];
+	uint32_t n;
+} g_tempo;
+static void tempo_reset(void)
+{
+	memset((void *)&g_tempo, 0, sizeof(g_tempo));
+	g_tempo.active = 1;
+}
+static inline void tempo_feed(int16_t sv, uint32_t pos)
+{
+	if (!g_tempo.active) return;
+	int32_t a = sv < 0 ? -sv : sv;
+	g_tempo.env += (a - g_tempo.env) >> 6;
+	if (g_tempo.env > g_tempo.peak) g_tempo.peak = g_tempo.env;
+	int32_t thr = g_tempo.peak >> 1;
+	if (!g_tempo.above && g_tempo.env > thr && thr > 200) {
+		g_tempo.above = 1;
+		if (g_tempo.last_onset && g_tempo.n < TEMPO_MAX_ONSETS) {
+			uint32_t d = pos - g_tempo.last_onset;
+			if (d > LOOP_RATE / 8u) g_tempo.ioi[g_tempo.n++] = d;
+		}
+		g_tempo.last_onset = pos;
+	} else if (g_tempo.above && g_tempo.env < (thr * 3 >> 2)) {
+		g_tempo.above = 0;
+	}
+}
+static void tempo_finish(void)
+{
+	g_tempo.active = 0;
+	if (g_tempo.n < 2u) return;
+	for (uint32_t i = 1; i < g_tempo.n; i++) {
+		uint32_t v = g_tempo.ioi[i]; int j = (int)i - 1;
+		while (j >= 0 && g_tempo.ioi[j] > v) { g_tempo.ioi[j + 1] = g_tempo.ioi[j]; j--; }
+		g_tempo.ioi[j + 1] = v;
+	}
+	uint32_t beat = g_tempo.ioi[g_tempo.n / 2];
+	uint32_t lo = (uint32_t)((uint64_t)LOOP_RATE * 60u / 176u);
+	uint32_t hi = (uint32_t)((uint64_t)LOOP_RATE * 60u / 70u);
+	while (beat > hi) beat >>= 1;
+	while (beat && beat < lo) beat <<= 1;
+	if (beat < lo || beat > hi) return;
+	g_beat_samples = beat;
+	g_det_bpm = (int)(((uint64_t)LOOP_RATE * 60u + beat / 2u) / beat);
+}
 /* Boot STOPPED (no auto-play): the saved song loads paused; PLAY (tap=resume,
  * hold=from the top) or recording starts the tape. The device used to blast the
  * last loop the instant it powered up — annoying after a flash or plug-in. */
@@ -883,10 +954,16 @@ static void looper_audio_block(int16_t *s)
 		int i = g_rec_track;
 		if (i >= 0 && i < NTRK) {
 			if (trk[i].state == TS_ARMED) {
-				/* released before it ever started -> cancel, nothing recorded */
+				/* released before any sound -> cancel. If it was the first take of
+				 * an empty song, stop the transport too. */
 				trk[i].state = (g_slot < NUM_SLOTS && g_meta.slot[g_slot].present[i])
 					       ? TS_PLAY : TS_EMPTY;
 				g_rec_track = -1;
+				if (g_loop_len == 0u) {
+					int anyp = 0;
+					for (int k = 0; k < NTRK; k++) if (trk[k].state == TS_PLAY) anyp = 1;
+					if (!anyp) g_loop_active = 0;
+				}
 			} else if (trk[i].state == TS_REC) {
 				if (g_loop_len == 0u) {
 					/* first take: the loop is EXACTLY what was held — no tempo
@@ -900,6 +977,7 @@ static void looper_audio_block(int16_t *s)
 					g_loop_len = blocks * SAMP_PER_BLK;
 					g_loop_blocks = blocks;
 					trk[i].rec_target = g_loop_len;
+					tempo_finish();         /* set the detected beat grid + BPM */
 					if (g_slot < NUM_SLOTS) {
 						g_meta.slot[g_slot].loop_len = g_loop_len;
 						g_meta_save_req = 1;
@@ -942,25 +1020,21 @@ static void looper_audio_block(int16_t *s)
 		if (!others) { g_loop_len = 0; g_loop_blocks = 0; g_loop_active = 0; }
 
 		if (g_loop_len == 0u) {
-			/* FIRST take: start the master grid NOW (responsive) and record open-
-			 * ended; the length is fixed to whole bars when the button is released.
-			 * SNAP the tape speed to its target instantly: a take started from
-			 * STOP otherwise records the audible 0->1 spin-up ramp (~130 ms) into
-			 * the loop — a pitch bend baked into every pass ("pitchy like tape").
-			 * Nothing is playing on an empty song, so the snap is inaudible. */
+			/* FIRST take: start the transport NOW so the recorder can watch the
+			 * input, but DON'T capture yet — recording begins at the first sound
+			 * (auto-start), at which point the playhead is reset so that sound is
+			 * loop position 0. Snap the tape speed so no spin-up ramp is baked in. */
 			g_cur_speed_q16 = g_play_speed_q16;
 			g_loop_active = 1; g_consume_pos = 0;
 			g_pphase = 0; g_frames_since = 0; g_dec_acc = 0;
-			g_midi_start_pending = 1;
-			trk[i].r_w = 0; trk[i].r_r = 0; trk[i].flush_blk = 0;
-			trk[i].flush_mod = MAX_LOOP_BLOCKS;
-			trk[i].rec_count = 0; trk[i].rec_silence = 0; trk[i].rec_target = 0; trk[i].muted = 0;
-			trk[i].state = TS_REC;
-		} else {
-			/* OVERDUB: arm; the wrap logic starts it on the next beat, in sync. */
-			trk[i].rec_silence = 0;
-			trk[i].state = TS_ARMED;
 		}
+		/* ARM (first take AND overdub): wait for the first sound, then the tick
+		 * handler begins the capture so the loop starts exactly on the audio. */
+		trk[i].r_w = 0; trk[i].r_r = 0; trk[i].flush_blk = 0;
+		trk[i].flush_mod = MAX_LOOP_BLOCKS;
+		trk[i].rec_count = 0; trk[i].rec_silence = 0; trk[i].rec_target = 0; trk[i].muted = 0;
+		trk[i].wait_peak = 0; trk[i].wait_ticks = 0;
+		trk[i].state = TS_ARMED;
 		g_rec_track = i;
 	}
 
@@ -1057,6 +1131,33 @@ static void looper_audio_block(int16_t *s)
 					(int32_t)(g_frames_since ? g_frames_since : 1u));
 				g_dec_acc = 0; g_frames_since = 0;
 
+				int rt_i = g_rec_track;
+				if (rt_i >= 0 && trk[rt_i].state == TS_ARMED) {
+					/* AUTO-START: hold armed until the input first crosses the
+					 * threshold (or a timeout), then begin recording. */
+					struct looptrk *rt = &trk[rt_i];
+					int32_t aa = lsamp < 0 ? -lsamp : lsamp;
+					if (aa > rt->wait_peak) rt->wait_peak = aa;
+					if (rt->wait_peak >= SOUND_THRESHOLD ||
+					    ++rt->wait_ticks >= SOUND_WAIT_TICKS) {
+						if (g_loop_len == 0u) {
+							/* first take: this sound is loop position 0 */
+							g_consume_pos = 0; g_midi_start_pending = 1;
+							tempo_reset();
+							rt->flush_blk = 0; rt->flush_mod = MAX_LOOP_BLOCKS;
+							rt->rec_target = 0;
+						} else {
+							/* overdub: anchor at the current transport block and
+							 * record one base loop, wrapping (in sync). */
+							uint32_t sb = (g_consume_pos / SAMP_PER_BLK) % g_loop_blocks;
+							rt->flush_blk = sb;
+							rt->flush_mod = g_loop_blocks;
+							rt->rec_target = g_loop_len;
+						}
+						rt->r_w = 0; rt->r_r = 0; rt->rec_count = 0; rt->rec_silence = 0;
+						rt->state = TS_REC;
+					}
+				}
 				if (g_rec_track >= 0 && trk[g_rec_track].state == TS_REC) {
 					struct looptrk *rt = &trk[g_rec_track];
 					if ((rt->r_w - rt->r_r) >= RRING_SAMPLES)
@@ -1064,12 +1165,14 @@ static void looper_audio_block(int16_t *s)
 					g_rring[rt->r_w & RRING_MASK] = rt->rec_silence ? 0 : lsamp;
 					rt->r_w++;
 					rt->rec_count++;
+					if (g_tempo.active) tempo_feed(lsamp, rt->rec_count);
 					if (rt->rec_target == 0u) {
 						/* open first take: force-stop at the maximum length */
 						if (rt->rec_count >= MAX_LOOP_SAMPLES) {
 							g_loop_len = MAX_LOOP_SAMPLES;
 							g_loop_blocks = g_loop_len / SAMP_PER_BLK;
 							rt->rec_target = g_loop_len;
+							tempo_finish();
 							if (g_slot < NUM_SLOTS) {
 								g_meta.slot[g_slot].loop_len = g_loop_len;
 								g_meta_save_req = 1;
@@ -1082,34 +1185,19 @@ static void looper_audio_block(int16_t *s)
 				}
 
 				g_consume_pos++;
-				if ((g_consume_pos % MIDI_DIV) == 0) g_midi_clk_produced++;
+				{ uint32_t md = g_beat_samples / 24u; if (md && (g_consume_pos % md) == 0u) g_midi_clk_produced++; }
 				if (g_loop_len > 0u) {
 					uint32_t lp = g_consume_pos % g_loop_len;
-					/* start an armed overdub at the NEXT STORAGE BLOCK (~38 ms —
-					 * effectively instant; no tempo grid, no waiting for a beat).
-					 * It records one full loop, wrapping: the flush begins at this
-					 * block (exact — zero offset) and wraps mod the loop length. */
-					if ((lp % SAMP_PER_BLK) == 0u) {
-						for (int i = 0; i < NTRK; i++)
-							if (trk[i].state == TS_ARMED) {
-								uint32_t sb = lp / SAMP_PER_BLK;
-								if (g_loop_blocks && sb >= g_loop_blocks) sb = 0u;
-								trk[i].r_w = 0; trk[i].r_r = 0;
-								trk[i].flush_blk = sb;
-								trk[i].flush_mod = g_loop_blocks ? g_loop_blocks
-										                 : MAX_LOOP_BLOCKS;
-								trk[i].rec_count = 0; trk[i].rec_silence = 0; trk[i].muted = 0;
-								trk[i].rec_target = g_loop_len;
-								trk[i].state = TS_REC;
-								g_rec_track = i;
-							}
-					}
-					g_beat_phase = lp % BEAT_SAMPLES_L;
-					g_dbg_beat = (int)(lp / BEAT_SAMPLES_L);
+					/* (overdubs now start on first sound, handled above —
+					 * no beat-boundary arm here.) */
+					uint32_t bs = g_beat_samples ? g_beat_samples : BEAT_SAMPLES_L;
+					g_beat_phase = lp % bs;
+					g_dbg_beat = (int)(lp / bs);
 				} else {
 					/* first take in progress: count up, no wrap until length is set */
-					g_beat_phase = g_consume_pos % BEAT_SAMPLES_L;
-					g_dbg_beat = (int)(g_consume_pos / BEAT_SAMPLES_L);
+					uint32_t bs = g_beat_samples ? g_beat_samples : BEAT_SAMPLES_L;
+					g_beat_phase = g_consume_pos % bs;
+					g_dbg_beat = (int)(g_consume_pos / bs);
 				}
 			}
 		}
@@ -1318,32 +1406,94 @@ static void streamer_thread(void *a, void *b, void *c)
 	}
 }
 
-/* ---- MIDI clock out: DISABLED — the SP-1 has no MIDI jack -------------------
- * TimK's pinout shows the old "MIDI" pin P1.04 is the Bluetooth module's UART
- * line (contention risk), so the UART node is gone from the overlay and this
- * whole block compiles out. The engine still maintains its clock/start/stop
- * counters (cheap), so if a real MIDI path is ever traced (the TE firmware
- * sends sync out the 3.5 mm TRS ring), only this block needs re-enabling. */
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart1), okay)
-static const struct device *const midi_uart = DEVICE_DT_GET(DT_NODELABEL(uart1));
-static K_THREAD_STACK_DEFINE(midi_stack, 512);
+/* ---- MIDI clock + Pocket-Operator sync out over the SYNC jack --------------
+ * Pins from TimK's sync-jack schematic:
+ *   MIDI  : BC807_BASE = P0.23 -> a PNP transistor that drives SYNC_RING. The
+ *           PNP INVERTS: P0.23 LOW -> ring HIGH (MIDI idle/mark), P0.23 HIGH ->
+ *           ring LOW (start bit/space). So we bit-bang the MIDI waveform, and
+ *           midi_line() flips it for the transistor (set MIDI_INVERT 0 to undo
+ *           if a receiver sees it inverted).
+ *   PO sync: PO_A = P0.20 -> SYNC_TIP. A short pulse per 1/8 note (2 PPQN),
+ *           the Korg/Volca/Pocket-Operator convention.
+ * MIDI is 31250 baud, 8N1 = 32 us/bit. Each byte is sent with interrupts locked
+ * so its 10 bits keep accurate spacing (~320 us, well within one I2S block of
+ * DMA cushion). Driven from the low-priority midi_thread off the engine's
+ * 24-PPQN clock counter — no UART peripheral needed.
+ *
+ * NOTE: untested on real gear yet — verify on a MIDI/PO device; if MIDI is
+ * silent/garbled, try flipping MIDI_INVERT. */
+#define MIDI_PIN      23u    /* P0.23 BC807_BASE -> SYNC_RING (MIDI)          */
+#define POSYNC_PIN    20u    /* P0.20 PO_A       -> SYNC_TIP  (PO/Volca sync) */
+#define POSYNC_PIN_B  17u    /* P0.17 PO_B       -> SYNC_TIP (paralleled)     */
+#define MIDI_INVERT   1      /* PNP stage inverts; 1 = compensate             */
+#define MIDI_BIT_US   32u    /* 31250 baud                                    */
+#define PO_PULSE_MS   5      /* sync pulse width                              */
+#define PO_DIV        12u    /* 24-PPQN clock / 12 = 2 PPQN (1/8-note pulses) */
+
+static K_THREAD_STACK_DEFINE(midi_stack, 768);
 static struct k_thread   midi_tcb;
 
-static inline void midi_send(uint8_t b) { uart_poll_out(midi_uart, b); }
+static void midi_pins_init(void)
+{
+	NRF_P0->PIN_CNF[MIDI_PIN]   =
+		(GPIO_PIN_CNF_DIR_Output << GPIO_PIN_CNF_DIR_Pos) |
+		(GPIO_PIN_CNF_DRIVE_S0S1 << GPIO_PIN_CNF_DRIVE_Pos);
+	NRF_P0->PIN_CNF[POSYNC_PIN] =
+		(GPIO_PIN_CNF_DIR_Output << GPIO_PIN_CNF_DIR_Pos) |
+		(GPIO_PIN_CNF_DRIVE_S0S1 << GPIO_PIN_CNF_DRIVE_Pos);
+	NRF_P0->PIN_CNF[POSYNC_PIN_B] =
+		(GPIO_PIN_CNF_DIR_Output << GPIO_PIN_CNF_DIR_Pos) |
+		(GPIO_PIN_CNF_DRIVE_S0S1 << GPIO_PIN_CNF_DRIVE_Pos);
+	NRF_P0->OUTCLR = (1u << POSYNC_PIN) | (1u << POSYNC_PIN_B);
+	/* idle the MIDI line at MARK (ring high -> P0.23 low after inversion) */
+	if (MIDI_INVERT) NRF_P0->OUTCLR = (1u << MIDI_PIN);
+	else             NRF_P0->OUTSET = (1u << MIDI_PIN);
+}
+
+static inline void midi_line(int mark)   /* drive the MIDI line; mark=1 is idle/high */
+{
+	int p = MIDI_INVERT ? !mark : mark;
+	if (p) NRF_P0->OUTSET = (1u << MIDI_PIN);
+	else   NRF_P0->OUTCLR = (1u << MIDI_PIN);
+}
+
+static void midi_send(uint8_t b)
+{
+	unsigned int key = irq_lock();           /* keep the 10 bits evenly spaced */
+	midi_line(0); k_busy_wait(MIDI_BIT_US);  /* start bit (space) */
+	for (int i = 0; i < 8; i++) {            /* 8 data bits, LSB first */
+		midi_line((b >> i) & 1);
+		k_busy_wait(MIDI_BIT_US);
+	}
+	midi_line(1); k_busy_wait(MIDI_BIT_US);  /* stop bit (mark) */
+	irq_unlock(key);
+}
 
 static void midi_thread(void *a, void *b, void *c)
 {
 	ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c);
-	if (!device_is_ready(midi_uart)) { return; }   /* no MIDI if the UART is absent */
-	uint32_t consumed = 0;
+	uint32_t consumed = 0, po_clk = 0;
+	int64_t  po_off = -1;
 	while (1) {
-		if (g_midi_start_pending) { g_midi_start_pending = 0; midi_send(0xFA); }
+		if (g_midi_start_pending) { g_midi_start_pending = 0; midi_send(0xFA); po_clk = 0; }
 		if (g_midi_stop_pending)  { g_midi_stop_pending  = 0; midi_send(0xFC); }
-		if (consumed != g_midi_clk_produced) { consumed++; midi_send(0xF8); }
-		else { k_msleep(1); }
+		if (consumed != g_midi_clk_produced) {
+			consumed++;
+			midi_send(0xF8);                       /* MIDI clock, 24 PPQN */
+			if (++po_clk >= PO_DIV) {              /* PO/Volca sync pulse */
+				po_clk = 0;
+				NRF_P0->OUTSET = (1u << POSYNC_PIN) | (1u << POSYNC_PIN_B);
+				po_off = k_uptime_get() + PO_PULSE_MS;
+			}
+		} else {
+			k_msleep(1);
+		}
+		if (po_off >= 0 && k_uptime_get() >= po_off) {
+			NRF_P0->OUTCLR = (1u << POSYNC_PIN) | (1u << POSYNC_PIN_B);
+			po_off = -1;
+		}
 	}
 }
-#endif /* uart1 okay */
 
 static void audio_thread(void *a, void *b, void *c)
 {
@@ -1440,12 +1590,12 @@ static void audio_init(void)
 			streamer_thread, NULL, NULL, NULL,
 			K_PRIO_PREEMPT(5), 0, K_NO_WAIT);
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart1), okay)
-	/* MIDI clock out: small, low priority; sends bytes when the engine flags them. */
+	/* MIDI clock + PO sync out over the SYNC jack (bit-banged GPIO, TimK pins).
+	 * Low priority; sends bytes when the engine flags them. */
+	midi_pins_init();
 	k_thread_create(&midi_tcb, midi_stack, K_THREAD_STACK_SIZEOF(midi_stack),
 			midi_thread, NULL, NULL, NULL,
 			K_PRIO_PREEMPT(6), 0, K_NO_WAIT);
-#endif
 
 	/* Wait until the audio thread has the I2S stream running (BCLK live), then
 	 * configure the codec here on the main thread. The audio thread keeps the
@@ -1664,11 +1814,11 @@ static void controls_diag(void)
 
 	static const char *const tsn[] = { "---", "ARM", "REC", "DON", "PLY" };
 	int batt = ladder_read(&adc_ladder[LAD_BATT]);   /* raw 12-bit, battery divider */
-	printk("LOOPER %dHz song=%d %s hp=%d hpin=%d usb=%d chg=%d batt=%d bpm=%d vol=%d "
+	printk("LOOPER %dHz song=%d %s hp=%d hpin=%d usb=%d chg=%d batt=%d bpm=%d detbpm=%d vol=%d "
 	       "trk[%s %s %s %s] rec=%d ovr=%u rerr=%u werr=%u\n",
 	       (int)LOOP_RATE, (int)g_slot, g_playing ? "PLAY" : "STOP", g_hp_on, g_hp_in,
 	       usb_present() ? 1 : 0, charging() ? 1 : 0, batt,
-	       g_play_bpm, g_master_vol_q8,
+	       g_play_bpm, g_det_bpm, g_master_vol_q8,
 	       tsn[trk[0].state % 5], tsn[trk[1].state % 5],
 	       tsn[trk[2].state % 5], tsn[trk[3].state % 5],
 	       g_rec_track, (unsigned)g_rec_overruns,

@@ -12,12 +12,17 @@ re-flashing the firmware.
 
 ### Features
 - 🎛️ **4 independent loop tracks**, each with its own fader for level.
-- 🎙️ **Hold-to-record** — hold a track button to lay down a loop; the first
-  recording sets the loop length, later ones overdub in time with it.
+- 🎙️ **Hold-to-record with auto-start** — hold a track button and recording
+  begins on the *first sound it hears* (no clipped attacks); the first recording
+  sets the loop length, later ones overdub in time with it.
 - 🔇 **Tap to mute / unmute**, **double-tap to erase** a track.
 - ▶️ **Full 48 kHz playback** streamed straight off the internal flash.
 - 📼 **Tape-style tempo** — the FWD/RWD rocker changes playback speed *and* pitch
   together, one BPM per click.
+- 🥁 **Tempo detection** — the first loop's rhythm is analysed to estimate its
+  BPM, which drives the beat LEDs and the MIDI clock grid.
+- 🎹 **MIDI clock + Pocket-Operator sync out** of the sync jack — start/stop +
+  24-PPQN clock for MIDI gear, and a 2-PPQN pulse for Korg/Volca/PO sync.
 - 💾 **4 song slots**, each remembering its own tracks and tempo; loops persist
   across power-off *and* across re-flashing the firmware.
 - 🎧 **Speaker and headphone output**, both clean — speaker auto-mutes when
@@ -82,7 +87,7 @@ Each track button does three things depending on how you press it:
 
 | Gesture | What it does |
 |---|---|
-| **Hold** (and keep holding) | **Records** into that track. The very first recording you make sets the loop length; release to stop. While other tracks play, a new recording overdubs in time with them. |
+| **Hold** (and keep holding) | **Arms recording** into that track — capture begins on the **first sound** it hears (so a held breath or count-in doesn't get recorded), and you can let go any time to stop. The very first recording sets the loop length. While other tracks play, a new recording overdubs in time with them. |
 | **Quick tap** | **Mutes / unmutes** that track (its content is kept — tap again to bring it back). |
 | **Double-tap** | **Deletes** that track. |
 
@@ -110,6 +115,15 @@ whatever was there.
 - Plug headphones into the **headphone jack** (the one nearest the headphone
   symbol — **not** the second/sync jack). The **speaker mutes automatically**
   while headphones are plugged in, and comes back when you unplug.
+
+### Sync & MIDI out (the second / sync jack)
+- The **sync jack** sends clock to your other gear, locked to the looper's tempo:
+  **MIDI clock** (Start / Stop + 24-PPQN) for MIDI instruments, and a **2-PPQN
+  pulse** for Korg / Volca / Pocket-Operator–style sync.
+- Use the appropriate **3.5 mm TRS adapter** for whatever you're driving (a
+  TRS→MIDI-DIN adapter for MIDI, or a sync cable for PO/Volca).
+- This is **new and not yet widely tested** — if a MIDI device reads it inverted,
+  it's a one-line firmware flag (`MIDI_INVERT`) to flip.
 
 ### If it ever locks up
 - **Hold Track 1 + Track 4 together for ~1.2 s** to drop straight back into
