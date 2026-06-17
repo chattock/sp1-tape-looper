@@ -651,7 +651,7 @@ static volatile uint32_t g_ring_overflows;
  * loop, wrapping. "BPM" is just the varispeed label (80 = 1.0x); there is NO
  * tempo grid — the beat constants below only pace the LED pulse + MIDI clock. */
 #define DECIM            2u
-#define LOOP_RATE        (I2S_TRUE_HZ / DECIM)             /* 24000 Hz mono — HALF RATE: ~half the eMMC read/write bandwidth, ~2x the multi-track headroom (trade: ~12 kHz audio bandwidth) */
+#define LOOP_RATE        (I2S_TRUE_HZ / DECIM)             /* 24000 Hz mono — half-rate (~2x track headroom); the optimized full build at 24k */
 #define SAMP_PER_BLK     (EMMC_BLOCK_SIZE / 2u)            /* 256 int16 / block */
 #define LOOP_BPM_BASE    80u                               /* BPM label for 1.0x varispeed */
 /* FULL-RATE LOOPS: the SPIM2 hardware eMMC path measures 1333 blk/s sustained
@@ -762,6 +762,13 @@ static struct looptrk trk[NTRK];
 #define RRING_MASK       (RRING_SAMPLES - 1u)
 static int16_t g_rring[RRING_SAMPLES];
 static volatile uint32_t g_rec_overruns;         /* diag: rec ring overflow events */
+/* DIAG PROBE (read-only): wall-clock of each play-track eMMC read, to settle
+ * bus-bound vs CPU/latency-bound. A 16-block read is ~4 ms of pure 16 MHz SCK;
+ * if the MAX under multi-track load is near that, the bus is the wall; if it is
+ * much larger, the streamer is being preempted/stretched (recoverable headroom).
+ * Reset each diag print so the line shows the worst read since the last line. */
+static volatile uint32_t g_rd_us_last;           /* last play-read wall-clock (us) */
+static volatile uint32_t g_rd_us_max;            /* worst since last diag print (us) */
 
 static volatile uint32_t g_consume_pos;          /* shared playhead (loop samples, free-running) */
 static volatile uint8_t  g_loop_active;          /* a loop exists / master clock running */
@@ -813,6 +820,13 @@ static volatile int g_play_bpm = 80;
  * (the rocker still does tape varispeed); it's the metronome grid only. */
 static volatile uint32_t g_beat_samples = BEAT_SAMPLES_L;
 static volatile int      g_det_bpm;       /* diag: last detected BPM (0 = none) */
+/* PRECOMPUTED MIDI-clock divisor: loop-samples per 24-PPQN tick = g_beat_samples/24.
+ * Recomputed ONLY when the tempo is (re)detected, NOT per audio sample -- so the
+ * detected tempo costs one divide once, not a runtime divide 48000x/sec on every
+ * track (that per-sample divide was a big part of why this build lost v2's
+ * headroom). The per-sample path just runs a cheap counter (g_midi_cnt). */
+static volatile uint32_t g_midi_div = (BEAT_SAMPLES_L + 12u) / 24u;
+static uint32_t          g_midi_cnt;      /* counts loop-samples toward the next MIDI tick */
 
 /* Lightweight integer onset/tempo estimator, run only over the FIRST take of an
  * empty song. Envelope follower flags onsets (energy past half the running
@@ -867,6 +881,7 @@ static void tempo_finish(void)
 	while (beat && beat < lo) beat <<= 1;
 	if (beat < lo || beat > hi) return;
 	g_beat_samples = beat;
+	g_midi_div = (beat + 12u) / 24u;          /* precompute once: no per-sample divide */
 	g_det_bpm = (int)(((uint64_t)LOOP_RATE * 60u + beat / 2u) / beat);
 }
 /* Boot STOPPED (no auto-play): the saved song loads paused; PLAY (tap=resume,
@@ -1078,7 +1093,7 @@ static void looper_audio_block(int16_t *s)
 	if (g_restart_req) {
 		g_restart_req = 0;
 		if (g_rec_track < 0 && g_loop_active) {
-			g_consume_pos = 0; g_pphase = 0; g_frames_since = 0; g_dec_acc = 0;
+			g_consume_pos = 0; g_pphase = 0; g_frames_since = 0; g_dec_acc = 0; g_midi_cnt = 0;
 			for (int i = 0; i < NTRK; i++) trk[i].p_w = 0;
 			g_playing = 1;
 			g_midi_start_pending = 1;
@@ -1090,7 +1105,7 @@ static void looper_audio_block(int16_t *s)
 	 * region from block 0); empty tracks -> ready to record. Restart the loop. */
 	if (g_slot_switch_req) {
 		g_slot_switch_req = 0;
-		g_consume_pos = 0; g_pphase = 0; g_frames_since = 0; g_dec_acc = 0;
+		g_consume_pos = 0; g_pphase = 0; g_frames_since = 0; g_dec_acc = 0; g_midi_cnt = 0;
 		g_rec_track = -1;
 		/* this song's remembered loop length (0 = empty, ready for a fresh take) */
 		g_loop_len    = (g_slot < NUM_SLOTS) ? g_meta.slot[g_slot].loop_len : 0;
@@ -1147,6 +1162,9 @@ static void looper_audio_block(int16_t *s)
 			 * has refilled half the ring. */
 			int32_t avail = (int32_t)(trk[i].p_w - cpos);
 			if (trk[i].starved) {
+				/* recover only once the ring has refilled HALF (~170 ms) — matches
+				 * the proven v2 / 24k builds. Recovering earlier (RING/8) with less
+				 * cushion can re-dip and chatter on a tight 48k load. */
 				if (avail >= (int32_t)(RING_SAMPLES / 2u))
 					trk[i].starved = 0;
 				else
@@ -1179,12 +1197,13 @@ static void looper_audio_block(int16_t *s)
 					 * threshold (or a timeout), then begin recording. */
 					struct looptrk *rt = &trk[rt_i];
 					int32_t aa = lsamp < 0 ? -lsamp : lsamp;
-					if (aa > rt->wait_peak) rt->wait_peak = aa;
-					if (rt->wait_peak >= SOUND_THRESHOLD ||
+					/* trigger directly on the first sample past threshold (no
+					 * running-peak tracking needed) -- one less op per armed sample */
+					if (aa >= SOUND_THRESHOLD ||
 					    ++rt->wait_ticks >= SOUND_WAIT_TICKS) {
 						if (g_loop_len == 0u) {
 							/* first take: this sound is loop position 0 */
-							g_consume_pos = 0; g_midi_start_pending = 1;
+							g_consume_pos = 0; g_midi_start_pending = 1; g_midi_cnt = 0;
 							tempo_reset();
 							rt->flush_blk = 0; rt->flush_mod = MAX_LOOP_BLOCKS;
 							rt->rec_target = 0;
@@ -1251,26 +1270,33 @@ static void looper_audio_block(int16_t *s)
 				}
 
 				g_consume_pos++;
-				{ uint32_t md = g_beat_samples / 24u; if (md && (g_consume_pos % md) == 0u) g_midi_clk_produced++; }
-				if (g_loop_len > 0u) {
-					uint32_t lp = g_consume_pos % g_loop_len;
-					/* (overdubs now start on first sound, handled above —
-					 * no beat-boundary arm here.) */
-					uint32_t bs = g_beat_samples ? g_beat_samples : BEAT_SAMPLES_L;
-					g_beat_phase = lp % bs;
-					g_dbg_beat = (int)(lp / bs);
-				} else {
-					/* first take in progress: count up, no wrap until length is set */
-					uint32_t bs = g_beat_samples ? g_beat_samples : BEAT_SAMPLES_L;
-					g_beat_phase = g_consume_pos % bs;
-					g_dbg_beat = (int)(g_consume_pos / bs);
+				/* MIDI 24-PPQN clock: a cheap per-sample COUNTER (the divisor
+				 * g_midi_div is precomputed when the tempo is detected) -- no
+				 * runtime divide here. The beat-phase display moved to once-per-
+				 * block (after this loop); it only drives the LED + diag. */
+				if (g_midi_div && ++g_midi_cnt >= g_midi_div) {
+					g_midi_cnt = 0; g_midi_clk_produced++;
 				}
 			}
 		}
 	}
 	g_sample_clock += BLK_FRAMES;
-	if (!g_loop_active)
+	/* Beat-phase display computed ONCE per block now (was per loop-sample). It
+	 * only feeds the LED + MIDI-grid diag, so block granularity (~5 ms) is plenty
+	 * -- this lifts three runtime divides off the per-sample hot path. */
+	if (g_loop_active) {
+		uint32_t bs = g_beat_samples ? g_beat_samples : BEAT_SAMPLES_L;
+		if (g_loop_len > 0u) {
+			uint32_t lp = g_consume_pos % g_loop_len;
+			g_beat_phase = lp % bs;
+			g_dbg_beat = (int)(lp / bs);
+		} else {
+			g_beat_phase = g_consume_pos % bs;
+			g_dbg_beat = (int)(g_consume_pos / bs);
+		}
+	} else {
 		g_beat_phase = (uint32_t)((g_sample_clock % BEAT_SAMPLES_I2S) / DECIM);
+	}
 }
 
 /* ---- background eMMC streamer (the ONLY eMMC user) -------------------------
@@ -1465,7 +1491,12 @@ static void streamer_thread(void *a, void *b, void *c)
 				uint32_t n = 16u;
 				if (loop_blk + n > gb) n = gb - loop_blk;  /* stop at the wrap */
 				uint32_t blkno = trk_blk(slot, (uint32_t)i) + loop_blk;
-				if (!emmc_read_blocks(blkno, batchbuf, n)) {
+				uint32_t _rc0 = k_cycle_get_32();
+				bool _rok = emmc_read_blocks(blkno, batchbuf, n);
+				uint32_t _rus = k_cyc_to_us_floor32(k_cycle_get_32() - _rc0);
+				g_rd_us_last = _rus;
+				if (_rus > g_rd_us_max) g_rd_us_max = _rus;   /* track the tail */
+				if (!_rok) {
 					work = true;       /* read failed (CRC): retry next round */
 					continue;
 				}
@@ -1514,6 +1545,9 @@ static void streamer_thread(void *a, void *b, void *c)
  * UARTE cannot compensate for -- the timer's ISR drives the bit via midi_line()
  * which applies MIDI_INVERT, so the timing is hardware-accurate AND the polarity
  * is right. Set to 0 to compile MIDI out entirely. */
+/* 48 kHz FULL-FEATURE build: MIDI is ON here (timer-driven) + segment loops. This
+ * is the build we're making smooth enough for 48 kHz multi-track; it carries the
+ * read-timing diag probe (rdus=). The shipped 48 kHz backups set this to 0. */
 #define MIDI_SYNC_ENABLE 1
 
 static K_THREAD_STACK_DEFINE(midi_stack, 768);
@@ -1600,28 +1634,21 @@ static void midi_send(uint8_t b)
 	MIDI_TIMER->TASKS_START = 1;                      /* 1st ISR (+32us) emits the START bit */
 }
 
+/* BASIC MIDI ONLY: just Start/Stop + 24-PPQN clock on the MIDI line. The
+ * Pocket-Operator / Volca 2-PPQN sync (the POSYNC GPIO pulses + k_uptime polling)
+ * has been removed to keep this thread minimal. */
 static void midi_thread(void *a, void *b, void *c)
 {
 	ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c);
-	uint32_t consumed = 0, po_clk = 0;
-	int64_t  po_off = -1;
+	uint32_t consumed = 0;
 	while (1) {
-		if (g_midi_start_pending) { g_midi_start_pending = 0; midi_send(0xFA); po_clk = 0; }
+		if (g_midi_start_pending) { g_midi_start_pending = 0; midi_send(0xFA); }
 		if (g_midi_stop_pending)  { g_midi_stop_pending  = 0; midi_send(0xFC); }
 		if (consumed != g_midi_clk_produced) {
 			consumed++;
 			midi_send(0xF8);                       /* MIDI clock, 24 PPQN */
-			if (++po_clk >= PO_DIV) {              /* PO/Volca sync pulse */
-				po_clk = 0;
-				NRF_P0->OUTSET = (1u << POSYNC_PIN) | (1u << POSYNC_PIN_B);
-				po_off = k_uptime_get() + PO_PULSE_MS;
-			}
 		} else {
 			k_msleep(1);
-		}
-		if (po_off >= 0 && k_uptime_get() >= po_off) {
-			NRF_P0->OUTCLR = (1u << POSYNC_PIN) | (1u << POSYNC_PIN_B);
-			po_off = -1;
 		}
 	}
 }
@@ -1951,14 +1978,16 @@ static void controls_diag(void)
 	static const char *const tsn[] = { "---", "ARM", "REC", "DON", "PLY" };
 	int batt = ladder_read(&adc_ladder[LAD_BATT]);   /* raw 12-bit, battery divider */
 	printk("LOOPER %dHz song=%d %s hp=%d hpin=%d usb=%d chg=%d batt=%d bpm=%d detbpm=%d vol=%d "
-	       "trk[%s %s %s %s] rec=%d ovr=%u rerr=%u werr=%u\n",
+	       "trk[%s %s %s %s] rec=%d ovr=%u rerr=%u werr=%u rdus=%u/%u\n",
 	       (int)LOOP_RATE, (int)g_slot, g_playing ? "PLAY" : "STOP", g_hp_on, g_hp_in,
 	       usb_present() ? 1 : 0, charging() ? 1 : 0, batt,
 	       g_play_bpm, g_det_bpm, g_master_vol_q8,
 	       tsn[trk[0].state % 5], tsn[trk[1].state % 5],
 	       tsn[trk[2].state % 5], tsn[trk[3].state % 5],
 	       g_rec_track, (unsigned)g_rec_overruns,
-	       (unsigned)emmc_crc_rd_errs, (unsigned)emmc_crc_wr_errs);
+	       (unsigned)emmc_crc_rd_errs, (unsigned)emmc_crc_wr_errs,
+	       (unsigned)g_rd_us_last, (unsigned)g_rd_us_max);
+	g_rd_us_max = 0;   /* each line shows the worst play-read since the last line */
 }
 
 /* ---- decode the ladders into named buttons (verified thresholds) ---- */
