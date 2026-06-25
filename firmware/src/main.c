@@ -652,6 +652,13 @@ static volatile uint32_t g_ring_overflows;
  * tempo grid — the beat constants below only pace the LED pulse + MIDI clock. */
 #define DECIM            2u
 #define LOOP_RATE        (I2S_TRUE_HZ / DECIM)             /* 24000 Hz mono — half-rate (~2x track headroom); the optimized full build at 24k */
+
+/* USB upload/download (loop transfer website). 0 = OFF: compiles out completely,
+ * leaving the proven streaming engine byte-for-byte (the rock-solid default). 1 =
+ * ON: adds the transfer mode (BETA — its CDC RX still costs a little under a full
+ * 4-track load, so the last track can struggle). The default build ships with it
+ * OFF; the beta build turns it ON. */
+#define SP1_XFER_ENABLE  0
 #define SAMP_PER_BLK     (EMMC_BLOCK_SIZE / 2u)            /* 256 int16 / block */
 #define LOOP_BPM_BASE    80u                               /* BPM label for 1.0x varispeed */
 /* FULL-RATE LOOPS: the SPIM2 hardware eMMC path measures 1333 blk/s sustained
@@ -691,7 +698,13 @@ static volatile uint32_t g_ring_overflows;
  * wipe-on-reflash build stamp is gone — user prefers persistence; double-tap a
  * track to delete it instead). Storage only re-formats if this constant or the
  * layout ever changes. */
-#define META_MAGIC       0x53453234u                       /* 'SE24' — 24 kHz SEGMENT layout (per-track lengths) */
+/* Per-rate on-flash magic so the two builds keep distinct save formats (TRACK_BLOCKS
+ * scales with DECIM): switching builds reformats rather than misreading. */
+#if DECIM == 1u
+#define META_MAGIC       0x53453438u                       /* 'SE48' — 48 kHz layout */
+#else
+#define META_MAGIC       0x53453234u                       /* 'SE24' — 24 kHz layout */
+#endif
 static inline uint32_t trk_blk(uint32_t slot, uint32_t t)
 {
 	return SLOT0_BLOCK + (slot * NTRK + t) * TRACK_BLOCKS;
@@ -718,6 +731,14 @@ static volatile uint32_t g_slot;
 static volatile int      g_slot_switch_req;   /* main -> audio: reload tracks for the new slot */
 static volatile int      g_meta_save_req;     /* -> streamer: persist g_meta to eMMC */
 static volatile int      g_meta_loaded;       /* streamer -> main: g_meta read at boot */
+
+/* ---- USB block-transfer mode (the loop transfer website talks to this) -------
+ * Compiled in only when SP1_XFER_ENABLE; with it off, none of this exists and the
+ * engine is byte-for-byte the proven build. */
+#if SP1_XFER_ENABLE
+static volatile uint8_t  g_xfer_mode;          /* 1 = in block-transfer mode (audio paused) */
+RING_BUF_DECLARE(g_cdc_rx, 1024);              /* CDC serial RX bytes, filled by the ISR */
+#endif
 
 enum trk_state { TS_EMPTY, TS_ARMED, TS_REC, TS_DONE, TS_PLAY };
 
@@ -923,6 +944,9 @@ static inline int16_t soft_limit(int32_t x)
 }
 static void looper_audio_block(int16_t *s)
 {
+#if SP1_XFER_ENABLE
+	if (g_xfer_mode) { memset(s, 0, BLK_BYTES); return; }   /* USB transfer: silence out */
+#endif
 	static int16_t tmp[BLK_FRAMES * 2];
 	/* PREBUFFER: do not start draining a freshly-(re)enabled stream until the
 	 * ring holds FB_SETPOINT frames — the feedback regulator over-delivers to
@@ -1307,6 +1331,155 @@ static void looper_audio_block(int16_t *s)
 static K_THREAD_STACK_DEFINE(streamer_stack, 2048);
 static struct k_thread streamer_tcb;
 
+#if SP1_XFER_ENABLE
+/* ===================== USB block-transfer protocol ========================
+ * Lets the loop transfer website read/write the eMMC over the CDC serial port.
+ * Serviced from the streamer (the only eMMC user) so flash access stays
+ * single-owner. Inert until the host sends the 8-byte enter-magic. */
+
+/* ISR: drain the CDC RX FIFO into the ring buffer (host -> device bytes). */
+static void cdc_rx_isr(const struct device *dev, void *u)
+{
+	ARG_UNUSED(u);
+	while (uart_irq_update(dev) && uart_irq_rx_ready(dev)) {
+		uint8_t b[64];
+		int n = uart_fifo_read(dev, b, sizeof b);
+		if (n > 0) (void)ring_buf_put(&g_cdc_rx, b, (uint32_t)n);
+	}
+}
+
+/* Blocking byte send (matches how printk drives the console). */
+static void cdc_tx(const uint8_t *p, uint32_t n)
+{
+	for (uint32_t i = 0; i < n; i++) uart_poll_out(cdc, p[i]);
+}
+
+/* Pull exactly n bytes from the RX ring, up to timeout_ms. */
+static bool cdc_rx(uint8_t *p, uint32_t n, int timeout_ms)
+{
+	int64_t end = k_uptime_get() + timeout_ms;
+	uint32_t got = 0;
+	while (got < n) {
+		got += ring_buf_get(&g_cdc_rx, p + got, n - got);
+		if (got < n) {
+			if (k_uptime_get() > end) return false;
+			k_msleep(1);
+		}
+	}
+	return true;
+}
+
+/* A block command's sub-read stalled mid-stream: drain the RX ring back to a clean
+ * command boundary and send the host an error byte so it aborts that block; the
+ * host's next ping resyncs cleanly. */
+static void xfer_resync(uint8_t err_byte)
+{
+	uint8_t dump;
+	while (ring_buf_get(&g_cdc_rx, &dump, 1) == 1) {
+	}
+	cdc_tx(&err_byte, 1);
+}
+
+/* Commit host writes durably. This 24 kHz build has no eMMC write cache, so host
+ * writes already programmed straight to NAND (durable). Just re-read block 0 into
+ * the in-RAM index so playback reflects the upload and a later save can't overwrite
+ * it. Runs from the streamer while g_xfer_mode is still set (audio is silenced). */
+static void xfer_commit(void)
+{
+	static uint8_t mblk[EMMC_BLOCK_SIZE];
+	if (g_emmc_ready && emmc_read_blocks(META_BLOCK, mblk, 1)) {
+		struct meta_blk *m = (struct meta_blk *)mblk;
+		if (m->magic == META_MAGIC && m->cur_slot < NUM_SLOTS) {
+			memcpy(&g_meta, m, sizeof(g_meta));
+			g_slot = g_meta.cur_slot;
+		}
+	}
+}
+
+/* OUT of transfer mode: scan the RX stream for the 8-byte enter-magic.
+ * IN transfer mode: run ONE command per call ('P'ing/'R'ead/'W'rite/'F'lush/e'X'it),
+ * auto-committing + auto-exiting after 15 s with no command. */
+static void xfer_service(void)
+{
+	static const uint8_t MAGIC[8] = { 'S','P','1','X','F','E','R','!' };
+	static uint8_t  m;
+	static int64_t  last;
+
+	if (!g_xfer_mode) {
+		uint8_t b;
+		while (ring_buf_get(&g_cdc_rx, &b, 1) == 1) {
+			m = (b == MAGIC[m]) ? (uint8_t)(m + 1) : (b == MAGIC[0] ? 1u : 0u);
+			if (m == 8u) {
+				m = 0;
+				/* Don't freeze the streamer mid-take: if a recording is still
+				 * being captured or flushed, finalize it first. Enter on a later
+				 * magic -- the host's handshake retries. */
+				bool busy = (g_rec_track >= 0) || g_meta_save_req;
+				for (int t = 0; t < NTRK; t++)
+					if (trk[t].state == TS_REC || trk[t].state == TS_DONE) busy = 1;
+				if (busy) {
+					g_stop_req = 1;
+					break;
+				}
+				g_xfer_mode = 1;
+				g_playing = 0;           /* pause the transport during transfer */
+				last = k_uptime_get();
+				break;
+			}
+		}
+		return;
+	}
+
+	uint8_t cmd;
+	if (ring_buf_get(&g_cdc_rx, &cmd, 1) != 1) {            /* idle: commit + exit on timeout */
+		if (k_uptime_get() - last > 15000) {
+			xfer_commit();
+			g_slot_switch_req = 1;                 /* reload tracks for the active song */
+			g_xfer_mode = 0;
+		}
+		return;
+	}
+	last = k_uptime_get();
+
+	if (cmd == 'P') {                                      /* ping -> magic + layout */
+		uint8_t r[4 + 6 * 4];
+		memcpy(r, "SP1!", 4);
+		uint32_t info[6] = { EMMC_BLOCK_SIZE, NUM_SLOTS, NTRK,
+				     SLOT0_BLOCK, TRACK_BLOCKS, META_MAGIC };
+		memcpy(r + 4, info, sizeof info);
+		cdc_tx(r, sizeof r);
+	} else if (cmd == 'R' || cmd == 'W') {                 /* read / write one block */
+		uint8_t a[4];
+		if (!cdc_rx(a, 4, 1000)) { xfer_resync(cmd == 'R' ? 'e' : 'E'); return; }
+		uint32_t blk = (uint32_t)a[0] | ((uint32_t)a[1] << 8) |
+			       ((uint32_t)a[2] << 16) | ((uint32_t)a[3] << 24);
+		uint32_t total = SLOT0_BLOCK + (uint32_t)NUM_SLOTS * NTRK * TRACK_BLOCKS;
+		static uint8_t sec[EMMC_BLOCK_SIZE];
+		if (cmd == 'R') {
+			bool ok = (blk < total) && emmc_read_blocks(blk, sec, 1);
+			uint8_t h = ok ? 'r' : 'e';
+			cdc_tx(&h, 1);
+			if (ok) cdc_tx(sec, EMMC_BLOCK_SIZE);
+		} else {
+			if (!cdc_rx(sec, EMMC_BLOCK_SIZE, 4000)) { xfer_resync('E'); return; }
+			bool ok = (blk < total) && emmc_write_blocks(blk, sec, 1);
+			uint8_t h = ok ? 'w' : 'E';
+			cdc_tx(&h, 1);
+		}
+	} else if (cmd == 'F') {                               /* flush: commit writes */
+		xfer_commit();
+		uint8_t h = 'f';
+		cdc_tx(&h, 1);
+	} else if (cmd == 'X') {                               /* commit, then exit transfer mode */
+		xfer_commit();
+		g_slot_switch_req = 1;                         /* reload tracks for the active song */
+		g_xfer_mode = 0;
+		uint8_t h = 'x';
+		cdc_tx(&h, 1);
+	}
+}
+#endif /* SP1_XFER_ENABLE */
+
 static void streamer_thread(void *a, void *b, void *c)
 {
 	ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c);
@@ -1345,6 +1518,14 @@ static void streamer_thread(void *a, void *b, void *c)
 	g_meta_loaded = 1;
 
 	while (1) {
+#if SP1_XFER_ENABLE
+		/* USB block-transfer: scan for the enter-magic, and while in transfer mode
+		 * service one read/write per pass instead of the normal flush/read passes
+		 * (audio is paused, so the eMMC is ours alone). */
+		xfer_service();
+		if (g_xfer_mode) { k_msleep(1); continue; }
+#endif
+
 		bool work = false;
 		uint32_t cpos = g_consume_pos;
 		uint32_t slot = g_slot;
@@ -1959,6 +2140,12 @@ static void usb_audio_start(void)
 	if (usbd_enable(usbd) != 0) {
 		printk("usbd enable failed\n");
 	}
+
+#if SP1_XFER_ENABLE
+	/* Arm CDC RX so the loop transfer website's bytes reach xfer_service(). */
+	uart_irq_callback_user_data_set(cdc, cdc_rx_isr, NULL);
+	uart_irq_rx_enable(cdc);
+#endif
 }
 
 /* Stream the raw ladder codes, but ONLY when a host has opened the port
@@ -2346,6 +2533,20 @@ int main(void)
 
 	while (1) {
 		feed_wdt();
+
+#if SP1_XFER_ENABLE
+		/* USB block-transfer in progress: audio is paused and the streamer is
+		 * servicing reads/writes. Ignore the controls and blink all four track
+		 * LEDs together so the device reads as mid-transfer, not frozen. */
+		if (g_xfer_mode) {
+			static uint32_t xb;
+			int on = ((xb++ / 8u) & 1u);
+			for (int i = 0; i < NUM_TRACK_LEDS; i++)
+				on ? track_led_on(i) : track_led_off(i);
+			k_msleep(20);
+			continue;
+		}
+#endif
 
 		/* Milestone 1: report the raw ladder codes ~6x/sec so we can map
 		 * each button. Only prints when a serial monitor is attached. */

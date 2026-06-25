@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>SP-1 loop transfer</title>
+<style>
+  :root{
+    --bg:#ffffff; --ink:#1d1d1f; --muted:#6e6e73; --line:#e5e5e7;
+    --tint:#0071e3; --tint-press:#005bbb; --ok:#1d8a3f; --err:#c01f2d;
+    --cell:#fbfbfd; --radius:14px;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5}
+  .wrap{max-width:860px;margin:0 auto;padding:56px 24px 80px}
+  h1{font-size:34px;font-weight:600;letter-spacing:-.02em;margin:0 0 6px}
+  .sub{color:var(--muted);font-size:17px;margin:0 0 28px}
+  .bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+  button{font:inherit;font-size:16px;border:0;border-radius:980px;padding:11px 22px;cursor:pointer;
+    background:var(--tint);color:#fff;transition:background .15s}
+  button:hover{background:var(--tint-press)}
+  button:disabled{background:#d2d2d7;color:#fff;cursor:default}
+  button.ghost{background:transparent;color:var(--tint);padding:11px 6px}
+  button.ghost:hover{background:transparent;text-decoration:underline}
+  .dot{width:9px;height:9px;border-radius:50%;background:#d2d2d7;display:inline-block}
+  .dot.on{background:var(--ok)}
+  .status{color:var(--muted);font-size:15px}
+  .hint{background:var(--cell);border:1px solid var(--line);border-radius:var(--radius);padding:14px 18px;
+    color:var(--muted);font-size:14px;margin:22px 0}
+  .songs{display:grid;gap:18px;margin-top:8px}
+  .song{border:1px solid var(--line);border-radius:18px;padding:18px 18px 8px}
+  .song h2{font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+  .tracks{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .cell{background:var(--cell);border:1px solid var(--line);border-radius:var(--radius);padding:14px;
+    display:flex;flex-direction:column;gap:9px;min-height:128px}
+  .cell .name{font-size:14px;font-weight:500}
+  .cell .len{font-size:13px;color:var(--muted);min-height:18px}
+  .cell .acts{margin-top:auto;display:flex;flex-direction:column;gap:7px}
+  .mini{font-size:14px;border-radius:8px;padding:8px 0;text-align:center}
+  .mini.dl{background:#f0f0f3;color:var(--ink)}
+  .mini.dl:hover{background:#e7e7ec}
+  label.up{display:block;font-size:13px;color:var(--tint);text-align:center;border:1px dashed #c7c7cc;
+    border-radius:8px;padding:8px 4px;cursor:pointer}
+  label.up:hover{border-color:var(--tint)}
+  label.up input{display:none}
+  .empty .name{color:var(--muted)}
+  .log{margin-top:30px;font-size:13px;color:var(--muted);white-space:pre-wrap;
+    font-family:"SF Mono",ui-monospace,Menlo,monospace;max-height:220px;overflow:auto}
+  .err{color:var(--err)}
+  .ok{color:var(--ok)}
+  .gone{opacity:.45;pointer-events:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>SP-1 loop transfer</h1>
+  <p class="sub">Move loops between your computer and the stem player, as WAV or MP3.</p>
+
+  <div class="bar">
+    <button id="connect">Connect</button>
+    <span class="dot" id="dot"></span>
+    <span class="status" id="status">Not connected</span>
+    <button class="ghost" id="done" style="margin-left:auto;display:none">Done</button>
+  </div>
+
+  <div class="hint" id="hint">
+    Use <b>Chrome</b> or <b>Edge</b> on a computer, with the SP-1 plugged in over USB and powered on
+    normally (not playing). Click Connect and pick the <b>SP-1 Audio</b> serial port. No button combo
+    or special mode is needed &mdash; the looper switches itself into transfer mode the moment you
+    select that port (it pauses and the four track lights blink together). Works with either build &mdash;
+    it detects the device&rsquo;s sample rate (48 or 24&nbsp;kHz). Uploaded clips are resampled to that
+    rate, mono; lengths snap up to a whole multiple of the song&rsquo;s first track (the rest is filled
+    with silence).
+  </div>
+
+  <div class="songs" id="songs"></div>
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+"use strict";
+const SAMP_PER_BLK = 256;
+let RATE = 48000;                          // set per device after connect (48 or 24 kHz build)
+// The on-flash format magic is the build's sample rate: 'SE4A' = 48 kHz, 'SE2A' = 24 kHz.
+function rateFromMagic(magic){ return (magic === 0x53453234 || magic === 0x53453241) ? 24000 : 48000; } // 'SE24'/'SE2A' = 24 kHz; else 48 kHz
+const $ = s => document.querySelector(s);
+const logEl = $("#log");
+function log(msg, cls){ const t = new Date().toLocaleTimeString();
+  logEl.innerHTML += `<span class="${cls||''}">${t}  ${msg}</span>\n`; logEl.scrollTop = logEl.scrollHeight; }
+
+/* ---- WebSerial transport: read/write exact byte counts over the CDC port ----
+ * A background pump drains the read stream into a buffer; read() then waits on
+ * that buffer against a real wall-clock deadline, so a silent device times out
+ * cleanly instead of blocking forever on reader.read(). */
+class Serial {
+  constructor(port){ this.port = port;
+    this.reader = port.readable.getReader();
+    this.writer = port.writable.getWriter();
+    this.buf = new Uint8Array(0); this.closed = false; this.rxTotal = 0;
+    this._pump(); }
+  async _pump(){
+    try{
+      while (!this.closed){
+        const { value, done } = await this.reader.read();
+        if (done) break;
+        if (value && value.length){
+          const m = new Uint8Array(this.buf.length + value.length);
+          m.set(this.buf); m.set(value, this.buf.length); this.buf = m;
+          this.rxTotal += value.length;
+        }
+      }
+    }catch(e){ /* reader cancelled on close */ }
+  }
+  async write(bytes){ await this.writer.write(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)); }
+  drain(){ this.buf = new Uint8Array(0); }   // discard any stale/buffered bytes
+  async read(n, timeoutMs=4000){
+    const deadline = Date.now() + timeoutMs;
+    while (this.buf.length < n){
+      if (this.closed) throw new Error("port closed");
+      if (Date.now() > deadline) throw new Error(`timed out (got ${this.buf.length}/${n} bytes)`);
+      await new Promise(r => setTimeout(r, 8));
+    }
+    const out = this.buf.slice(0, n); this.buf = this.buf.slice(n); return out;
+  }
+  async close(){ this.closed = true;
+    try{ await this.reader.cancel(); }catch(e){}
+    try{ this.reader.releaseLock(); }catch(e){}
+    try{ this.writer.releaseLock(); }catch(e){}
+    try{ await this.port.close(); }catch(e){} }
+}
+
+/* ---- SP-1 block protocol ---- */
+const MAGIC = new TextEncoder().encode("SP1XFER!");
+let io = null, layout = null, meta = null;
+
+function le32(arr, off){ return (arr[off] | (arr[off+1]<<8) | (arr[off+2]<<16) | (arr[off+3]*0x1000000)) >>> 0; }
+function put32(arr, off, v){ arr[off]=v&255; arr[off+1]=(v>>>8)&255; arr[off+2]=(v>>>16)&255; arr[off+3]=(v>>>24)&255; }
+
+function parsePing(info){
+  return { blockSize: le32(info,0), numSlots: le32(info,4), ntrk: le32(info,8),
+           slot0: le32(info,12), trackBlocks: le32(info,16), magic: le32(info,20) };
+}
+
+/* Serialise every exchange so the keepalive ping can never interleave with a
+ * download/upload (they share one port). */
+let lock = Promise.resolve();
+function withLock(fn){ const run = lock.then(fn, fn); lock = run.catch(()=>{}); return run; }
+
+/* The device drops out of transfer mode after ~15 s with no command and then
+ * resumes printing status lines. A short keepalive ping keeps it in transfer
+ * mode through slow steps (picking a file, decoding audio). */
+let kaTimer = null;
+function startKeepalive(){
+  stopKeepalive();
+  kaTimer = setInterval(() => { if (io) withLock(async () => {
+    try{ await io.write(new Uint8Array([0x50])); await new Promise(r=>setTimeout(r,80)); io.drain(); }
+    catch(e){}
+  }); }, 7000);
+}
+function stopKeepalive(){ if (kaTimer){ clearInterval(kaTimer); kaTimer = null; } }
+
+/* Read bytes until the 4-byte "SP1!" reply tag appears, skipping any leading
+ * status-line noise (in case the device was mid-print when we connected). */
+async function readUntilTag(timeoutMs){
+  const deadline = Date.now() + timeoutMs;
+  const win = [];
+  while (Date.now() < deadline){
+    const b = (await io.read(1, Math.max(50, deadline - Date.now())))[0];
+    win.push(b); if (win.length > 4) win.shift();
+    if (win.length === 4 && String.fromCharCode(...win) === "SP1!") return true;
+  }
+  throw new Error("timed out waiting for the SP-1 reply");
+}
+/* Enter transfer mode and read the layout, tolerating noise and retrying. */
+async function handshake(){
+  for (let attempt = 1; attempt <= 5; attempt++){
+    io.drain();                                            // clear any stale bytes
+    await io.write(MAGIC);                                 // "SP1XFER!" -> transfer mode
+    await new Promise(r => setTimeout(r, 120));
+    await io.write(new Uint8Array([0x50]));                // 'P' ping
+    try{
+      await readUntilTag(1200);                            // find "SP1!" past any noise
+      return parsePing(await io.read(24, 1200));
+    }catch(e){
+      log(`Handshake ${attempt}/5: ${e.message}. Bytes from device so far: ${io.rxTotal}.`);
+    }
+  }
+  throw new Error("the SP-1 never sent its reply");
+}
+async function readBlock(blk){
+  const cmd = new Uint8Array(5); cmd[0]=0x52; put32(cmd,1,blk);   // 'R'
+  await io.write(cmd);
+  const h = await io.read(1);
+  if (h[0] !== 0x72) throw new Error("read failed at block "+blk);  // 'r'
+  return await io.read(512);
+}
+async function writeBlock(blk, data512){
+  const cmd = new Uint8Array(5+512); cmd[0]=0x57; put32(cmd,1,blk); cmd.set(data512,5);  // 'W'
+  await io.write(cmd);
+  const h = await io.read(1, 9000);
+  if (h[0] !== 0x77) throw new Error("write failed at block "+blk);  // 'w'
+}
+// 'F': flush the device's write cache to NAND so the upload is durable. The flush
+// can take a few seconds, so allow a generous timeout.
+async function commitToDevice(){
+  await io.write(new Uint8Array([0x46]));                 // 'F'
+  const h = await io.read(1, 15000);
+  if (h[0] !== 0x66) throw new Error("the device didn't confirm the save");  // 'f'
+}
+async function exit(){ try{ await io.write(new Uint8Array([0x58])); await io.read(1, 15000); }catch(e){} } // 'X' (also flushes)
+
+function trkBlk(slot, t){ return layout.slot0 + (slot*layout.ntrk + t)*layout.trackBlocks; }
+
+/* meta_blk: magic u32 | cur_slot u32 | slot[NUM_SLOTS] (each: speed_q16,loop_len,present[4],trk_len[4],trk_start[4]) */
+const SLOT_SZ = 44;
+function parseMeta(b){
+  const m = { magic: le32(b,0), cur: le32(b,4), slots: [] };
+  for (let s=0; s<layout.numSlots; s++){
+    const o = 8 + s*SLOT_SZ;
+    const slot = { speed: le32(b,o), loopLen: le32(b,o+4), present:[], trkLen:[], trkStart:[] };
+    for (let t=0;t<4;t++) slot.present[t] = b[o+8+t];
+    for (let t=0;t<4;t++) slot.trkLen[t]  = le32(b,o+12+t*4);
+    for (let t=0;t<4;t++) slot.trkStart[t]= le32(b,o+28+t*4);
+    m.slots.push(slot);
+  }
+  return m;
+}
+function buildMeta(m){
+  const b = new Uint8Array(512);
+  put32(b,0, layout.magic); put32(b,4, m.cur);
+  for (let s=0;s<layout.numSlots;s++){
+    const o = 8 + s*SLOT_SZ, slot = m.slots[s];
+    put32(b,o, slot.speed||65536); put32(b,o+4, slot.loopLen);
+    for (let t=0;t<4;t++) b[o+8+t] = slot.present[t]?1:0;
+    for (let t=0;t<4;t++) put32(b,o+12+t*4, slot.trkLen[t]);
+    for (let t=0;t<4;t++) put32(b,o+28+t*4, slot.trkStart[t]);
+  }
+  return b;
+}
+
+/* ---- connect / refresh ---- */
+$("#connect").onclick = async () => {
+  if (!navigator.serial){ log("This browser has no WebSerial — use Chrome or Edge on a computer.", "err"); return; }
+  let port;
+  try{
+    port = await navigator.serial.requestPort();   // (the long "Serial blocklist" console lines are just Chrome hiding Bluetooth devices — ignore them)
+  }catch(e){ return; }                              // user closed the picker — nothing to report
+  try{
+    await port.open({ baudRate: 115200 });
+  }catch(e){
+    log("Couldn't open the SP-1 port — it's still held by another program or a previous attempt.", "err");
+    log("Close any other tab running this page and any serial monitor, unplug and replug the SP-1, then click Connect again.", "err");
+    return;
+  }
+  try{
+    io = new Serial(port);
+    try{ await port.setSignals({ dataTerminalReady: true, requestToSend: true }); }catch(e){}
+    log("Port open. Entering transfer mode…");
+    layout = await handshake();
+    RATE = rateFromMagic(layout.magic);            // match the build (48 or 24 kHz)
+    log(`Connected. ${layout.numSlots} songs x ${layout.ntrk} tracks, ${RATE/1000} kHz build.`, "ok");
+    setConnected(true);
+    await refresh();
+    startKeepalive();                              // hold transfer mode open between actions
+  }catch(e){
+    stopKeepalive();
+    log("Couldn't reach the SP-1: " + e.message, "err");
+    log("Check it's flashed with the 48 kHz transfer build, powered on, and not actively playing a loop — then unplug/replug and retry.", "err");
+    setConnected(false);
+    try{ await io.close(); }catch(_){}             // always release the port so the next attempt can open it
+    io = null;
+  }
+};
+$("#done").onclick = async () => { if (!io) return; stopKeepalive(); await exit(); await io.close(); io=null;
+  log("Done — device resumed.", "ok"); setConnected(false); $("#songs").innerHTML=""; };
+
+function setConnected(on){
+  $("#dot").classList.toggle("on", on);
+  $("#status").textContent = on ? "Connected to SP-1" : "Not connected";
+  $("#connect").style.display = on ? "none" : "";
+  $("#done").style.display = on ? "" : "none";
+  $("#hint").classList.toggle("gone", on);
+}
+
+async function refresh(){
+  const b0 = await readBlock(0);
+  meta = parseMeta(b0);
+  if (meta.magic !== layout.magic) log("Note: the index block looks unformatted/empty.", "err");
+  render();
+}
+
+function fmtLen(blocks){ const s = blocks*SAMP_PER_BLK/RATE; return s>=1 ? s.toFixed(1)+" s" : Math.round(s*1000)+" ms"; }
+
+function render(){
+  const root = $("#songs"); root.innerHTML = "";
+  for (let s=0; s<layout.numSlots; s++){
+    const slot = meta.slots[s];
+    const base = slot.loopLen ? slot.loopLen/SAMP_PER_BLK : 0;
+    const song = document.createElement("div"); song.className = "song";
+    song.innerHTML = `<h2>Song ${s+1}${base? " · base "+fmtLen(base):""}</h2>`;
+    const grid = document.createElement("div"); grid.className = "tracks";
+    for (let t=0; t<layout.ntrk; t++){
+      const present = !!slot.present[t];
+      const blocks = present ? (slot.trkLen[t] || base) : 0;
+      const mult = (present && base) ? Math.round(blocks/base) : 0;
+      const cell = document.createElement("div"); cell.className = "cell" + (present?"":" empty");
+      cell.innerHTML = `<div class="name">Track ${t+1}</div>
+        <div class="len">${present ? fmtLen(blocks) + (mult>1 ? ` · ${mult}× base` : "") : "empty"}</div>`;
+      const acts = document.createElement("div"); acts.className = "acts";
+      if (present){
+        const dl = document.createElement("div"); dl.className="mini dl"; dl.textContent="Download";
+        dl.onclick = () => download(s, t, blocks); acts.appendChild(dl);
+      }
+      const up = document.createElement("label"); up.className="up"; up.textContent = present? "Replace…" : "Upload…";
+      const inp = document.createElement("input"); inp.type="file"; inp.accept=".wav,.mp3,audio/*";
+      inp.onchange = e => { if (e.target.files[0]) upload(s, t, e.target.files[0]); };
+      up.appendChild(inp); acts.appendChild(up);
+      cell.appendChild(acts); grid.appendChild(cell);
+    }
+    song.appendChild(grid); root.appendChild(song);
+  }
+}
+
+/* ---- download: read the track's blocks -> int16 -> WAV ---- */
+async function download(slot, t, blocks){
+  await withLock(async () => {
+    try{
+      log(`Downloading song ${slot+1} track ${t+1} (${blocks} blocks)…`);
+      const base = trkBlk(slot, t);
+      const pcm = new Uint8Array(blocks*512);
+      for (let i=0;i<blocks;i++){ pcm.set(await readBlock(base+i), i*512);
+        if (i%64===0) $("#status").textContent = `Reading ${Math.round(100*i/blocks)}%`; }
+      $("#status").textContent = "Connected to SP-1";
+      const wav = makeWav(pcm, blocks*SAMP_PER_BLK);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([wav], {type:"audio/wav"}));
+      a.download = `sp1_song${slot+1}_track${t+1}.wav`; a.click();
+      log("Downloaded.", "ok");
+    }catch(e){ log("Download failed: "+e.message, "err"); }
+  });
+}
+function makeWav(pcmBytes, nSamples){
+  const hdr = new ArrayBuffer(44), v = new DataView(hdr);
+  const dataLen = nSamples*2;
+  const wr = (o,str)=>{ for(let i=0;i<str.length;i++) v.setUint8(o+i, str.charCodeAt(i)); };
+  wr(0,"RIFF"); v.setUint32(4, 36+dataLen, true); wr(8,"WAVE"); wr(12,"fmt ");
+  v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,RATE,true); v.setUint32(28,RATE*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
+  wr(36,"data"); v.setUint32(40,dataLen,true);
+  const out = new Uint8Array(44+dataLen); out.set(new Uint8Array(hdr)); out.set(pcmBytes.slice(0,dataLen),44);
+  return out;
+}
+
+/* ---- upload: decode -> 48 kHz mono int16 -> snap to loop multiple -> write ---- */
+async function upload(slot, t, file){
+  try{
+    log(`Reading ${file.name}…`);
+    const ac = new (window.AudioContext||window.webkitAudioContext)();
+    const decoded = await ac.decodeAudioData(await file.arrayBuffer());
+    const frames = Math.ceil(decoded.duration*RATE);
+    const off = new OfflineAudioContext(1, Math.max(1,frames), RATE);
+    const src = off.createBufferSource(); src.buffer = decoded; src.connect(off.destination); src.start();
+    const mono = (await off.startRendering()).getChannelData(0);
+    ac.close();
+
+    const sl = meta.slots[slot];
+    const baseBlocks = sl.loopLen ? sl.loopLen/SAMP_PER_BLK : 0;
+    const isBase = baseBlocks === 0;                       // first track in this song sets the base
+    const clipBlocks = Math.ceil(mono.length / SAMP_PER_BLK);
+    let blocks = clipBlocks, mult = 1;
+    if (!isBase){
+      // A track must be a whole multiple of the song's base loop. Round up to the
+      // smallest multiple that holds the clip, with ~1% slack so a clip that is
+      // essentially k x (a hair over, from resampling) stays k x instead of k+1.
+      mult = Math.max(1, Math.ceil(clipBlocks/baseBlocks - 0.01));
+      blocks = mult*baseBlocks;
+    }
+    if (blocks > layout.trackBlocks){                      // clamp to the per-track region
+      mult = isBase ? 1 : Math.max(1, Math.floor(layout.trackBlocks/baseBlocks));
+      blocks = isBase ? layout.trackBlocks : mult*baseBlocks;
+      log(`Clip too long — truncated to ${fmtLen(blocks)}${isBase?"":` (${mult}x base)`}.`, "err");
+    }
+
+    const clipS = (mono.length/RATE).toFixed(1);
+    if (isBase) log(`First track in song ${slot+1}: its ${clipS}s sets the base loop length (${fmtLen(blocks)}).`);
+    else if (mult === 1) log(`Clip is ${clipS}s; padded to the ${fmtLen(blocks)} base.`);
+    else log(`Clip is ${clipS}s; snapped to ${mult}x the ${fmtLen(baseBlocks)} base = ${fmtLen(blocks)} (the rest filled with silence).`);
+
+    // int16 buffer padded to whole blocks (the silence "gaps")
+    const total = blocks*SAMP_PER_BLK;
+    const i16 = new Int16Array(total);
+    const n = Math.min(mono.length, total);
+    for (let i=0;i<n;i++){ let x = Math.round(mono[i]*32767); i16[i] = x>32767?32767:(x<-32768?-32768:x); }
+    const bytes = new Uint8Array(i16.buffer);
+
+    // Only the block writes are locked; the decode above ran unlocked so the
+    // keepalive could keep the device in transfer mode while it worked.
+    await withLock(async () => {
+      log(`Writing ${blocks} blocks (${fmtLen(blocks)})…`);
+      const dst = trkBlk(slot, t);
+      for (let i=0;i<blocks;i++){ await writeBlock(dst+i, bytes.subarray(i*512,(i+1)*512));
+        if (i%64===0) $("#status").textContent = `Writing ${Math.round(100*i/blocks)}%`; }
+      $("#status").textContent = "Connected to SP-1";
+
+      // update the index block, preserving every other song/track
+      sl.present[t] = 1; sl.trkLen[t] = blocks; sl.trkStart[t] = 0;
+      if (!sl.speed) sl.speed = 65536;
+      if (isBase) sl.loopLen = blocks*SAMP_PER_BLK;
+      await writeBlock(0, buildMeta(meta));
+      $("#status").textContent = "Saving to device…";
+      await commitToDevice();                            // flush to NAND so it survives unplug
+      $("#status").textContent = "Connected to SP-1";
+      log("Uploaded and saved to the device.", "ok");
+      render();
+    });
+  }catch(e){ log("Upload failed: "+e.message, "err"); }
+}
+
+window.addEventListener("beforeunload", () => { if (io) exit(); });
+</script>
+</body>
+</html>
