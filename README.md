@@ -16,8 +16,7 @@ Move loops between your computer and the SP-1 as WAV or MP3:
 
 ### → https://chattock.github.io/sp1-tape-looper/
 
-Works with **both** builds — the page detects the device's sample rate (24 or
-48 kHz) automatically.
+Works with the device automatically — just plug it in and the page does the rest.
 
 Open it in Chrome or Edge with the SP-1 plugged in and powered on normally, click
 Connect, and pick the `SP-1 Audio` port. No button combo or special mode is needed
@@ -60,8 +59,7 @@ layers takes).
 ```
 sp1-tape-looper/
 ├── README.md            you are here
-├── sp1_looper.bin       DEFAULT build — 24 kHz, rock-solid (flash this one)
-├── sp1_looper_48kHz.bin optional build — 48 kHz, full fidelity
+├── sp1_looper.bin       the build — 24 kHz, rock-solid (flash this one)
 └── firmware/            full source code (for reading / rebuilding)
     ├── src/
     │   ├── main.c       the whole looper: audio engine, controls, power, USB
@@ -77,19 +75,11 @@ For normal use, flash `sp1_looper.bin` (Sections 2–3). To read or change how i
 works, start with `firmware/src/main.c`, which opens with a full architecture
 overview.
 
-**`sp1_looper.bin` — the default.** Runs at 24 kHz, built for reliability under a
-heavy load. Recording mono at half the rate halves the flash bandwidth and leaves
-roughly twice the headroom, so all four tracks stay solid while you record and
-overdub — at the cost of the top octave of high-frequency detail (a warm, slightly
-lo-fi sound). This is the recommended build for most people.
-
-**`sp1_looper_48kHz.bin` — optional.** Runs at 48 kHz for full fidelity, trading
-some of that bandwidth headroom. Use it when sound quality matters more than the
-extra margin.
-
-Both builds include the loop transfer tool and differ only in sample rate. They
-save in different on-flash formats, so switching between them clears any saved
-loops — pick one for a session.
+**`sp1_looper.bin`.** Runs at 24 kHz, built for reliability under a heavy load.
+Recording mono at half the rate halves the flash bandwidth and leaves roughly
+twice the headroom, so all four tracks stay solid while you record and overdub —
+at the cost of the top octave of high-frequency detail (a warm, slightly lo-fi
+sound). It includes the loop transfer tool.
 
 ---
 
@@ -169,14 +159,12 @@ whatever was there.
 
 ## 4. Audio quality
 
-- Tracks are mono, 16-bit. The main build records and plays at 24 kHz; the backup
-  build at 48 kHz. Mono (rather than the stock player's stereo) is a
-  storage-bandwidth choice.
+- Tracks are mono, 16-bit, and record and play at 24 kHz. Mono (rather than the
+  stock player's stereo) is a storage-bandwidth choice.
 - Every playing track is a separate stream read off the flash in real time, while
   the track you are recording is written back. The flash has a hard ceiling on how
-  many of those it can sustain at once. The 24 kHz default build needs only half the
-  bandwidth per track, so it holds a full four-track session with headroom to
-  spare; the 48 kHz build trades some of that headroom for full fidelity.
+  many of those it can sustain at once. At 24 kHz each track needs only half the
+  bandwidth, so it holds a full four-track session with headroom to spare.
 - The flash occasionally pauses for its own housekeeping; the firmware reads ahead
   to hide this, so even during a busy session you would at most rarely hear a tiny
   hiccup. Nothing is damaged and the loops on disk stay intact.
@@ -241,11 +229,9 @@ The firmware is a [Zephyr](https://www.zephyrproject.org/) application built
 against a custom board definition for the SP-1. With a Zephyr workspace and the
 nRF SDK set up, point a `west build` at the `firmware/` folder, then convert the
 resulting ELF to a bootloader-friendly `.bin` (the application is linked to load
-at `0x20000`). The source builds the 24 kHz default. Two compile-time switches in
-`firmware/src/main.c` select the variant: `DECIM` (`2` = 24 kHz default, `1` =
-48 kHz) and `SP1_XFER_ENABLE` (`1` = include the loop-transfer mode, as both
-shipped builds do; `0` = compile it out entirely, leaving the proven engine
-byte-for-byte). The 48 kHz build is `DECIM 1`.
+at `0x20000`). The source builds at 24 kHz (`DECIM 2` in `firmware/src/main.c`).
+`SP1_XFER_ENABLE` (`1` = include the loop-transfer mode, as the shipped build
+does; `0` = compile it out entirely, leaving the proven engine byte-for-byte).
 
 The most important rule when modifying the firmware: the SP-1 has no hardware
 reset, so the firmware must always feed the watchdog and must always offer a path

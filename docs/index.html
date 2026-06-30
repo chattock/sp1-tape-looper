@@ -69,10 +69,9 @@
     Use <b>Chrome</b> or <b>Edge</b> on a computer, with the SP-1 plugged in over USB and powered on
     normally (not playing). Click Connect and pick the <b>SP-1 Audio</b> serial port. No button combo
     or special mode is needed &mdash; the looper switches itself into transfer mode the moment you
-    select that port (it pauses and the four track lights blink together). Works with either build &mdash;
-    it detects the device&rsquo;s sample rate (48 or 24&nbsp;kHz). Uploaded clips are resampled to that
-    rate, mono; lengths snap up to a whole multiple of the song&rsquo;s first track (the rest is filled
-    with silence).
+    select that port (it pauses and the four track lights blink together). Uploaded clips are
+    resampled to the device&rsquo;s rate, mono; lengths snap up to a whole multiple of the
+    song&rsquo;s first track (the rest is filled with silence).
   </div>
 
   <div class="songs" id="songs"></div>
@@ -82,9 +81,9 @@
 <script>
 "use strict";
 const SAMP_PER_BLK = 256;
-let RATE = 48000;                          // set per device after connect (48 or 24 kHz build)
-// The on-flash format magic is the build's sample rate: 'SE4A' = 48 kHz, 'SE2A' = 24 kHz.
-function rateFromMagic(magic){ return (magic === 0x53453234 || magic === 0x53453241) ? 24000 : 48000; } // 'SE24'/'SE2A' = 24 kHz; else 48 kHz
+let RATE = 24000;                          // device rate, confirmed from the device after connect
+// The on-flash format magic encodes the device's sample rate; the device reports 24 kHz.
+function rateFromMagic(magic){ return (magic === 0x53453234 || magic === 0x53453241) ? 24000 : 48000; } // 'SE24'/'SE2A' = 24 kHz
 const $ = s => document.querySelector(s);
 const logEl = $("#log");
 function log(msg, cls){ const t = new Date().toLocaleTimeString();
@@ -259,15 +258,15 @@ $("#connect").onclick = async () => {
     try{ await port.setSignals({ dataTerminalReady: true, requestToSend: true }); }catch(e){}
     log("Port open. Entering transfer mode…");
     layout = await handshake();
-    RATE = rateFromMagic(layout.magic);            // match the build (48 or 24 kHz)
-    log(`Connected. ${layout.numSlots} songs x ${layout.ntrk} tracks, ${RATE/1000} kHz build.`, "ok");
+    RATE = rateFromMagic(layout.magic);            // match the device rate
+    log(`Connected. ${layout.numSlots} songs x ${layout.ntrk} tracks, ${RATE/1000} kHz.`, "ok");
     setConnected(true);
     await refresh();
     startKeepalive();                              // hold transfer mode open between actions
   }catch(e){
     stopKeepalive();
     log("Couldn't reach the SP-1: " + e.message, "err");
-    log("Check it's flashed with the 48 kHz transfer build, powered on, and not actively playing a loop — then unplug/replug and retry.", "err");
+    log("Check it's flashed with the transfer build, powered on, and not actively playing a loop — then unplug/replug and retry.", "err");
     setConnected(false);
     try{ await io.close(); }catch(_){}             // always release the port so the next attempt can open it
     io = null;
@@ -353,7 +352,7 @@ function makeWav(pcmBytes, nSamples){
   return out;
 }
 
-/* ---- upload: decode -> 48 kHz mono int16 -> snap to loop multiple -> write ---- */
+/* ---- upload: decode -> 24 kHz mono int16 -> snap to loop multiple -> write ---- */
 async function upload(slot, t, file){
   try{
     log(`Reading ${file.name}…`);
