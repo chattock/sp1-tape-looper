@@ -70,8 +70,8 @@
     normally (not playing). Click Connect and pick the <b>SP-1 Audio</b> serial port. No button combo
     or special mode is needed &mdash; the looper switches itself into transfer mode the moment you
     select that port (it pauses and the four track lights blink together). Uploaded clips are
-    resampled to the device&rsquo;s rate, mono; lengths snap up to a whole multiple of the
-    song&rsquo;s first track (the rest is filled with silence).
+    resampled to the device&rsquo;s rate, mono; every track keeps its own length and loops
+    independently (the first clip in a song also sets its beat grid).
   </div>
 
   <div class="songs" id="songs"></div>
@@ -174,7 +174,11 @@ async function readUntilTag(timeoutMs){
 }
 /* Enter transfer mode and read the layout, tolerating noise and retrying. */
 async function handshake(){
-  for (let attempt = 1; attempt <= 5; attempt++){
+  // The device refuses the connect-magic while a take is being recorded or
+  // flushed — it finishes the take first and expects the host to RETRY. A
+  // take can run to the end of its loop before finalizing, so keep retrying
+  // for ~1 minute instead of a handful of attempts.
+  for (let attempt = 1; attempt <= 40; attempt++){
     io.drain();                                            // clear any stale bytes
     await io.write(MAGIC);                                 // "SP1XFER!" -> transfer mode
     await new Promise(r => setTimeout(r, 120));
@@ -183,7 +187,9 @@ async function handshake(){
       await readUntilTag(1200);                            // find "SP1!" past any noise
       return parsePing(await io.read(24, 1200));
     }catch(e){
-      log(`Handshake ${attempt}/5: ${e.message}. Bytes from device so far: ${io.rxTotal}.`);
+      if (attempt <= 3) log(`Handshake ${attempt}: ${e.message}. Bytes from device so far: ${io.rxTotal}.`);
+      else if (attempt === 4) log("Still trying — if the SP-1 is mid-recording it finishes the take first, which can run to the end of the current loop…");
+      $("#status").textContent = `Connecting (attempt ${attempt})…`;
     }
   }
   throw new Error("the SP-1 never sent its reply");
@@ -303,7 +309,7 @@ function render(){
     for (let t=0; t<layout.ntrk; t++){
       const present = !!slot.present[t];
       const blocks = present ? (slot.trkLen[t] || base) : 0;
-      const mult = (present && base) ? Math.round(blocks/base) : 0;
+      const mult = (present && base && blocks % base === 0) ? (blocks/base) : 0;
       const cell = document.createElement("div"); cell.className = "cell" + (present?"":" empty");
       cell.innerHTML = `<div class="name">Track ${t+1}</div>
         <div class="len">${present ? fmtLen(blocks) + (mult>1 ? ` · ${mult}× base` : "") : "empty"}</div>`;
@@ -366,26 +372,20 @@ async function upload(slot, t, file){
 
     const sl = meta.slots[slot];
     const baseBlocks = sl.loopLen ? sl.loopLen/SAMP_PER_BLK : 0;
-    const isBase = baseBlocks === 0;                       // first track in this song sets the base
+    const isBase = baseBlocks === 0;                       // first clip in this song sets the beat grid
     const clipBlocks = Math.ceil(mono.length / SAMP_PER_BLK);
-    let blocks = clipBlocks, mult = 1;
-    if (!isBase){
-      // A track must be a whole multiple of the song's base loop. Round up to the
-      // smallest multiple that holds the clip, with ~1% slack so a clip that is
-      // essentially k x (a hair over, from resampling) stays k x instead of k+1.
-      mult = Math.max(1, Math.ceil(clipBlocks/baseBlocks - 0.01));
-      blocks = mult*baseBlocks;
-    }
+    // INDEPENDENT LOOPS: every track keeps its own length and cycles on its
+    // own loop — no snapping to the song's first track, no silence padding
+    // (only the sub-block remainder below is zero-filled).
+    let blocks = clipBlocks;
     if (blocks > layout.trackBlocks){                      // clamp to the per-track region
-      mult = isBase ? 1 : Math.max(1, Math.floor(layout.trackBlocks/baseBlocks));
-      blocks = isBase ? layout.trackBlocks : mult*baseBlocks;
-      log(`Clip too long — truncated to ${fmtLen(blocks)}${isBase?"":` (${mult}x base)`}.`, "err");
+      blocks = layout.trackBlocks;
+      log(`Clip too long — truncated to ${fmtLen(blocks)}.`, "err");
     }
 
     const clipS = (mono.length/RATE).toFixed(1);
-    if (isBase) log(`First track in song ${slot+1}: its ${clipS}s sets the base loop length (${fmtLen(blocks)}).`);
-    else if (mult === 1) log(`Clip is ${clipS}s; padded to the ${fmtLen(blocks)} base.`);
-    else log(`Clip is ${clipS}s; snapped to ${mult}x the ${fmtLen(baseBlocks)} base = ${fmtLen(blocks)} (the rest filled with silence).`);
+    if (isBase) log(`First track in song ${slot+1}: its ${clipS}s also sets the song's beat grid (${fmtLen(blocks)}).`);
+    else log(`Clip is ${clipS}s — the track loops at its own length (${fmtLen(blocks)}).`);
 
     // int16 buffer padded to whole blocks (the silence "gaps")
     const total = blocks*SAMP_PER_BLK;

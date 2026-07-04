@@ -32,8 +32,10 @@
  *      speaker amp are clock slaves (see the "I2S audio bus" section).
  *    * Loops play at full 48 kHz; recording is mono and decimated by DECIM (see
  *      the LOOPER ENGINE section) — the flash write speed sets that ceiling.
- *    * Storage uses the nRF's SPIM3 SPI engine at 16 MHz with hardware CRC
- *      checking + retry, so the flash bus is fast and self-correcting.
+ *    * Storage uses the nRF's SPIM3 SPI engine at 32 MHz (a calculated overclock
+ *      above the 26 MHz default-speed max) with hardware CRC checking + retry,
+ *      so the flash bus is fast and self-correcting. The card's internal write
+ *      cache is enabled to absorb record bursts; it's flushed only at power-off.
  *
  *  ---- BOOTLOADER SAFETY (the SP-1 "BIG FIVE") ----
  *    app lives at 0x20000; watchdog fed < 5 s; we do NOT re-init bootloader-
@@ -66,11 +68,21 @@
 
 /* FAILSAFE: turn ANY unrecoverable fault (bad pointer, stack overflow, kernel
  * panic, failed assert) into a clean reboot instead of a dead hang, so the
- * device can never get stuck in a bricked-looking state. */
+ * device can never get stuck in a bricked-looking state.
+ * CRASH FORENSICS: this silent reboot is also why crashes left no trail —
+ * stash the fault reason + faulting PC in __noinit RAM (survives the soft
+ * reboot); the next boot prints them in the diag line as flt=reason@pc. */
+static __noinit uint32_t g_fault_key;            /* 0xFA17FA17 = breadcrumb valid */
+static __noinit uint32_t g_fault_reason;
+static __noinit uint32_t g_fault_pc;
+static uint32_t g_resetreas;                     /* NRF_POWER->RESETREAS at boot */
+static uint32_t g_last_fault_reason = 0xFFFFFFFFu; /* from the PREVIOUS boot (diag) */
+static uint32_t g_last_fault_pc;
 void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
 {
-	ARG_UNUSED(reason);
-	ARG_UNUSED(esf);
+	g_fault_reason = reason;
+	g_fault_pc = esf ? esf->basic.pc : 0u;
+	g_fault_key = 0xFA17FA17u;
 	sys_reboot(SYS_REBOOT_COLD);
 	CODE_UNREACHABLE;
 }
@@ -266,13 +278,13 @@ static void codec_init(void)
 #define BLK_FRAMES      256
 #define BLK_BYTES       (BLK_FRAMES * 2 * (int)sizeof(int16_t))   /* stereo 16-bit slots */
 
-K_MEM_SLAB_DEFINE(tx_slab, BLK_BYTES, 10, 4);   /* deep queue so the DMA never starves */
+K_MEM_SLAB_DEFINE(tx_slab, BLK_BYTES, 10, 4);   /* 10 blks ~106ms DMA cushion — the PROVEN WORKING.bin
+                                                 * value. (A codec-era trim to 4 was never validated on
+                                                 * hardware and rode along in every failed build.) */
 static const struct device *const i2s_dev = DEVICE_DT_GET(DT_NODELABEL(i2s0));
 
 static int  audio_cfg_rc = 1;        /* i2s_configure() result, for serial diag */
 static bool tas_cfg_ok;              /* did the TAS2505 register writes all ACK?  */
-static volatile int  audio_blocks;   /* count of I2S blocks actually written      */
-static volatile int  audio_write_rc = 99;
 static volatile bool audio_started;  /* did i2s START trigger fire?               */
 
 /* ---- TAS2505 speaker-amp setup (ported from TimK SP-1-dev, 16-bit I2S) ---- */
@@ -592,7 +604,12 @@ static void hp_init(void)
 }
 
 /* ---- continuous I2S TX thread ---- */
-static K_THREAD_STACK_DEFINE(audio_stack, 2048);
+static K_THREAD_STACK_DEFINE(audio_stack, 3072);  /* +1K margin over the historical 2048: the
+                                                   * PREEMPT(0) mixer takes USB-thread
+                                                   * preemptions (incl. FPU lazy-stacking
+                                                   * frames) on top of its own worst case —
+                                                   * the top-ranked candidate for the
+                                                   * unexplained record-start crash */
 static struct k_thread audio_tcb;
 
 /* Fill one stereo I2S block with silence. Used to prime the I2S DMA at start-up
@@ -611,7 +628,10 @@ static void fill_block(int16_t *s)
  * between the host's 48000 Hz send rate and the SP-1's 48000 Hz I2S rate; the
  * explicit-feedback regulator keeps it centred (see feedback_update). */
 #define USB_FRAME_BYTES   4u                 /* 2 ch * 16-bit */
-#define USB_RING_FRAMES   4096u              /* ~85 ms at 48 kHz */
+#define USB_RING_FRAMES   4096u              /* ~85 ms — the PROVEN WORKING.bin value. This ring buffers
+                                              * the host's UAC2 stream, i.e. the RECORD SOURCE: the
+                                              * codec-era trim to 2048 was never validated and rode
+                                              * along in every failed build. */
 /* Target ring fill (frames, ~21 ms). Used both as the prebuffer target before
  * the consumer starts draining a freshly-enabled stream, and as the feedback
  * regulator's setpoint, so the hand-off from prebuffering to draining is smooth. */
@@ -626,6 +646,15 @@ static volatile bool g_usb_streaming;        /* host has enabled the UAC2 termin
  * sounds wrong, the problem is NOT the buffer (look at level/codec instead). */
 static volatile uint32_t g_ring_underruns;
 static volatile uint32_t g_ring_overflows;
+static volatile uint32_t g_usb_pkts;               /* diag: ISO packets received (~1000/s streaming) */
+static volatile uint32_t g_usb_frames;             /* diag: audio frames received (~48000/s streaming) */
+static volatile uint32_t g_sof_cnt;                /* diag: SOFs seen by the feedback regulator (1000/s) */
+static volatile uint32_t g_zero_pad;               /* diag: silence frames padded into short blocks */
+static volatile uint32_t g_rx_nobuf;               /* diag: ISO packets DROPPED — rx pool empty (the
+                                                    * exact mechanism: ISO never retries a NAKed buffer) */
+static volatile uint32_t g_rx_slab_min = 0xFFFF;   /* diag: window MIN free rx buffers */
+static volatile int32_t  g_usb_lowat = 0x7FFFFFFF; /* diag: window MIN usb-in ring fill, frames */
+static volatile uint32_t g_usb_hiwat;              /* diag: window MAX usb-in ring fill, frames */
 
 /* Drain up to BLK_FRAMES stereo frames from the USB ring into one I2S block,
  * expanding each 16-bit sample into the 24-in-32-bit I2S word with the same <<8
@@ -650,18 +679,60 @@ static volatile uint32_t g_ring_overflows;
  * start at the next block (~38 ms = effectively instant) and record exactly one
  * loop, wrapping. "BPM" is just the varispeed label (80 = 1.0x); there is NO
  * tempo grid — the beat constants below only pace the LED pulse + MIDI clock. */
-#define DECIM            2u
-#define LOOP_RATE        (I2S_TRUE_HZ / DECIM)             /* 24000 Hz mono — half-rate (~2x track headroom); the optimized full build at 24k */
-
-/* USB upload/download (loop transfer website). 0 = OFF: compiles out completely,
- * leaving the proven streaming engine byte-for-byte (the rock-solid default). 1 =
- * ON: adds the transfer mode (BETA — its CDC RX still costs a little under a full
- * 4-track load, so the last track can struggle). The default build ships with it
- * OFF; the beta build turns it ON. */
-#define SP1_XFER_ENABLE  1
+#if SP1_BUILD_24K
+#define DECIM            2u                               /* 24 kHz build (see SP1_BUILD_24K) */
+#else
+#define DECIM            1u                               /* 48 kHz build (default) */
+#endif
+#define LOOP_RATE        (I2S_TRUE_HZ / DECIM)             /* 48000/DECIM Hz mono */
+/* ===== STORAGE CODEC TOGGLE (compile-time) ===============================
+ * Loop audio is stored COMPRESSED on flash to cut the WRITE+READ traffic that
+ * is the eMMC reliability bottleneck. The audio engine is UNCHANGED: the rec
+ * ring (g_rring) and play rings (trk[].pring) and the whole mix stay int16.
+ * We ONLY encode on the flash write and decode on the flash read, at the three
+ * flush-boundary sites (codec_pack / codec_unpack). SAMP_PER_BLK = int16
+ * samples represented by ONE 512-byte flash block; it is codec-conditional.
+ *   PCM   (0): 16-bit, 256 samp/blk, 1:1  (current format, memcpy-equivalent)
+ *   ULAW  (1):  8-bit G.711 u-law, 512 samp/blk, 2:1
+ *   ADPCM (2):  4-bit IMA, self-contained blocks: 4-byte header (predictor
+ *               int16 + step-index uint8 + 1 pad) + 508 nibble-bytes = 1016
+ *               samp/blk, ~4:1. Predictor RESETS at the start of every block so
+ *               any block decodes standalone (random-access loop seeks work).
+ * NOTE: 256 and 512 are powers of two; 1016 is NOT. The only bitmask use of
+ * SAMP_PER_BLK (the prime align at the promotion site) is converted to a
+ * division-based align so the non-power-of-two ADPCM value is correct. All
+ * other SAMP_PER_BLK uses are already /,*,%  (block-domain). The int16 ring
+ * masks (RING_MASK / RRING_MASK) are sample-domain and stay powers of two. */
+#define SP1_CODEC_PCM    0
+#define SP1_CODEC_ULAW   1
+#define SP1_CODEC_ADPCM  2
+#ifndef SP1_CODEC
+#define SP1_CODEC        SP1_CODEC_PCM    /* FULL 16-BIT PCM — the proven WORKING.bin
+                                           * format (magic SE4A). The u-law/ADPCM
+                                           * compressed builds never worked right on
+                                           * the user's hardware; do not rebase on
+                                           * them again. */
+#endif
+#if   SP1_CODEC == SP1_CODEC_PCM
 #define SAMP_PER_BLK     (EMMC_BLOCK_SIZE / 2u)            /* 256 int16 / block */
+#elif SP1_CODEC == SP1_CODEC_ULAW
+#define SAMP_PER_BLK     (EMMC_BLOCK_SIZE)                 /* 512 samp / block (8-bit) */
+#elif SP1_CODEC == SP1_CODEC_ADPCM
+#define SAMP_PER_BLK     1016u                             /* 4B hdr + 508 nibble-bytes = 1016 samp / block (4-bit IMA) */
+#else
+#error "SP1_CODEC must be 0 (PCM), 1 (ULAW) or 2 (ADPCM)"
+#endif
+/* ---- storage codec pack/unpack (full bodies just before streamer_thread) ----
+ * codec_pack:   int16 ring -> flash bytes  (encode), one CMD25 burst of n blocks
+ * codec_unpack: flash bytes -> int16 ring  (decode), one CMD18 burst of n blocks
+ * Both take (ring, ring_mask, ring_start_sample, flashbuf, nblocks) and handle
+ * the power-of-two ring wrap internally. PCM = memcpy-equivalent. */
+static void codec_pack(const int16_t *ring, uint32_t ring_mask, uint32_t start,
+                       uint8_t *flash, uint32_t nblk);
+static void codec_unpack(int16_t *ring, uint32_t ring_mask, uint32_t start,
+                         const uint8_t *flash, uint32_t nblk);
 #define LOOP_BPM_BASE    80u                               /* BPM label for 1.0x varispeed */
-/* FULL-RATE LOOPS: the SPIM2 hardware eMMC path measures 1333 blk/s sustained
+/* FULL-RATE LOOPS: the SPIM3 hardware eMMC path measures 1333 blk/s sustained
  * REWRITE (2026-06-12 capture) — 48 kHz mono needs 187.5 blk/s write + 750
  * blk/s read (4 tracks): ~14% / ~60% of capacity. DECIM=1 also means the
  * decimator/interpolator is bit-transparent — loops record and play exactly
@@ -681,9 +752,17 @@ static volatile uint32_t g_ring_overflows;
  * Data-Structure page). With regions 8KB-ALIGNED, every 16-block flush burst
  * lands exactly on one internal page and the card can program it without a
  * read-modify-write, which is far slower than a clean page-aligned burst. */
-#define TRACK_BLOCKS     ((((MAX_LOOP_BLOCKS + 8u) + 15u) / 16u) * 16u)
-#define RING_SAMPLES     16384u                            /* 341 ms read-ahead @48k: rides out the card's ~150 ms random stalls (measured min=194 of 8192 before doubling) */
+/* round the per-track region UP to a 4096-block (2MB) multiple so every track
+ * region stays 2MB-aligned. (The original reason was a pre-erase pass that has
+ * since been removed; the alignment is harmless and is kept so the on-card
+ * layout / META_MAGIC do not change.) */
+#define TRACK_BLOCKS     ((((MAX_LOOP_BLOCKS + 8u) + 4095u) / 4096u) * 4096u)
+#define RING_SAMPLES     16384u                            /* ~341 ms read-ahead @48k (reverted 8192->16384 to give the compressed codecs comfortable play-ring margin) */
 #define RING_MASK        (RING_SAMPLES - 1u)
+/* Play-ring critical margin for scheduling decisions: 128 ms expressed in
+ * samples at the loop rate — EXPLICIT and codec-independent (the old
+ * 24u*SAMP_PER_BLK silently varied 2.5x across codec block sizes). */
+#define PLAY_CRIT_SAMPLES (128u * (LOOP_RATE / 1000u))
 
 /* ---- SONG SLOTS + eMMC layout ----------------------------------------------
  * The looper owns the whole eMMC starting at block 0: block 0 holds the slot
@@ -693,17 +772,36 @@ static volatile uint32_t g_ring_overflows;
  * exactly 4 songs so each maps to one of the 4 status LEDs (song N -> LED N). */
 #define NUM_SLOTS        4u
 #define META_BLOCK       0u
-#define SLOT0_BLOCK      16u    /* 8KB-aligned (block 0 = meta, 1-15 spare) */
+#define SLOT0_BLOCK      4096u  /* 2MB-aligned (block 0 = meta, 1-4095 spare) so every trk_blk stays 2MB-aligned */
 /* FIXED storage signature: reflashing KEEPS the saved songs (the earlier
  * wipe-on-reflash build stamp is gone — user prefers persistence; double-tap a
  * track to delete it instead). Storage only re-formats if this constant or the
  * layout ever changes. */
-/* Per-rate on-flash magic so the two builds keep distinct save formats (TRACK_BLOCKS
- * scales with DECIM): switching builds reformats rather than misreading. */
+/* The two sample-rate builds use different on-flash layouts (TRACK_BLOCKS
+ * scales with DECIM), so each gets its own magic: switching builds is detected
+ * as "unformatted" and reformats, rather than reading the other rate's data. */
+/* The on-flash byte format now depends on BOTH the sample-rate build (DECIM)
+ * AND the storage codec (SP1_CODEC): a different codec packs the same loop into
+ * a different number of bytes/block, so the two are not interchangeable. Give
+ * each (rate,codec) pair its own magic; switching either is detected as
+ * "unformatted" and triggers a one-time reformat instead of mis-reading the
+ * other format's bytes. */
 #if DECIM == 1u
-#define META_MAGIC       0x53453438u                       /* 'SE48' — 48 kHz layout */
+#  if   SP1_CODEC == SP1_CODEC_PCM
+#define META_MAGIC       0x53453441u                       /* 'SE4A' — 48 kHz, PCM 16-bit (original) */
+#  elif SP1_CODEC == SP1_CODEC_ULAW
+#define META_MAGIC       0x53455534u                       /* 'SEU4' — 48 kHz, u-law 8-bit */
+#  else
+#define META_MAGIC       0x53454134u                       /* 'SEA4' — 48 kHz, IMA-ADPCM 4-bit */
+#  endif
 #else
-#define META_MAGIC       0x53453234u                       /* 'SE24' — 24 kHz layout */
+#  if   SP1_CODEC == SP1_CODEC_PCM
+#define META_MAGIC       0x53453241u                       /* 'SE2A' — 24 kHz, PCM 16-bit */
+#  elif SP1_CODEC == SP1_CODEC_ULAW
+#define META_MAGIC       0x53455532u                       /* 'SEU2' — 24 kHz, u-law 8-bit */
+#  else
+#define META_MAGIC       0x53454132u                       /* 'SEA2' — 24 kHz, IMA-ADPCM 4-bit */
+#  endif
 #endif
 static inline uint32_t trk_blk(uint32_t slot, uint32_t t)
 {
@@ -731,14 +829,6 @@ static volatile uint32_t g_slot;
 static volatile int      g_slot_switch_req;   /* main -> audio: reload tracks for the new slot */
 static volatile int      g_meta_save_req;     /* -> streamer: persist g_meta to eMMC */
 static volatile int      g_meta_loaded;       /* streamer -> main: g_meta read at boot */
-
-/* ---- USB block-transfer mode (the loop transfer website talks to this) -------
- * Compiled in only when SP1_XFER_ENABLE; with it off, none of this exists and the
- * engine is byte-for-byte the proven build. */
-#if SP1_XFER_ENABLE
-static volatile uint8_t  g_xfer_mode;          /* 1 = in block-transfer mode (audio paused) */
-RING_BUF_DECLARE(g_cdc_rx, 1024);              /* CDC serial RX bytes, filled by the ISR */
-#endif
 
 enum trk_state { TS_EMPTY, TS_ARMED, TS_REC, TS_DONE, TS_PLAY };
 
@@ -779,17 +869,43 @@ static struct looptrk trk[NTRK];
  * rings were waste: one ring TWICE the size costs 32 KB less RAM and absorbs
  * twice the eMMC-write transient (~2.4 s at the loop rate) before overflowing.
  * Overflow = a permanently corrupted take, so headroom here is what matters. */
-#define RRING_SAMPLES    16384u
+#define RRING_SAMPLES    16384u   /* ~341 ms record backlog (reverted 32768->16384): the compressed codecs cut flush traffic, so the doubled rec ring is no longer needed; this reclaims RAM for the play-ring revert */
 #define RRING_MASK       (RRING_SAMPLES - 1u)
 static int16_t g_rring[RRING_SAMPLES];
 static volatile uint32_t g_rec_overruns;         /* diag: rec ring overflow events */
-/* DIAG PROBE (read-only): wall-clock of each play-track eMMC read, to settle
- * bus-bound vs CPU/latency-bound. A 16-block read is ~4 ms of pure 16 MHz SCK;
- * if the MAX under multi-track load is near that, the bus is the wall; if it is
- * much larger, the streamer is being preempted/stretched (recoverable headroom).
- * Reset each diag print so the line shows the worst read since the last line. */
-static volatile uint32_t g_rd_us_last;           /* last play-read wall-clock (us) */
-static volatile uint32_t g_rd_us_max;            /* worst since last diag print (us) */
+static volatile uint32_t g_starve_cnt[NTRK];     /* diag: per-track play-ring underrun episodes */
+static volatile uint32_t g_stored_glitch_cnt;    /* diag: wfail advance-anyway commits — a STORED glitch
+                                                  * replays at the same loop spot every pass (vs a live
+                                                  * underrun, which is one-shot). Separating the two is
+                                                  * what previous crackle hunts were missing. */
+static volatile uint32_t g_i2s_wfail_cnt;        /* diag: I2S write failures (audio-path exoneration) */
+static volatile uint32_t g_audio_us_max;         /* diag: worst looper_audio_block exec time, us (DWT, session) */
+static volatile int32_t  g_play_lowat = 0x7FFFFFFF; /* diag: window MIN play-ring margin, samples */
+static volatile uint32_t g_rec_hiwat;            /* diag: window MAX rec-ring fill, samples */
+static volatile uint8_t  g_extcsd_dump[9];       /* diag: EXT_CSD[167,166,231,502,503,198,246,192,175] */
+static volatile uint8_t  g_hpi_on;               /* 1 = HPI enabled (abort lever for maintenance ops; also proves
+                                                  * the card's HPI works, for a possible future write-path V4) */
+static volatile uint8_t  g_emmc_quiesce;         /* 1 = shutdown flush done: park the eMMC bus */
+/* eMMC internal write cache: enabled at boot if the card has one. It absorbs the
+ * record write-bursts so an overdub doesn't overflow the rec ring. The cache is
+ * volatile, so it is flushed to NAND once at power-off (via g_cache_flush_req) to
+ * keep the loops -- never during play, which would stall the bus. */
+static volatile uint8_t  g_cache_on;           /* 1 = card write cache enabled */
+static volatile uint32_t g_cache_kb;           /* diag: EXT_CSD CACHE_SIZE (KB) the card reports */
+static volatile int      g_cache_flush_req;    /* power-off: streamer, flush the cache now */
+
+/* ---- USB block-transfer mode (the file-transfer website talks to this) -----
+ * A tiny binary protocol over the CDC serial console lets a WebSerial page
+ * read/write raw eMMC blocks, so loops can be up/downloaded as WAV. The host
+ * sends an 8-byte magic to ENTER; the streamer (the only eMMC user) then pauses
+ * audio and services one command at a time. Auto-exits on 'X' or a 15 s idle. */
+#define SP1_XFER_ENABLE 1                      /* 1 = USB loop-transfer (website upload/download) enabled */
+#if SP1_XFER_ENABLE
+static volatile uint8_t  g_xfer_mode;          /* 1 = in block-transfer mode (audio paused) */
+RING_BUF_DECLARE(g_cdc_rx, 1024);              /* CDC serial RX bytes, filled by the ISR */
+#else
+#define g_xfer_mode 0u                         /* transfer out: constant 0 so every g_xfer_mode branch drops */
+#endif
 
 static volatile uint32_t g_consume_pos;          /* shared playhead (loop samples, free-running) */
 static volatile uint8_t  g_loop_active;          /* a loop exists / master clock running */
@@ -818,7 +934,7 @@ static volatile int      g_emmc_ready;
 static volatile int      g_dbg_beat;              /* current beat number (diag) */
 static volatile int      g_dbg_btn = -1;          /* committed track button (diag) */
 static uint64_t          g_sample_clock;          /* free-running I2S frames (idle metronome) */
-static int32_t           g_dec_acc;                /* live accumulator for record decimation */
+static int64_t           g_dec_acc;                /* live accumulator for record decimation (int64: cannot overflow when the transport is stopped / step rounds to 0) */
 static uint32_t          g_frames_since;           /* I2S frames since the last loop-sample tick */
 static uint32_t          g_pphase;                 /* Q16 playback phase */
 static volatile uint32_t g_play_speed_q16 = 65536; /* tape speed when playing (Q16, 65536=1.0x); rocker sets */
@@ -942,27 +1058,48 @@ static inline int16_t soft_limit(int32_t x)
 	}
 	return (int16_t)(s * a);         /* a <= 32767 by construction */
 }
+/* mix-only -O2: the audio hot path. Safe here (unlike global -O2): the two signed-
+ * overflow UB sites are fixed with int64 casts, -fno-strict-aliasing is global, and
+ * this function contains NO flash-write code -- same per-function -O2 already proven
+ * werr-safe on the eMMC read path. Speeds the per-frame interp/volume/limit work. */
+__attribute__((optimize("O2")))
 static void looper_audio_block(int16_t *s)
 {
-#if SP1_XFER_ENABLE
-	if (g_xfer_mode) { memset(s, 0, BLK_BYTES); return; }   /* USB transfer: silence out */
-#endif
 	static int16_t tmp[BLK_FRAMES * 2];
+	if (g_xfer_mode) { memset(s, 0, BLK_BYTES); return; }   /* USB transfer: silence out */
 	/* PREBUFFER: do not start draining a freshly-(re)enabled stream until the
 	 * ring holds FB_SETPOINT frames — the feedback regulator over-delivers to
 	 * fill it in ~20 ms. Without this gate the consumer races the empty ring and
 	 * the first moments of every host play start dribble out as choppy fragments
 	 * (this gate existed in the old direct path but was lost in the looper). */
 	static bool primed;
+	/* SCHED-LOCKED cluster: the mixer is PREEMPT(0) now, so the COOP USB
+	 * threads can preempt it mid-ring_buf_get — and the terminal-toggle
+	 * callback resets this ring (documented unsafe against a concurrent
+	 * get). The lock (~tens of us) restores exactly the atomicity the old
+	 * COOP(7) mixer had for this cluster; USB ISO service only needs to
+	 * preempt the ~ms-scale MIX work below, never this copy. */
+	k_sched_lock();
 	if (!g_usb_streaming)
 		primed = false;
 	else if (!primed &&
 		 ring_buf_size_get(&usb_audio_ring) >= FB_SETPOINT * USB_FRAME_BYTES)
 		primed = true;
+	if (primed) {
+		/* diag: usb-in ring fill watermarks — the LIVE INPUT is the record
+		 * source, and none of the eMMC counters can see it starve. */
+		int32_t _uf = (int32_t)(ring_buf_size_get(&usb_audio_ring) / USB_FRAME_BYTES);
+		if (_uf < g_usb_lowat) g_usb_lowat = _uf;
+		if (_uf > (int32_t)g_usb_hiwat) g_usb_hiwat = (uint32_t)_uf;
+	}
 	uint32_t bytes = primed ?
 		ring_buf_get(&usb_audio_ring, (uint8_t *)tmp, sizeof(tmp)) : 0;
+	k_sched_unlock();
 	uint32_t got = bytes / USB_FRAME_BYTES;
-	if (primed && got < BLK_FRAMES) g_ring_underruns++;
+	if (primed && got < BLK_FRAMES) {
+		g_ring_underruns++;
+		g_zero_pad += BLK_FRAMES - got;   /* silence frames injected (and recorded) */
+	}
 
 	/* FAILSAFE — exactly one recorder. Every block, find the single ARMED/REC
 	 * track and make g_rec_track the one source of truth; if a second recorder
@@ -1021,38 +1158,55 @@ static void looper_audio_block(int16_t *s)
 		int i = g_rec_track;
 		if (i >= 0 && i < NTRK) {
 			if (trk[i].state == TS_ARMED) {
-				/* released before any sound -> cancel. If it was the first take of
-				 * an empty song, stop the transport too. */
+				/* cancelled before any sound -> back to PLAY/EMPTY. */
 				trk[i].state = (g_slot < NUM_SLOTS && g_meta.slot[g_slot].present[i])
 					       ? TS_PLAY : TS_EMPTY;
 				g_rec_track = -1;
 				if (g_loop_len == 0u) {
+					/* A sole-track re-record ARM reset the song grid and the
+					 * playhead. A cancel must UNDO that damage: restore the
+					 * saved grid, and re-anchor every playing ring to the
+					 * (reset) playhead — without this the track replays one
+					 * stale ~341 ms ring chunk for as long as the song had
+					 * been running (PASS 2 believes the ring is pinned full)
+					 * and the NEXT take hijacks the song grid. */
+					if (g_slot < NUM_SLOTS && g_meta.slot[g_slot].loop_len) {
+						g_loop_len = g_meta.slot[g_slot].loop_len;
+						g_loop_blocks = g_loop_len / SAMP_PER_BLK;
+					}
 					int anyp = 0;
-					for (int k = 0; k < NTRK; k++) if (trk[k].state == TS_PLAY) anyp = 1;
+					for (int k = 0; k < NTRK; k++)
+						if (trk[k].state == TS_PLAY) {
+							anyp = 1;
+							trk[k].p_w = g_consume_pos;  /* starve -> clean refill */
+						}
 					if (!anyp) g_loop_active = 0;
 				}
 			} else if (trk[i].state == TS_REC) {
+				/* FREE-LENGTH stop (every take): the loop is EXACTLY what was
+				 * recorded — no quantization to the first track's grid, no
+				 * silence padding while you hunt for the loop point. Rounded
+				 * only to the 256-sample storage block (~±2.7 ms, inaudible)
+				 * so the eMMC streaming stays block-aligned. The FIRST take
+				 * of a song additionally defines the beat grid + BPM (LEDs,
+				 * MIDI clock); later tracks free-run on their own cycles. */
+				uint32_t blocks = (trk[i].rec_count + SAMP_PER_BLK / 2u)
+						  / SAMP_PER_BLK;
+				if (blocks < 1u) blocks = 1u;
+				else if (blocks > MAX_LOOP_BLOCKS) blocks = MAX_LOOP_BLOCKS;
 				if (g_loop_len == 0u) {
-					/* first take: the loop is EXACTLY what was held — no tempo
-					 * quantization (works for podcasts/speech, never "jumpy").
-					 * Rounded only to the 256-sample storage block (~±19 ms,
-					 * inaudible) so the eMMC streaming stays block-aligned. */
-					uint32_t blocks = (trk[i].rec_count + SAMP_PER_BLK / 2u)
-							  / SAMP_PER_BLK;
-					if (blocks < 1u) blocks = 1u;
-					else if (blocks > MAX_LOOP_BLOCKS) blocks = MAX_LOOP_BLOCKS;
 					g_loop_len = blocks * SAMP_PER_BLK;
 					g_loop_blocks = blocks;
-					trk[i].rec_target = g_loop_len;
-					trk[i].len_blocks = g_loop_blocks;   /* base take = one segment */
 					tempo_finish();         /* set the detected beat grid + BPM */
 					if (g_slot < NUM_SLOTS) {
 						g_meta.slot[g_slot].loop_len = g_loop_len;
 						g_meta_save_req = 1;
 					}
 				}
-				/* end the live phrase; the per-tick recorder pads silence (if any)
-				 * up to rec_target, then -> TS_DONE. */
+				trk[i].rec_target = blocks * SAMP_PER_BLK;
+				trk[i].len_blocks = blocks;          /* THIS track's own cycle */
+				/* end the live phrase; the per-tick recorder pads silence (if
+				 * any) up to rec_target, then -> TS_DONE. */
 				trk[i].rec_silence = 1;
 			}
 		}
@@ -1165,7 +1319,20 @@ static void looper_audio_block(int16_t *s)
 	int32_t sd = (int32_t)target_q16 - (int32_t)g_cur_speed_q16;
 	if (sd > -64 && sd < 64) g_cur_speed_q16 = target_q16;                 /* snap when ~there */
 	else g_cur_speed_q16 = (uint32_t)((int32_t)g_cur_speed_q16 + sd / 50); /* one-pole ~2%/block */
+	/* At exact unity, drop any fractional-phase residue left by the spin-up
+	 * ramp (one-time <=1/2-sample jump, inaudible): otherwise frac stays
+	 * nonzero forever and every playing track pays the interpolation
+	 * multiply per frame despite running at 1.0x. */
+	if (g_cur_speed_q16 == 65536u && g_playing && (g_pphase & 0xFFFFu))
+		g_pphase &= ~0xFFFFu;
 	uint32_t step = g_cur_speed_q16 / DECIM;                              /* Q16 per I2S frame */
+
+	/* Snapshot per-track fader volume once per block. vol_q8 is volatile (reloaded
+	 * every frame at -Os), but its only writer is the lower-priority controls path
+	 * and the mixer (PREEMPT 0) outranks it, so it is constant
+	 * across the 256 frames -- the snapshot is bit-identical and drops ~1024 reloads. */
+	uint16_t vol_s[NTRK];
+	for (int i = 0; i < NTRK; i++) vol_s[i] = trk[i].vol_q8;
 
 	for (uint32_t f = 0; f < BLK_FRAMES; f++) {
 		int32_t live = (f < got)
@@ -1187,20 +1354,30 @@ static void looper_audio_block(int16_t *s)
 			int32_t avail = (int32_t)(trk[i].p_w - cpos);
 			if (trk[i].starved) {
 				/* recover only once the ring has refilled HALF (~170 ms) — matches
-				 * the proven v2 / 24k builds. Recovering earlier (RING/8) with less
-				 * cushion can re-dip and chatter on a tight 48k load. */
+				 * the proven v2 / 24k builds. Recovering earlier with less cushion
+				 * re-dips and chatters on a tight 48k load (VERIFIED ON HARDWARE:
+				 * a 64 ms recovery experiment made dropouts into stutter). */
 				if (avail >= (int32_t)(RING_SAMPLES / 2u))
 					trk[i].starved = 0;
 				else
 					continue;
 			} else if (avail < 2) {
-				trk[i].starved = 1;
+				trk[i].starved = 1; g_starve_cnt[i]++;
 				continue;
 			}
 			int16_t a = trk[i].pring[cpos & RING_MASK];
-			int16_t bb = trk[i].pring[(cpos + 1) & RING_MASK];
-			int16_t sv = (int16_t)((int32_t)a + (((int32_t)(bb - a) * (int32_t)frac) >> 16));
-			mix += ((int32_t)sv * trk[i].vol_q8) >> 8;
+			int16_t sv;
+			if (frac == 0u) {
+				sv = a;                      /* unity speed (1.0x): no interpolation */
+			} else {
+				int16_t bb = trk[i].pring[(cpos + 1) & RING_MASK];
+				/* int64 product: (bb-a)*frac can exceed INT32_MAX = signed-overflow
+				 * UB (the -O2 crash cause). The cast makes it well-defined and is
+				 * bit-identical for every in-range sample (SMULL on Cortex-M4). */
+				sv = (int16_t)((int32_t)a +
+					(int32_t)(((int64_t)(bb - a) * (int32_t)frac) >> 16));
+			}
+			mix += ((int32_t)sv * vol_s[i]) >> 8;
 		}
 		int16_t out = soft_limit((mix * g_master_vol_q8) >> 8);
 		s[2 * f] = out; s[2 * f + 1] = out;
@@ -1211,8 +1388,8 @@ static void looper_audio_block(int16_t *s)
 			g_pphase += step;
 			while (g_pphase >= 65536u) {
 				g_pphase -= 65536u;
-				int16_t lsamp = (int16_t)(g_dec_acc /
-					(int32_t)(g_frames_since ? g_frames_since : 1u));
+				int16_t lsamp = (g_frames_since <= 1u) ? (int16_t)g_dec_acc
+					: (int16_t)(g_dec_acc / (int64_t)g_frames_since);
 				g_dec_acc = 0; g_frames_since = 0;
 
 				int rt_i = g_rec_track;
@@ -1234,16 +1411,18 @@ static void looper_audio_block(int16_t *s)
 							rt->start_blk = 0;        /* the base take anchors the grid at 0 */
 							rt->len_blocks = 0;       /* set when the held length is known */
 						} else {
-							/* overdub: SEGMENT recorder. Capture ONE base-length
-							 * segment as a bounded take, contiguously from the track's
-							 * block 0 (linear flush, no wrap -- the same proven path
-							 * the base take uses). If the button is still held at the
-							 * segment boundary, the rec loop appends another segment.
-							 * start_blk anchors playback to where recording began. */
+							/* INDEPENDENT LOOPS: an overdub is an OPEN take
+							 * exactly like the first — it records until the
+							 * user taps the track again (or MAX), then loops
+							 * at ITS OWN length on its own cycle. No
+							 * quantization to the first track's grid, no
+							 * silence padding while you hunt for the loop
+							 * point. start_blk anchors playback to where
+							 * recording began; length is set at stop.
+							 * Linear flush, no wrap. */
 							rt->flush_blk = 0; rt->flush_mod = MAX_LOOP_BLOCKS;
-							rt->rec_target = g_loop_len;
+							rt->rec_target = 0;
 							rt->start_blk = g_consume_pos / SAMP_PER_BLK;
-							rt->len_blocks = g_loop_blocks;
 						}
 						rt->r_w = 0; rt->r_r = 0; rt->rec_count = 0; rt->rec_silence = 0;
 						rt->state = TS_REC;
@@ -1258,38 +1437,29 @@ static void looper_audio_block(int16_t *s)
 					rt->rec_count++;
 					if (g_tempo.active) tempo_feed(lsamp, rt->rec_count);
 					if (rt->rec_target == 0u) {
-						/* open first take: force-stop at the maximum length */
+						/* OPEN take (first take AND independent overdubs):
+						 * force-stop at the maximum length. Only a FIRST
+						 * take defines the song grid/BPM. */
 						if (rt->rec_count >= MAX_LOOP_SAMPLES) {
-							g_loop_len = MAX_LOOP_SAMPLES;
-							g_loop_blocks = g_loop_len / SAMP_PER_BLK;
-							rt->rec_target = g_loop_len;
-							rt->len_blocks = g_loop_blocks;
-							tempo_finish();
-							if (g_slot < NUM_SLOTS) {
-								g_meta.slot[g_slot].loop_len = g_loop_len;
-								g_meta_save_req = 1;
+							if (g_loop_len == 0u) {
+								g_loop_len = MAX_LOOP_SAMPLES;
+								g_loop_blocks = g_loop_len / SAMP_PER_BLK;
+								tempo_finish();
+								if (g_slot < NUM_SLOTS) {
+									g_meta.slot[g_slot].loop_len = g_loop_len;
+									g_meta_save_req = 1;
+								}
 							}
+							rt->rec_target = MAX_LOOP_SAMPLES;
+							rt->len_blocks = MAX_LOOP_BLOCKS;
 							rt->state = TS_DONE; g_rec_track = -1;
 						}
 					} else if (rt->rec_count >= rt->rec_target) {
-						/* SEGMENT boundary. If the button is still held (the take has
-						 * not been released -> rec_silence not set) and the track
-						 * region has room, append another base-length segment and keep
-						 * recording; otherwise finish the take here. Releasing thus
-						 * rounds the length UP to the segment you were holding into,
-						 * padding any remainder with silence. */
-						if (!rt->rec_silence &&
-						    rt->len_blocks + g_loop_blocks <= MAX_LOOP_BLOCKS) {
-							/* cap at MAX_LOOP_BLOCKS, the SAME modulus the linear
-							 * flush wraps at (flush_mod), so the recorder's write
-							 * address and the player's read address agree right up to
-							 * the top of the track region -- never wrap a final
-							 * segment back onto this take's own segment 0. */
-							rt->rec_target += g_loop_len;
-							rt->len_blocks += g_loop_blocks;
-						} else {
-							rt->state = TS_DONE; g_rec_track = -1;
-						}
+						/* Take FINALIZE: rec_target is set by the stop tap
+						 * (free-length, block-rounded) — the recorder pads
+						 * the sub-block remainder with silence and lands
+						 * here. The take now loops at its own length. */
+						rt->state = TS_DONE; g_rec_track = -1;
 					}
 				}
 
@@ -1321,22 +1491,61 @@ static void looper_audio_block(int16_t *s)
 	} else {
 		g_beat_phase = (uint32_t)((g_sample_clock % BEAT_SAMPLES_I2S) / DECIM);
 	}
+
+	/* diag WATERMARKS (once per block): how close each ring got to its cliff
+	 * this window — shows near-misses even when no starve/overrun fired. */
+	{
+		uint32_t _cp = g_consume_pos;
+		for (int i = 0; i < NTRK; i++) {
+			if (trk[i].state != TS_PLAY) continue;
+			int32_t _av = (int32_t)(trk[i].p_w - _cp);
+			if (_av < g_play_lowat) g_play_lowat = _av;
+		}
+		int _rt = g_rec_track;
+		if (_rt >= 0 && trk[_rt].state == TS_REC) {
+			uint32_t _fill = trk[_rt].r_w - trk[_rt].r_r;
+			if (_fill > g_rec_hiwat) g_rec_hiwat = _fill;
+		}
+	}
 }
 
+/* eMMC busy-abort callback: polled ~1 kHz inside the driver's ABORTABLE R1b
+ * waits (the idle cache flush), on the streamer thread. true = fire an HPI
+ * and bail. Trips the moment a take is armed/recording/finalizing, shutdown
+ * work is pending, or any playing ring has drained to half. */
+static bool emmc_busy_abort_chk(void)
+{
+	if (g_stop_req || g_cache_flush_req)
+		return true;
+	for (int j = 0; j < NTRK; j++) {
+		uint8_t sj = trk[j].state;
+		if (sj == TS_ARMED || sj == TS_REC || sj == TS_DONE)
+			return true;
+		if (sj == TS_PLAY &&
+		    (int32_t)(trk[j].p_w - g_consume_pos) <
+		    (int32_t)(RING_SAMPLES / 2u))
+			return true;
+	}
+	return false;
+}
+
+/* ========================================================================
+ *  eMMC STREAMER  —  PREEMPT-5 (below audio), the ONLY eMMC user. Each loop:
+ *  PASS 1 flushes the record ring to flash (writes-first), PASS 2 reads each
+ *  play track ahead into its RAM ring. A balanced ADAPTIVE FLUSH yields the
+ *  bus between the two passes — playback wins unless a play ring is about to
+ *  underrun, recording wins at true rec-ring overflow. Also loads/saves the
+ *  slot metadata (block 0) and runs the power-off cache flush.
+ * ======================================================================== */
 /* ---- background eMMC streamer (the ONLY eMMC user) -------------------------
  * Preemptible priority BELOW the cooperative audio thread, so the audio thread
  * can always preempt the bit-bang busy-waits and keep the I2S DMA fed. Per
  * PLAY track: read-ahead into the play ring. Per REC/DONE track: flush the rec
  * ring to the card; on DONE, finish the tail then switch the track to PLAY. */
-static K_THREAD_STACK_DEFINE(streamer_stack, 2048);
+static K_THREAD_STACK_DEFINE(streamer_stack, 4096);  /* 4096: the eMMC driver is -O2 here, so its read/send_command/crc chain inlines into a deeper frame on this thread */
 static struct k_thread streamer_tcb;
 
 #if SP1_XFER_ENABLE
-/* ===================== USB block-transfer protocol ========================
- * Lets the loop transfer website read/write the eMMC over the CDC serial port.
- * Serviced from the streamer (the only eMMC user) so flash access stays
- * single-owner. Inert until the host sends the 8-byte enter-magic. */
-
 /* ISR: drain the CDC RX FIFO into the ring buffer (host -> device bytes). */
 static void cdc_rx_isr(const struct device *dev, void *u)
 {
@@ -1369,9 +1578,10 @@ static bool cdc_rx(uint8_t *p, uint32_t n, int timeout_ms)
 	return true;
 }
 
-/* A block command's sub-read stalled mid-stream: drain the RX ring back to a clean
- * command boundary and send the host an error byte so it aborts that block; the
- * host's next ping resyncs cleanly. */
+/* A block command's sub-read stalled mid-stream, so the RX ring may hold a partial
+ * payload that would misframe every later command. Drain it back to a clean command
+ * boundary (consumer-side get, safe vs the producing ISR) and send the host an error
+ * byte so it aborts that block; the host's next ping then resyncs cleanly. */
 static void xfer_resync(uint8_t err_byte)
 {
 	uint8_t dump;
@@ -1380,13 +1590,18 @@ static void xfer_resync(uint8_t err_byte)
 	cdc_tx(&err_byte, 1);
 }
 
-/* Commit host writes durably. This 24 kHz build has no eMMC write cache, so host
- * writes already programmed straight to NAND (durable). Just re-read block 0 into
- * the in-RAM index so playback reflects the upload and a later save can't overwrite
- * it. Runs from the streamer while g_xfer_mode is still set (audio is silenced). */
+/* Commit host writes durably. The host writes land in the eMMC's volatile write
+ * cache (and never touch the in-RAM g_meta), so without this an upload is lost on
+ * the next power cut and the stale in-RAM index can overwrite it. This (1) flushes
+ * the cache to NAND and (2) re-reads block 0 into g_meta so the index matches what
+ * the host wrote. Runs from the streamer while g_xfer_mode is still set (audio is
+ * silenced), so the bus-blocking flush has nothing live to starve. */
 static void xfer_commit(void)
 {
 	static uint8_t mblk[EMMC_BLOCK_SIZE];
+	if (g_cache_on) {
+		(void)emmc_cache_flush();
+	}
 	if (g_emmc_ready && emmc_read_blocks(META_BLOCK, mblk, 1)) {
 		struct meta_blk *m = (struct meta_blk *)mblk;
 		if (m->magic == META_MAGIC && m->cur_slot < NUM_SLOTS) {
@@ -1396,9 +1611,11 @@ static void xfer_commit(void)
 	}
 }
 
-/* OUT of transfer mode: scan the RX stream for the 8-byte enter-magic.
+/* The block-transfer protocol, serviced from the streamer (the only eMMC user).
+ * OUT of transfer mode: scan the RX stream for the 8-byte enter-magic.
  * IN transfer mode: run ONE command per call ('P'ing/'R'ead/'W'rite/'F'lush/e'X'it),
- * auto-committing + auto-exiting after 15 s with no command. */
+ * auto-committing + auto-exiting after 15 s with no command so a dropped page can't
+ * wedge it or strand an upload in volatile cache. */
 static void xfer_service(void)
 {
 	static const uint8_t MAGIC[8] = { 'S','P','1','X','F','E','R','!' };
@@ -1406,21 +1623,16 @@ static void xfer_service(void)
 	static int64_t  last;
 
 	if (!g_xfer_mode) {
-		/* IDLE PATH: scan the ISR-fed RX ring for the 8-byte enter-magic,
-		 * throttled to ~every 64 streamer passes so the check is nearly free.
-		 * (RX interrupts stay enabled from boot — see the init comment: the
-		 * CDC class never receives ANYTHING without them, which is why the
-		 * old poll-only idle could never connect.) */
-		static uint32_t tick;
-		if ((++tick & 0x3Fu) != 0u) return;
 		uint8_t b;
 		while (ring_buf_get(&g_cdc_rx, &b, 1) == 1) {
 			m = (b == MAGIC[m]) ? (uint8_t)(m + 1) : (b == MAGIC[0] ? 1u : 0u);
 			if (m == 8u) {
 				m = 0;
 				/* Don't freeze the streamer mid-take: if a recording is still
-				 * being captured or flushed, finalize it first. Enter on a later
-				 * magic -- the host's handshake retries. */
+				 * being captured or flushed, finalize it first (the audio thread
+				 * promotes it + the streamer drains the ring and persists the
+				 * index). Enter on a later magic -- the host's handshake retries,
+				 * and a take finalizes in well under that window. */
 				bool busy = (g_rec_track >= 0) || g_meta_save_req;
 				for (int t = 0; t < NTRK; t++)
 					if (trk[t].state == TS_REC || trk[t].state == TS_DONE) busy = 1;
@@ -1428,8 +1640,6 @@ static void xfer_service(void)
 					g_stop_req = 1;
 					break;
 				}
-				/* RX has been armed since boot; anything already queued
-				 * after the magic is the host's first command — keep it. */
 				g_xfer_mode = 1;
 				g_playing = 0;           /* pause the transport during transfer */
 				last = k_uptime_get();
@@ -1442,7 +1652,7 @@ static void xfer_service(void)
 	uint8_t cmd;
 	if (ring_buf_get(&g_cdc_rx, &cmd, 1) != 1) {            /* idle: commit + exit on timeout */
 		if (k_uptime_get() - last > 15000) {
-			xfer_commit();
+			xfer_commit();                         /* don't strand an upload in cache */
 			g_slot_switch_req = 1;                 /* reload tracks for the active song */
 			g_xfer_mode = 0;
 		}
@@ -1475,7 +1685,7 @@ static void xfer_service(void)
 			uint8_t h = ok ? 'w' : 'E';
 			cdc_tx(&h, 1);
 		}
-	} else if (cmd == 'F') {                               /* flush: commit writes */
+	} else if (cmd == 'F') {                               /* flush: commit writes to NAND */
 		xfer_commit();
 		uint8_t h = 'f';
 		cdc_tx(&h, 1);
@@ -1489,6 +1699,230 @@ static void xfer_service(void)
 }
 #endif /* SP1_XFER_ENABLE */
 
+/* =====================================================================
+ * STORAGE CODEC pack/unpack
+ * Place this entire block in main.c just BEFORE streamer_thread()
+ * (above `static void streamer_thread(void *a,...)` at main.c:1523).
+ * SP1_CODEC, SAMP_PER_BLK, EMMC_BLOCK_SIZE are all in scope there.
+ *
+ *  codec_pack  : int16 ring -> packed flash bytes (ENCODE), nblk*512 bytes out
+ *  codec_unpack: packed flash bytes -> int16 ring (DECODE), nblk*512 bytes in
+ *
+ * Args:
+ *   ring       : the int16 ring base (g_rring for write, trk[].pring for read)
+ *   ring_mask  : RRING_MASK (write) or RING_MASK (read) — power of two, sample-domain
+ *   start      : ring sample offset of the FIRST sample (already & ring_mask'd by caller)
+ *   flash      : the linear 512*nblk-byte batch buffer (batchbuf)
+ *   nblk       : number of 512-byte flash blocks
+ * Each block holds exactly SAMP_PER_BLK int16 samples. The caller guarantees
+ * `start` is block-aligned in the ring, so each block's run wraps the ring at
+ * most once (same invariant the original memcpy pairs used).
+ * ===================================================================== */
+
+#if SP1_CODEC == SP1_CODEC_PCM
+/* ---- PCM: memcpy-equivalent (handles the single ring wrap) ---------------- */
+static void codec_pack(const int16_t *ring, uint32_t ring_mask, uint32_t start,
+                       uint8_t *flash, uint32_t nblk)
+{
+	int16_t *out = (int16_t *)flash;
+	uint32_t ntot = nblk * SAMP_PER_BLK;
+	uint32_t ring_samps = ring_mask + 1u;
+	uint32_t run1 = ring_samps - start;
+	if (run1 > ntot) run1 = ntot;
+	memcpy(out, &ring[start], run1 * 2u);
+	if (ntot > run1)
+		memcpy(out + run1, &ring[0], (ntot - run1) * 2u);
+}
+static void codec_unpack(int16_t *ring, uint32_t ring_mask, uint32_t start,
+                         const uint8_t *flash, uint32_t nblk)
+{
+	const int16_t *in = (const int16_t *)flash;
+	uint32_t ntot = nblk * SAMP_PER_BLK;
+	uint32_t ring_samps = ring_mask + 1u;
+	uint32_t run1 = ring_samps - start;
+	if (run1 > ntot) run1 = ntot;
+	memcpy(&ring[start], in, run1 * 2u);
+	if (ntot > run1)
+		memcpy(&ring[0], in + run1, (ntot - run1) * 2u);
+}
+
+#elif SP1_CODEC == SP1_CODEC_ULAW
+/* ---- G.711 u-law, 8-bit, 2:1 --------------------------------------------- */
+#define ULAW_BIAS 0x84
+#define ULAW_CLIP 32635
+static inline uint8_t ulaw_encode(int16_t pcm)
+{
+	int sign = (pcm >> 8) & 0x80;
+	int s = pcm;
+	if (sign) s = -s;
+	if (s > ULAW_CLIP) s = ULAW_CLIP;
+	s += ULAW_BIAS;
+	int exp = 7;
+	for (int em = 0x4000; (s & em) == 0 && exp > 0; exp--, em >>= 1) { }
+	int mant = (s >> (exp + 3)) & 0x0F;
+	return (uint8_t)(~(sign | (exp << 4) | mant));
+}
+static inline int16_t ulaw_decode(uint8_t u)
+{
+	u = ~u;
+	int sign = u & 0x80;
+	int exp  = (u >> 4) & 0x07;
+	int mant = u & 0x0F;
+	int s = ((mant << 3) + ULAW_BIAS) << exp;
+	s -= ULAW_BIAS;
+	return (int16_t)(sign ? -s : s);
+}
+/* one u-law byte per sample; SAMP_PER_BLK == 512 == EMMC_BLOCK_SIZE */
+static void codec_pack(const int16_t *ring, uint32_t ring_mask, uint32_t start,
+                       uint8_t *flash, uint32_t nblk)
+{
+	uint32_t ntot = nblk * SAMP_PER_BLK;
+	uint32_t pos = start;
+	for (uint32_t i = 0; i < ntot; i++) {
+		flash[i] = ulaw_encode(ring[pos]);
+		pos = (pos + 1u) & ring_mask;
+	}
+}
+static void codec_unpack(int16_t *ring, uint32_t ring_mask, uint32_t start,
+                         const uint8_t *flash, uint32_t nblk)
+{
+	uint32_t ntot = nblk * SAMP_PER_BLK;
+	uint32_t pos = start;
+	for (uint32_t i = 0; i < ntot; i++) {
+		ring[pos] = ulaw_decode(flash[i]);
+		pos = (pos + 1u) & ring_mask;
+	}
+}
+
+#else /* SP1_CODEC == SP1_CODEC_ADPCM */
+/* ---- IMA ADPCM, 4-bit, ~4:1, SELF-CONTAINED 512-byte blocks --------------
+ * Each 512-byte flash block decodes STANDALONE (predictor + step index RESET at
+ * the block start) so random-access loop seeks land on any block.
+ *   byte 0..1 : int16 predictor seed (little-endian) = block's first sample
+ *   byte 2    : uint8 step index seed (0..88)
+ *   byte 3    : pad (0)
+ *   byte 4..511 : 508 data bytes * 2 nibbles = 1016 samples (SAMP_PER_BLK).
+ * Within a block, sample[k] is encoded as nibble[k] against the running
+ * predictor seeded from the header (so nibble[0] re-encodes sample[0] against
+ * predictor==sample[0]; round-trips to ~sample[0]). 508 bytes = exactly 1016
+ * nibbles = SAMP_PER_BLK. Low nibble of each byte first, then high nibble. */
+static const int8_t  ima_index_tab[16] = {
+	-1, -1, -1, -1, 2, 4, 6, 8,
+	-1, -1, -1, -1, 2, 4, 6, 8
+};
+static const int16_t ima_step_tab[89] = {
+	    7,     8,     9,    10,    11,    12,    13,    14,    16,    17,
+	   19,    21,    23,    25,    28,    31,    34,    37,    41,    45,
+	   50,    55,    60,    66,    73,    80,    88,    97,   107,   118,
+	  130,   143,   157,   173,   190,   209,   230,   253,   279,   307,
+	  337,   371,   408,   449,   494,   544,   598,   658,   724,   796,
+	  876,   963,  1060,  1166,  1282,  1411,  1552,  1707,  1878,  2066,
+	 2272,  2499,  2749,  3024,  3327,  3660,  4026,  4428,  4871,  5358,
+	 5894,  6484,  7132,  7845,  8630,  9493, 10442, 11487, 12635, 13899,
+	15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767
+};
+#define ADPCM_HDR_BYTES   4u
+#define ADPCM_DATA_BYTES  (EMMC_BLOCK_SIZE - ADPCM_HDR_BYTES)   /* 508 -> 1016 samples */
+
+static inline uint8_t ima_enc_step(int16_t sample, int32_t *pred, int *idx)
+{
+	int step = ima_step_tab[*idx];
+	int diff = sample - *pred;
+	int code = 0;
+	if (diff < 0) { code = 8; diff = -diff; }
+	if (diff >= step)        { code |= 4; diff -= step; }
+	if (diff >= (step >> 1)) { code |= 2; diff -= step >> 1; }
+	if (diff >= (step >> 2)) { code |= 1; }
+	/* reconstruct EXACTLY as the decoder will, to keep predictor in lockstep */
+	int diffq = step >> 3;
+	if (code & 4) diffq += step;
+	if (code & 2) diffq += step >> 1;
+	if (code & 1) diffq += step >> 2;
+	if (code & 8) *pred -= diffq; else *pred += diffq;
+	if (*pred >  32767) *pred =  32767;
+	if (*pred < -32768) *pred = -32768;
+	*idx += ima_index_tab[code & 7];
+	if (*idx < 0)  *idx = 0;
+	if (*idx > 88) *idx = 88;
+	return (uint8_t)(code & 0x0F);
+}
+static inline int16_t ima_dec_step(uint8_t code, int32_t *pred, int *idx)
+{
+	int step = ima_step_tab[*idx];
+	int diffq = step >> 3;
+	if (code & 4) diffq += step;
+	if (code & 2) diffq += step >> 1;
+	if (code & 1) diffq += step >> 2;
+	if (code & 8) *pred -= diffq; else *pred += diffq;
+	if (*pred >  32767) *pred =  32767;
+	if (*pred < -32768) *pred = -32768;
+	*idx += ima_index_tab[code & 7];
+	if (*idx < 0)  *idx = 0;
+	if (*idx > 88) *idx = 88;
+	return (int16_t)*pred;
+}
+
+/* Encode exactly ONE block (SAMP_PER_BLK==1016 samples) into one 512-byte block,
+ * predictor + step index RESET at block start -> block is standalone. */
+static void adpcm_pack_block(const int16_t *ring, uint32_t ring_mask,
+                             uint32_t start, uint8_t *blk)
+{
+	uint32_t pos = start;
+	int32_t pred = ring[pos];          /* seed predictor = first sample */
+	int idx = 0;                        /* fixed reset step index */
+	blk[0] = (uint8_t)(pred & 0xFF);
+	blk[1] = (uint8_t)((pred >> 8) & 0xFF);
+	blk[2] = (uint8_t)idx;
+	blk[3] = 0;
+	uint8_t *data = blk + ADPCM_HDR_BYTES;
+	for (uint32_t i = 0; i < ADPCM_DATA_BYTES; i++) {
+		int16_t s0 = ring[pos];  pos = (pos + 1u) & ring_mask;
+		uint8_t n0 = ima_enc_step(s0, &pred, &idx);
+		int16_t s1 = ring[pos];  pos = (pos + 1u) & ring_mask;
+		uint8_t n1 = ima_enc_step(s1, &pred, &idx);
+		data[i] = (uint8_t)(n0 | (n1 << 4));
+	}
+}
+/* Decode exactly ONE block back into SAMP_PER_BLK==1016 ring samples. */
+static void adpcm_unpack_block(int16_t *ring, uint32_t ring_mask,
+                               uint32_t start, const uint8_t *blk)
+{
+	uint32_t pos = start;
+	int32_t pred = (int16_t)((uint16_t)blk[0] | ((uint16_t)blk[1] << 8));
+	int idx = blk[2];
+	if (idx > 88) idx = 88;
+	const uint8_t *data = blk + ADPCM_HDR_BYTES;
+	for (uint32_t i = 0; i < ADPCM_DATA_BYTES; i++) {
+		uint8_t b = data[i];
+		ring[pos] = ima_dec_step(b & 0x0F, &pred, &idx);
+		pos = (pos + 1u) & ring_mask;
+		ring[pos] = ima_dec_step((b >> 4) & 0x0F, &pred, &idx);
+		pos = (pos + 1u) & ring_mask;
+	}
+}
+/* nblk blocks, each independent (fresh predictor) — REQUIRED for random-access
+ * loop seeks: a play read can start at ANY block, so every block must decode
+ * without history from the previous one. */
+static void codec_pack(const int16_t *ring, uint32_t ring_mask, uint32_t start,
+                       uint8_t *flash, uint32_t nblk)
+{
+	uint32_t pos = start;
+	for (uint32_t b = 0; b < nblk; b++) {
+		adpcm_pack_block(ring, ring_mask, pos, flash + b * EMMC_BLOCK_SIZE);
+		pos = (pos + SAMP_PER_BLK) & ring_mask;
+	}
+}
+static void codec_unpack(int16_t *ring, uint32_t ring_mask, uint32_t start,
+                         const uint8_t *flash, uint32_t nblk)
+{
+	uint32_t pos = start;
+	for (uint32_t b = 0; b < nblk; b++) {
+		adpcm_unpack_block(ring, ring_mask, pos, flash + b * EMMC_BLOCK_SIZE);
+		pos = (pos + SAMP_PER_BLK) & ring_mask;
+	}
+}
+#endif /* SP1_CODEC */
+
 static void streamer_thread(void *a, void *b, void *c)
 {
 	ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c);
@@ -1496,7 +1930,7 @@ static void streamer_thread(void *a, void *b, void *c)
 	/* Flush the rec ring in MULTI-BLOCK (CMD25) bursts: the card pipelines the
 	 * programming across the burst instead of fully programming each block (~30 ms
 	 * single-block), so the sustained write keeps up with live recording. */
-#define FLUSH_BATCH 32u   /* 16KB bursts = 2 whole 8KB pages per CMD25 */
+#define FLUSH_BATCH 32u   /* 16KB bursts = 2 whole 8KB pages per CMD25 (reverted from 16: the interleave+16 experiment caused catastrophic rec-ring overflow + flash write errors) */
 	static uint8_t batchbuf[FLUSH_BATCH * EMMC_BLOCK_SIZE];
 
 	(void)emmc_init();
@@ -1506,6 +1940,40 @@ static void streamer_thread(void *a, void *b, void *c)
 	 * intended this whole time. Zero it here so it actually sticks. */
 	g_emmc_clk_half_us = 0u;
 	g_emmc_ready = emmc_is_ready() ? 1 : 0;
+
+	/* Enable the card's internal write cache if it has one. Read EXT_CSD (CMD8) to
+	 * check CACHE_SIZE and the spec revision; if present, turn the cache on. It
+	 * absorbs the record write-bursts so an overdub acks from the card's SRAM
+	 * instead of stalling the bus -- without it the 4th simultaneous track
+	 * overflows the rec ring. There is deliberately NO flush during play (that
+	 * freezes the bus and starves playback); the card flushes in the background,
+	 * and we force a single flush at power-off (see stop_and_flush) so loops are
+	 * durable. eMMC is streamer-only, so this boot-time read is safe here. */
+	/* The write cache absorbs each record burst so the write returns immediately
+	 * instead of programming NAND on the bus and starving the playing tracks
+	 * (which is what crackles). Both builds use it; the 24 kHz build pairs it with
+	 * the in-spec 16 MHz bus (the overclock, not the cache, was its white-noise). */
+	if (g_emmc_ready && emmc_read_ext_csd(blk)) {
+		uint32_t cache_kb = (uint32_t)blk[249] | ((uint32_t)blk[250] << 8) |
+				    ((uint32_t)blk[251] << 16) | ((uint32_t)blk[252] << 24);
+		g_cache_kb = cache_kb;
+		/* diag snapshot: WR_REL_SET, WR_REL_PARAM, SEC_FEATURE_SUPPORT,
+		 * BKOPS_SUPPORT, HPI_FEATURES, OUT_OF_INTERRUPT_TIME, BKOPS_STATUS,
+		 * EXT_CSD_REV, ERASE_GROUP_DEF — confirms on the REAL unit which
+		 * FTL-management features (TRIM/BKOPS/HPI) the card supports. */
+		g_extcsd_dump[0] = blk[167]; g_extcsd_dump[1] = blk[166];
+		g_extcsd_dump[2] = blk[231]; g_extcsd_dump[3] = blk[502];
+		g_extcsd_dump[4] = blk[503]; g_extcsd_dump[5] = blk[198];
+		g_extcsd_dump[6] = blk[246]; g_extcsd_dump[7] = blk[192];
+		g_extcsd_dump[8] = blk[175];
+		if (cache_kb > 0u && blk[192] >= 6u)   /* CACHE_SIZE>0, EXT_CSD_REV>=6 (v4.5+) */
+			g_cache_on = emmc_cache_enable() ? 1u : 0u;
+		if (blk[503] & 0x01) {                 /* HPI: abort lever for the idle flush */
+			g_hpi_on = emmc_hpi_enable() ? 1u : 0u;
+			if (g_hpi_on)
+				emmc_set_abort_cb(emmc_busy_abort_chk);
+		}
+	}
 
 	/* Load the slot metadata (block 0). If absent/invalid, format fresh — this
 	 * overwrites the old TE album index, deleting the original songs + reclaiming
@@ -1528,12 +1996,28 @@ static void streamer_thread(void *a, void *b, void *c)
 
 	while (1) {
 #if SP1_XFER_ENABLE
-		/* USB block-transfer: scan for the enter-magic, and while in transfer mode
-		 * service one read/write per pass instead of the normal flush/read passes
-		 * (audio is paused, so the eMMC is ours alone). */
+		/* Website loop transfer: scan for the connect-magic / run one command
+		 * per pass. While a transfer is active the transport is paused and
+		 * the streamer serves ONLY the transfer (audio is silent anyway). */
 		xfer_service();
-		if (g_xfer_mode) { k_msleep(1); continue; }
 #endif
+		if (g_xfer_mode) { k_msleep(1); continue; }
+
+		/* Power-off cache flush: program the volatile write cache to NAND so the
+		 * last take + slot index survive a power cut. Requested by stop_and_flush
+		 * AFTER recording is finalized + while shutting down, so this bus-blocking
+		 * flush has nothing live to starve. Done here because the streamer is the
+		 * only eMMC user. */
+		if (g_emmc_quiesce) {                   /* shutting down: bus parked */
+			k_msleep(10);
+			continue;
+		}
+		if (g_cache_flush_req) {
+			(void)emmc_cache_flush();
+			g_emmc_quiesce = 1;   /* no further eMMC traffic after the final flush */
+			g_cache_flush_req = 0;
+			continue;
+		}
 
 		bool work = false;
 		uint32_t cpos = g_consume_pos;
@@ -1577,7 +2061,11 @@ static void streamer_thread(void *a, void *b, void *c)
 					 * write a partial page = RMW = the slow path (this is
 					 * what made the first 24 kHz build unable to record).
 					 * Partial writes only at: overdub start, loop wrap, and
-					 * the final tail after the take ends. */
+					 * the final tail after the take ends.
+					 * Three cases below: (1) misaligned start -> trim to the next
+					 * 8KB (16-block) page boundary; (2) >=1 whole page ready ->
+					 * write whole pages only; (3) recording mid-loop with <1 page
+					 * ready -> wait (the loop-wrap tail is exempt via n<to_wrap). */
 					uint32_t mis = blkno % 16u;
 					if (mis) {
 						uint32_t to_page = 16u - mis;
@@ -1587,24 +2075,88 @@ static void streamer_thread(void *a, void *b, void *c)
 					} else if (t->state == TS_REC && n < to_wrap) {
 						break;            /* let a full page accumulate */
 					}
-					int16_t *b16 = (int16_t *)batchbuf;
-					for (uint32_t s = 0; s < n * SAMP_PER_BLK; s++)
-						b16[s] = g_rring[(t->r_r + s) & RRING_MASK];
-					static uint8_t wfails;
+					/* ENCODE: rec ring (int16, wraps at RRING_MASK, r_r is
+					 * block-aligned) -> packed flash bytes for n blocks. PCM is
+					 * memcpy-equivalent; ULAW/ADPCM compress 2x/4x so this CMD25
+					 * moves half/quarter the bytes the card must program. */
+					codec_pack(g_rring, RRING_MASK, t->r_r & RRING_MASK,
+					           batchbuf, n);
+					static uint32_t wfail_start;   /* 0 = no failure streak */
+					static uint32_t wfail_key;     /* streak identity (track|flush pos) */
+					static uint8_t  wfail_ready1;  /* card seen READY once this streak */
+					uint32_t _wkey = ((uint32_t)i << 28) ^ t->flush_blk;
 					if (!emmc_write_blocks(blkno, batchbuf, n)) {
-						/* card rejected a block (bus CRC): data is
-						 * still in the ring — retry next pass. After
-						 * 8 consecutive failures, advance anyway (one
-						 * stored glitch beats a frozen take). */
-						if (++wfails < 8) {
+						/* write failed (bus CRC or busy timeout): data is
+						 * still in the ring — retry next pass. Give up and
+						 * advance anyway (storing a glitch) ONLY after the
+						 * card has been failing >400 ms of WALL TIME and
+						 * reports READY_FOR_DATA via CMD13 (recovered yet
+						 * genuinely rejecting). The old 8-fast-fails counter
+						 * elapsed in <50 ms mid-stall and stored a glitch
+						 * that REPLAYED at the same spot every loop pass. */
+						uint32_t _now = k_uptime_get_32();
+						/* STREAK IDENTITY: a streak abandoned mid-take
+						 * (e.g. the track was deleted while flushing)
+						 * must not leak its stale timestamp into the
+						 * NEXT take — that made a single routine CRC
+						 * blip give up instantly and silently drop a
+						 * whole burst. */
+						if (!wfail_start || wfail_key != _wkey) {
+							wfail_start = _now | 1u;
+							wfail_key = _wkey;
+							wfail_ready1 = 0;
+						}
+						bool _giveup = false;
+						if ((_now - wfail_start) > 400u) {
+							uint8_t _r1[6];
+							if (emmc_cmd13(_r1) && (_r1[3] & 0x01)) {
+								/* READY often means the stall just
+								 * ended and THIS attempt was its tail
+								 * casualty — give the card ONE clean
+								 * retry before declaring the data
+								 * rejected for good. */
+								if (wfail_ready1)
+									_giveup = true;
+								else
+									wfail_ready1 = 1;
+							}
+						}
+						if (!_giveup) {
+							/* BACKOFF: the card is mid-stall; an
+							 * immediate CMD25 retry is a zero-yield
+							 * spin that starves MIDI/main (the WDT
+							 * feeder). 2 ms costs nothing here. */
+							k_msleep(2);
 							work = true;
 							break;
 						}
+						g_stored_glitch_cnt++;  /* audible as a REPEATING artifact */
 					}
-					wfails = 0;
+					wfail_start = 0;
+					wfail_ready1 = 0;
 					t->r_r += n * SAMP_PER_BLK;
 					t->flush_blk += n;
 					work = true;
+					/* POST-STALL DRAIN ORDER: a big rec backlog must not
+					 * starve the playing rings at their emptiest moment.
+					 * After each burst, if any playing ring is inside its
+					 * critical margin and the rec ring is NOT at the 7/8
+					 * overflow emergency, break to PASS 2 to feed the
+					 * emptiest ring one chunk, then resume flushing here.
+					 * Burst-granular alternation only (one fully-terminated
+					 * CMD25, then reads) — NOT the sub-page interleave that
+					 * broke writes in an earlier experiment. */
+					if ((t->r_w - t->r_r) <
+					    (RRING_SAMPLES - RRING_SAMPLES / 8u)) {
+						bool _pcrit = false;
+						for (int j = 0; j < NTRK; j++)
+							if (trk[j].state == TS_PLAY &&
+							    (int32_t)(trk[j].p_w - g_consume_pos) <
+							    (int32_t)PLAY_CRIT_SAMPLES)
+								_pcrit = true;
+						if (_pcrit)
+							break;  /* rec ring holds; feed play first */
+					}
 				}
 				/* Promotion re-reads the LIVE state (not the pass-start snapshot)
 				 * so an engine transition during the flush can't be overwritten.
@@ -1621,8 +2173,46 @@ static void streamer_thread(void *a, void *b, void *c)
 						g_meta.slot[slot].trk_start[i] = t->start_blk;   /* + phase anchor */
 					}
 					g_meta_save_req = 1;             /* persist the new recording */
-					t->p_w = g_consume_pos & ~(SAMP_PER_BLK - 1u);
-					t->state = TS_PLAY;
+					/* PRIME the play ring before publishing TS_PLAY: read ~half-ring of
+					 * the loop into pring so a freshly-promoted track starts with read-
+					 * ahead cushion instead of avail=0. Empty promotion made the last-
+					 * recorded track starve -> silent until half-refill -> resume at the
+					 * live playhead (a forward time-skip) = the 'last track clock wrong'.
+					 * Runs on the streamer thread while the ring is still private (state
+					 * != PLAY) so it can't race the audio read; the other rings hold
+					 * ~341 ms, so this one-time ~20 ms prime burst can't starve them. */
+					/* Block-align the prime start to a SAMP_PER_BLK boundary.
+					 * MUST be DIVISION-based (not & ~(SAMP_PER_BLK-1)): for ADPCM
+					 * SAMP_PER_BLK=1016 is NOT a power of two, so the bitmask
+					 * would corrupt the address. Division is exact for every codec
+					 * (256/512/1016) and identical to the mask for power-of-two. */
+					uint32_t _pw_snap = t->p_w;   /* detect restart/reset mid-prime */
+					uint32_t _pw   = (g_consume_pos / SAMP_PER_BLK) * SAMP_PER_BLK;
+					uint32_t _gb   = t->len_blocks ? t->len_blocks
+					               : (g_loop_blocks ? g_loop_blocks : 1u);
+					uint32_t _want = (RING_SAMPLES / 2u) + 16u * SAMP_PER_BLK;
+					if (_want > RING_SAMPLES) _want = RING_SAMPLES - SAMP_PER_BLK;
+					for (uint32_t _got = 0; _got < _want; ) {
+						uint32_t _pwb = _pw / SAMP_PER_BLK;
+						uint32_t _lb  = ((_pwb % _gb) + _gb - (t->start_blk % _gb)) % _gb;
+						uint32_t _n   = 16u;
+						if (_n > (RING_SAMPLES / SAMP_PER_BLK) - 1u) _n = (RING_SAMPLES / SAMP_PER_BLK) - 1u;
+						if (_lb + _n > _gb) _n = _gb - _lb;
+						if (!emmc_read_blocks(trk_blk(slot, (uint32_t)i) + _lb, batchbuf, _n))
+							break;
+						/* DECODE the prime burst (_n blocks) into the play ring. */
+						uint32_t _ntot = _n * SAMP_PER_BLK;
+						codec_unpack(t->pring, RING_MASK, _pw & RING_MASK,
+						             batchbuf, _n);
+						_pw  += _ntot;
+						_got += _ntot;
+					}
+					if (t->p_w == _pw_snap)
+						t->p_w = _pw;   /* publish: ring now has ~170 ms cushion */
+					/* else a restart/song-switch reset p_w mid-prime: keep the
+					 * reset value (int16 ring zeros = silence); PASS 2 refills
+					 * from the new playhead. */
+					t->state = TS_PLAY;    /* publish AFTER priming -> no entry starve */
 					work = true;
 				}
 			}
@@ -1631,26 +2221,19 @@ static void streamer_thread(void *a, void *b, void *c)
 		/* PASS 2 — play read-ahead, only after all pending writes are flushed.
 		 * Skip refills entirely while a big rec backlog exists so the recorder
 		 * always wins the bus (the play rings hold ~1.2 s and can coast). */
-		/* rec_backlog gate: skip playback refills ONLY when a rec ring is near
-		 * overflow (7/8). On the slow bit-bang bus this fired at half-full and
-		 * starved every backing track during overdubs (the playhead raced
-		 * seconds past the fill frontier — measured min ~ -100k). The SPIM bus
-		 * sustains ~1900 blk/s; recording (187) + 3-track playback (562) is a
-		 * third of that, so playback no longer needs to yield except in a true
-		 * write-stall emergency. */
-		int rec_backlog = 0;
-		for (int i = 0; i < NTRK; i++)
-			if ((trk[i].r_w - trk[i].r_r) >= (RRING_SAMPLES - RRING_SAMPLES / 8u))
-				rec_backlog = 1;
+		/* PASS 2 (playback read-ahead) ALWAYS runs now. The per-chunk yield inside
+		 * the loop hands the bus to PASS 1 (flush) whenever the rec ring backs up
+		 * (>=3/4, or one chunk then yield at the 7/8 emergency), so during a card
+		 * write-stall the playing tracks keep getting fed instead of going dead-
+		 * silent. The old all-or-nothing "skip ALL refills at 7/8" gate is what made
+		 * the 3 playing tracks underrun (margins -> -1300 ms) for the whole overdub. */
 
-		/* SERVICE BY ROUND: ONE chunk per needy track per round, rotating the
-		 * start order — the track nearest its cliff is served within one
+		/* SERVICE WORST-FIRST: ONE chunk per needy track per round, feeding the
+		 * emptiest ring first; the track nearest its cliff is served within one
 		 * chunk-time (~10 ms) instead of waiting for siblings' full refills.
 		 * Chunks are 16 blocks (4096 samples) per CMD18: one command's
 		 * overhead per 85 ms of audio. */
-		static int rr_start;
-		rr_start = (rr_start + 1) & 3;
-		bool more = !rec_backlog;
+		bool more = true;
 		while (more && g_slot == slot) {
 			more = false;
 			/* RE-READ the playhead every round: PASS 1's flushes (and a long
@@ -1659,13 +2242,25 @@ static void streamer_thread(void *a, void *b, void *c)
 			 * made PASS 2 under-fill the playing tracks during overdubs, the
 			 * residual negative-margin dips at take boundaries. */
 			cpos = g_consume_pos;
+			int order[NTRK];
+			for (int a = 0; a < NTRK; a++) order[a] = a;
+			for (int a = 0; a < NTRK - 1; a++)        /* sort needy tracks emptiest-first */
+				for (int b = a + 1; b < NTRK; b++)
+					if ((int32_t)(trk[order[b]].p_w - cpos) <
+					    (int32_t)(trk[order[a]].p_w - cpos)) {
+						int tmp = order[a]; order[a] = order[b]; order[b] = tmp;
+					}
 			for (int k = 0; k < NTRK; k++) {
-				int i = (rr_start + k) & 3;
+				int i = order[k];
 				struct looptrk *t = &trk[i];
 				if (t->state != TS_PLAY) continue;
-				if ((int32_t)(t->p_w - cpos) >
-				    (int32_t)(RING_SAMPLES - 16u * SAMP_PER_BLK))
-					continue;          /* this ring is fed */
+				int32_t avail = (int32_t)(t->p_w - cpos);
+				if (avail > (int32_t)(RING_SAMPLES - 8u * SAMP_PER_BLK))
+					continue;          /* ring PINNED ~full (<=8 blocks of headroom):
+					                    * the cushion is real at stall onset instead of
+					                    * sawtoothing between half and full. 8 blocks
+					                    * (not 4) so steady-state top-ups are >=7-block
+					                    * bursts, not 3-block CMD18 spam. */
 				/* SEGMENT: this track loops at ITS OWN length (a whole multiple
 				 * of the base), not the shared g_loop_blocks. */
 				uint32_t gb = t->len_blocks ? t->len_blocks
@@ -1679,30 +2274,101 @@ static void streamer_thread(void *a, void *b, void *c)
 				uint32_t pwb = pw / SAMP_PER_BLK;
 				uint32_t loop_blk = ((pwb % gb) + gb - (t->start_blk % gb)) % gb;
 				uint32_t n = 16u;
+				if (n > (RING_SAMPLES / SAMP_PER_BLK) - 1u) n = (RING_SAMPLES / SAMP_PER_BLK) - 1u;
+				/* VARIABLE TOP-UP: fill to ~full (keep a 1-block producer/consumer
+				 * gap) rather than a fixed 16-block step, so rings park at ~100%. */
+				{
+					int32_t _room = (int32_t)(RING_SAMPLES - SAMP_PER_BLK) - avail;
+					uint32_t _rb = _room > 0 ? (uint32_t)_room / SAMP_PER_BLK : 0u;
+					if (n > _rb) n = _rb;
+				}
+				if (!n) continue;
 				if (loop_blk + n > gb) n = gb - loop_blk;  /* stop at the wrap */
 				uint32_t blkno = trk_blk(slot, (uint32_t)i) + loop_blk;
-				uint32_t _rc0 = k_cycle_get_32();
 				bool _rok = emmc_read_blocks(blkno, batchbuf, n);
-				uint32_t _rus = k_cyc_to_us_floor32(k_cycle_get_32() - _rc0);
-				g_rd_us_last = _rus;
-				if (_rus > g_rd_us_max) g_rd_us_max = _rus;   /* track the tail */
 				if (!_rok) {
-					work = true;       /* read failed (CRC): retry next round */
+					work = true;       /* read failed (CRC/stall): retry later */
+					/* CRITICAL while a take is in flight: this failure may
+					 * have just burned up to ~230 ms of stalled bus, and the
+					 * rec ring is the one buffer that corrupts PERMANENTLY
+					 * on overflow. Leave PASS 2 immediately so PASS 1 can
+					 * flush — the success path runs the rec_backed yield but
+					 * this failure path used to bypass it, letting up to 3
+					 * consecutive stalled CMD18s pin the bus for ~a second
+					 * (the 'records only parts of the track' mechanism). */
+					bool _rec_live = false;
+					for (int j = 0; j < NTRK; j++)
+						if (trk[j].state == TS_REC || trk[j].state == TS_DONE)
+							_rec_live = true;
+					if (_rec_live) { more = false; break; }
 					continue;
 				}
 				if (t->p_w != pw) { work = true; continue; } /* reset raced us */
-				int16_t *b16 = (int16_t *)batchbuf;
-				for (uint32_t m = 0; m < n * SAMP_PER_BLK; m++)
-					t->pring[(pw + m) & RING_MASK] = b16[m];
+				/* DECODE: packed flash bytes (n blocks just read) -> play ring
+				 * (int16, wraps at RING_MASK, pw is block-aligned). PCM is
+				 * memcpy-equivalent. */
+				codec_unpack(t->pring, RING_MASK, pw & RING_MASK,
+				             batchbuf, n);
 				t->p_w = pw + n * SAMP_PER_BLK;
 				work = true;
 				more = true;           /* keep rounding until all rings fed */
+				/* ADAPTIVE FLUSH PRIORITY (balanced): when recording backs the
+				 * rec ring past 3/4-full during this read phase (a GC stall let
+				 * the writes fall behind), yield back to PASS 1 to drain it — a
+				 * rec-ring overflow corrupts the take forever. BUT do NOT yield
+				 * while a playing track is within ~24 blocks (~128 ms) of underrunning: that
+				 * brief playback dip is exactly the crackle the user hears, so
+				 * keep the playing tracks fed UNLESS the rec ring is at the true
+				 * overflow emergency (>=7/8), where the recording must win.
+				 * Result: play starvation is bounded to ~24 blocks and rec backlog
+				 * to ~7/8 — neither hits its failure point. Yields at PHASE
+				 * granularity (one clean, fully-terminated CMD18 burst, then back
+				 * to flush) — NOT the per-burst CMD25/CMD18 alternation that
+				 * broke writes before. */
+				bool rec_backed = false, rec_emerg = false;
+				for (int j = 0; j < NTRK; j++) {
+					uint8_t sj = trk[j].state;
+					if (sj != TS_REC && sj != TS_DONE) continue;
+					uint32_t fill = trk[j].r_w - trk[j].r_r;
+					if (fill >= (RRING_SAMPLES - RRING_SAMPLES / 4u)) rec_backed = true;
+					if (fill >= (RRING_SAMPLES - RRING_SAMPLES / 8u)) rec_emerg  = true;
+				}
+				if (rec_backed) {
+					bool play_crit = false;
+					if (!rec_emerg)
+						for (int j = 0; j < NTRK; j++)
+							if (trk[j].state == TS_PLAY &&
+							    (int32_t)(trk[j].p_w - cpos) <
+							    (int32_t)PLAY_CRIT_SAMPLES)
+								play_crit = true;
+					if (!play_crit) {  /* drain the rec ring now */
+						more = false;  /* exit PASS 2 -> streamer re-runs PASS 1 */
+						break;
+					}
+				}
 			}
 		}
-		if (!work) k_msleep(2);
+		if (!work) {
+			k_msleep(2);
+		} else {
+			/* ANTI-STARVATION: the streamer at PREEMPT(5) outranks main(8),
+			 * the WDT feeder. A long stretch of back-to-back work (or any
+			 * future livelock in this loop) must NEVER be able to hold main
+			 * off the CPU for the 4 s watchdog window — one 0.5 ms breather
+			 * per 64 working passes costs <1% and guarantees it. */
+			static uint32_t workpass;
+			if ((++workpass & 0x3Fu) == 0u)
+				k_usleep(500);
+		}
 	}
 }
 
+/* ========================================================================
+ *  MIDI  —  timer-driven 24-PPQN clock + Start/Stop out over the SYNC jack.
+ *  A free hardware timer clocks the UART bits one per ISR with interrupts
+ *  left ON, so it never masks the eMMC/I2S ISRs (the fix for the >3-track
+ *  crackle the old irq-locked bit-bang caused).
+ * ======================================================================== */
 /* ---- MIDI clock + Pocket-Operator sync out over the SYNC jack --------------
  * Pins from TimK's sync-jack schematic:
  *   MIDI  : BC807_BASE = P0.23 -> a PNP transistor that drives SYNC_RING. The
@@ -1735,9 +2401,8 @@ static void streamer_thread(void *a, void *b, void *c)
  * UARTE cannot compensate for -- the timer's ISR drives the bit via midi_line()
  * which applies MIDI_INVERT, so the timing is hardware-accurate AND the polarity
  * is right. Set to 0 to compile MIDI out entirely. */
-/* 48 kHz FULL-FEATURE build: MIDI is ON here (timer-driven) + segment loops. This
- * is the build we're making smooth enough for 48 kHz multi-track; it carries the
- * read-timing diag probe (rdus=). The shipped 48 kHz backups set this to 0. */
+/* MIDI is ON here (timer-driven) alongside the segment looper. Set to 0 to
+ * compile the MIDI clock/Start-Stop output out entirely (the line stays idle). */
 #define MIDI_SYNC_ENABLE 1
 
 static K_THREAD_STACK_DEFINE(midi_stack, 768);
@@ -1834,9 +2499,18 @@ static void midi_thread(void *a, void *b, void *c)
 	while (1) {
 		if (g_midi_start_pending) { g_midi_start_pending = 0; midi_send(0xFA); }
 		if (g_midi_stop_pending)  { g_midi_stop_pending  = 0; midi_send(0xFC); }
-		if (consumed != g_midi_clk_produced) {
-			consumed++;
-			midi_send(0xF8);                       /* MIDI clock, 24 PPQN */
+		uint32_t prod = g_midi_clk_produced;
+		if (consumed != prod) {
+			if ((uint32_t)(prod - consumed) > 96u) {
+				/* absurd backlog (>4 beats — a stall or a counter
+				 * glitch): RESYNC instead of blasting the difference,
+				 * because each clock byte locks IRQs ~320 us and a huge
+				 * catch-up burst starves everything below PREEMPT(6). */
+				consumed = prod;
+			} else {
+				consumed++;
+				midi_send(0xF8);               /* MIDI clock, 24 PPQN */
+			}
 		} else {
 			k_msleep(1);
 		}
@@ -1890,12 +2564,18 @@ static void audio_thread(void *a, void *b, void *c)
 			continue;
 
 		/* Looper engine: drains the live USB input (prebuffer-gated inside;
-		 * silence if the host isn't streaming) and mixes the 4 tracks on top. */
+		 * silence if the host isn't streaming) and mixes the 4 tracks on top.
+		 * DWT-timed: worst-case exec must stay far below the 5.33 ms block
+		 * budget — aus= in the diag definitively exonerates (or convicts)
+		 * the CPU path for the crackle. */
+		uint32_t _c0 = DWT->CYCCNT;
 		looper_audio_block(blk);
+		uint32_t _cus = (DWT->CYCCNT - _c0) / 64u;   /* 64 MHz -> us */
+		if (_cus > g_audio_us_max) g_audio_us_max = _cus;
 
 		int wrc = i2s_write(i2s_dev, blk, BLK_BYTES);
-		audio_write_rc = wrc;
 		if (wrc != 0) {
+			g_i2s_wfail_cnt++;   /* diag: I2S path failure counter */
 			k_mem_slab_free(&tx_slab, blk);
 			/* FAILSAFE: if the I2S TX ever errors into the stopped state, every
 			 * write fails forever and the device latches SILENT until reboot.
@@ -1917,7 +2597,6 @@ static void audio_thread(void *a, void *b, void *c)
 			continue;
 		}
 		wfail = 0;
-		audio_blocks++;
 	}
 }
 
@@ -1931,7 +2610,15 @@ static void audio_init(void)
 	k_msleep(5);
 	k_thread_create(&audio_tcb, audio_stack, K_THREAD_STACK_SIZEOF(audio_stack),
 			audio_thread, NULL, NULL, NULL,
-			K_PRIO_COOP(7), 0, K_NO_WAIT);   /* above main: USB prints can't starve the feed */
+			K_PRIO_PREEMPT(0), 0, K_NO_WAIT);
+	/* PREEMPT(0), not COOP(7): still outranks every other app thread (main 8,
+	 * streamer 5, MIDI 6 — none can preempt it), but the COOP USB/UDC stack
+	 * threads can now interrupt the mixer for their ~100 us ISO service.
+	 * MEASURED on hardware: with the mixer non-preemptible, the USB
+	 * controller lost ~600 incoming audio frames/s ONLY while recording
+	 * (SOF heartbeat perfect, rx pool untouched) — silence stitched into
+	 * every take = THE 4-track crackle. Shared state with the USB threads is
+	 * one SPSC ring buffer and one mem-slab, both preemption-safe. */
 
 	/* eMMC streamer: preemptible + below the audio thread so audio always wins. */
 	k_thread_create(&streamer_tcb, streamer_stack, K_THREAD_STACK_SIZEOF(streamer_stack),
@@ -1959,12 +2646,12 @@ static void audio_init(void)
 }
 
 /* ---- UAC2 explicit feedback: software regulator (v1) ------------------------
- * The host needs to know how fast the SP-1 actually consumes samples. The
- * The SP-1 I2S bus runs at exactly 48000 Hz (codec-mastered), so we report
- * nominal rate would make the host over-deliver and overflow the ring. Nordic
- * only ships a hardware feedback measurement for the nRF5340 (it needs an I2S
- * FRAMESTART event the nRF52840 lacks), so we regulate in software, reporting a
- * USB Q10.14 "samples per SOF" value (1.0 sample = 1<<14 in the low 24 bits).
+ * The host needs to know how fast the SP-1 actually consumes samples. The SP-1
+ * I2S bus runs at exactly 48000 Hz (codec-mastered); reporting the nominal rate
+ * would make the host over-deliver and overflow the ring. Nordic only ships a
+ * hardware feedback measurement for the nRF5340 (it needs an I2S FRAMESTART
+ * event the nRF52840 lacks), so we regulate in software, reporting a USB Q10.14
+ * "samples per SOF" value (1.0 sample = 1<<14 in the low 24 bits).
  *
  * CRITICAL: the reported value must be SMOOTH. The raw ring fill carries a large
  * ~187 Hz sawtooth (audio_thread drains in 256-frame blocks) plus per-packet USB
@@ -2005,6 +2692,7 @@ static void feedback_reset(void)
 /* Called every USB SOF (USB thread) while the terminal is streaming. */
 static void feedback_update(void)
 {
+	g_sof_cnt++;                        /* diag: SOF heartbeat (1000/s) */
 	int frames = (int)(ring_buf_size_get(&usb_audio_ring) / USB_FRAME_BYTES);
 
 	/* EMA low-pass of the fill (Q=FILL_Q fixed point) to strip the block-drain
@@ -2025,11 +2713,19 @@ static void feedback_update(void)
 /* ---- UAC2 application callbacks --------------------------------------------
  * UDC-aligned pool the USB stack writes incoming audio into before handing it
  * to data_recv_cb. One SOF of FS audio is 48 frames; allow +1 for feedback
- * over-speed packets. A handful of buffers covers SOF/scheduling overlap. */
+ * over-speed packets.
+ * POOL DEPTH IS LOAD-BEARING: if uac2_get_recv_buf has no buffer for an
+ * isochronous OUT interval, that packet is LOST FOREVER (ISO never retries) —
+ * a 1 ms hole in the live input that gets RECORDED into a take. The audio
+ * thread is COOP(7) and non-preemptible, so the COOP(8) USB threads can be
+ * held off for several ms under recording load; 6 buffers (~6 ms) was NOT
+ * enough — measured live: the input ring pinned at its floor with ~16 silence
+ * frames padded into every block, 187x/s, for entire takes = THE crackle
+ * (the eMMC was never the cause). 32 buffers = ~32 ms of cushion. */
 #define UAC2_IN_TERMINAL_ID  UAC2_ENTITY_ID(DT_NODELABEL(in_terminal))
 #define UAC2_MAX_PKT         ((48 + 1) * USB_FRAME_BYTES)
 K_MEM_SLAB_DEFINE_STATIC(uac2_rx_slab, ROUND_UP(UAC2_MAX_PKT, UDC_BUF_GRANULARITY),
-			 6, UDC_BUF_ALIGN);
+			 32, UDC_BUF_ALIGN);
 
 static const struct device *const uac2_dev =
 	DEVICE_DT_GET(DT_NODELABEL(uac2_speaker));
@@ -2068,8 +2764,13 @@ static void *uac2_get_recv_buf(const struct device *dev, uint8_t terminal,
 
 	if (terminal == UAC2_IN_TERMINAL_ID && g_usb_streaming) {
 		__ASSERT_NO_MSG(size <= UAC2_MAX_PKT);
+		uint32_t _free = k_mem_slab_num_free_get(&uac2_rx_slab);
+		if (_free < g_rx_slab_min) g_rx_slab_min = _free;
 		if (k_mem_slab_alloc(&uac2_rx_slab, &buf, K_NO_WAIT) != 0) {
-			buf = NULL;            /* back-pressure: stack will retry */
+			buf = NULL;            /* NO buffer for an ISO interval = the
+			                        * packet is DROPPED (ISO never retries):
+			                        * counted — this is the crackle source. */
+			g_rx_nobuf++;
 		}
 	}
 
@@ -2082,6 +2783,8 @@ static void uac2_data_recv_cb(const struct device *dev, uint8_t terminal,
 	ARG_UNUSED(dev); ARG_UNUSED(terminal); ARG_UNUSED(user_data);
 
 	if (g_usb_streaming && size) {
+		g_usb_pkts++;                /* diag: ~1000/s expected while streaming */
+		g_usb_frames += size / USB_FRAME_BYTES;
 		/* Push the 16-bit stereo frames into the elastic ring. If the whole
 		 * packet doesn't fit, drop the WHOLE packet (one clean 1 ms gap) rather
 		 * than a partial put — with a feedback-deaf host the ring pegs full and
@@ -2151,14 +2854,12 @@ static void usb_audio_start(void)
 	}
 
 #if SP1_XFER_ENABLE
-	/* Register the CDC RX callback AND enable RX now. The previous "lean poll"
-	 * idle (RX interrupt off, uart_poll_in scan) could never work on this USB
-	 * stack: the CDC-ACM class only queues its FIRST receive transfer from
-	 * uart_irq_rx_enable(), so with the interrupt off the endpoint never
-	 * accepts a single byte from the host and the connect-magic can never
-	 * arrive (the "transfer tool cannot connect" bug, GitHub issue #1). The
-	 * ISR just moves bytes into a ring; its cost while looping is a few
-	 * microseconds per line the host sends, i.e. zero in normal use. */
+	/* Register the CDC RX callback AND enable RX now. On this USB stack the
+	 * CDC-ACM class only queues its FIRST receive transfer from
+	 * uart_irq_rx_enable() — with it off the endpoint never accepts a single
+	 * byte and the transfer site can never connect (GitHub issue #1). The ISR
+	 * just moves bytes into a ring; while looping its cost is zero unless the
+	 * host actually sends something. */
 	uart_irq_callback_user_data_set(cdc, cdc_rx_isr, NULL);
 	uart_irq_rx_enable(cdc);
 #endif
@@ -2180,8 +2881,12 @@ static void controls_diag(void)
 
 	static const char *const tsn[] = { "---", "ARM", "REC", "DON", "PLY" };
 	int batt = ladder_read(&adc_ladder[LAD_BATT]);   /* raw 12-bit, battery divider */
+	uint32_t cpos = g_consume_pos;
+	int mg[NTRK];
+	for (int _i = 0; _i < NTRK; _i++)
+		mg[_i] = (int)((int32_t)(trk[_i].p_w - cpos) / (int)(LOOP_RATE / 1000u));
 	printk("LOOPER %dHz song=%d %s hp=%d hpin=%d usb=%d chg=%d batt=%d bpm=%d detbpm=%d vol=%d "
-	       "trk[%s %s %s %s] rec=%d ovr=%u rerr=%u werr=%u rdus=%u/%u\n",
+	       "trk[%s %s %s %s] rec=%d ovr=%u rerr=%u werr=%u marg=[%d %d %d %d]ms stv=[%u %u %u %u] len=[%u %u %u %u] st=[%u %u %u %u] spim=%d cache=%d ckb=%u wbi=%u\n",
 	       (int)LOOP_RATE, (int)g_slot, g_playing ? "PLAY" : "STOP", g_hp_on, g_hp_in,
 	       usb_present() ? 1 : 0, charging() ? 1 : 0, batt,
 	       g_play_bpm, g_det_bpm, g_master_vol_q8,
@@ -2189,8 +2894,77 @@ static void controls_diag(void)
 	       tsn[trk[2].state % 5], tsn[trk[3].state % 5],
 	       g_rec_track, (unsigned)g_rec_overruns,
 	       (unsigned)emmc_crc_rd_errs, (unsigned)emmc_crc_wr_errs,
-	       (unsigned)g_rd_us_last, (unsigned)g_rd_us_max);
-	g_rd_us_max = 0;   /* each line shows the worst play-read since the last line */
+	       mg[0], mg[1], mg[2], mg[3],
+	       (unsigned)g_starve_cnt[0], (unsigned)g_starve_cnt[1], (unsigned)g_starve_cnt[2], (unsigned)g_starve_cnt[3],
+	       (unsigned)trk[0].len_blocks, (unsigned)trk[1].len_blocks, (unsigned)trk[2].len_blocks, (unsigned)trk[3].len_blocks,
+	       (unsigned)trk[0].start_blk, (unsigned)trk[1].start_blk, (unsigned)trk[2].start_blk, (unsigned)trk[3].start_blk,
+	       emmc_spim_active() ? 1 : 0, g_cache_on ? 1 : 0, (unsigned)g_cache_kb, (unsigned)emmc_dbg_wr_busy_max);
+	{
+		/* THE stall numbers, finally wall-clock: wus=write-busy window/session
+		 * max (us), rus=read-access wait, sus=CMD6 busy (cache flush / future
+		 * TRIM+BKOPS), bto=busy-poll expiries, low=worst play margin this
+		 * window (ms), hiw=worst rec fill (ms), gl=stored glitches (REPEATING
+		 * artifacts), iwf=i2s failures, aus=worst audio-block exec us,
+		 * ec=EXT_CSD[167,166,231,502,503,198,246,192,175]. */
+		int32_t _lwv = g_play_lowat;
+		int _lw = (_lwv == 0x7FFFFFFF) ? -1
+			  : (int)(_lwv / (int32_t)(LOOP_RATE / 1000u));
+		/* USB live-input health: uu=drain underruns (ring dry at the mixer),
+		 * uo=receive overflows (whole 1 ms packet dropped: host over-
+		 * delivering), up=ISO packets this window (~2x window-ms expected...
+		 * i.e. ~1000/s), ufl=ring fill low,high watermarks in frames
+		 * (setpoint ~1024 of 4096), fb=feedback delta from the true rate
+		 * (Q10.14 LSBs; 0 = asking exactly for 48000 Hz). */
+		static uint32_t _uplast;
+		uint32_t _upnow = g_usb_pkts;
+		unsigned _updelta = (unsigned)(_upnow - _uplast);
+		_uplast = _upnow;
+		int32_t _ulw = g_usb_lowat;
+		if (_ulw == 0x7FFFFFFF) _ulw = -1;
+		int _fbd = (int)((int32_t)atomic_get(&g_fb_value) - (int32_t)FB_TRUE);
+		printk("EMMC48 wus=%u/%u rus=%u sus=%u bto=%u low=%dms hiw=%ums gl=%u iwf=%u aus=%u rr=%x flt=%x@%x hi=%u,%u uu=%u uo=%u up=%u ufl=%d,%u fb=%d ec=%02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x\n",
+		       (unsigned)emmc_dbg_wr_busy_us_max, (unsigned)emmc_dbg_wr_busy_us_peak,
+		       (unsigned)emmc_dbg_rd_wait_us_max, (unsigned)emmc_dbg_switch_busy_us_max,
+		       (unsigned)emmc_dbg_busy_timeouts, _lw,
+		       (unsigned)(g_rec_hiwat / (LOOP_RATE / 1000u)),
+		       (unsigned)g_stored_glitch_cnt, (unsigned)g_i2s_wfail_cnt,
+		       (unsigned)g_audio_us_max,
+		       (unsigned)g_resetreas,
+		       (unsigned)g_last_fault_reason, (unsigned)g_last_fault_pc,
+		       (unsigned)g_hpi_on, (unsigned)emmc_dbg_hpi_fires,
+		       (unsigned)g_ring_underruns, (unsigned)g_ring_overflows,
+		       _updelta, _ulw, (unsigned)g_usb_hiwat, _fbd,
+		       g_extcsd_dump[0], g_extcsd_dump[1], g_extcsd_dump[2],
+		       g_extcsd_dump[3], g_extcsd_dump[4], g_extcsd_dump[5],
+		       g_extcsd_dump[6], g_extcsd_dump[7], g_extcsd_dump[8]);
+	}
+	{
+		/* USBIN: exact-rate splits for the input path. dt=window ms;
+		 * sof/pk/fr = SOF heartbeats, ISO packets, audio frames received
+		 * this window (expect dt, dt, 48*dt); nb=packets DROPPED because
+		 * the rx pool was empty (MUST stay 0 after the 32-buffer fix);
+		 * sl=min free rx buffers (headroom left); zp=silence frames padded
+		 * into the live/record path this window (MUST stay 0). */
+		static uint32_t _lms, _lsof, _lpk, _lfr, _lnb, _lzp;
+		uint32_t _now2 = k_uptime_get_32();
+		uint32_t _sof = g_sof_cnt, _pk = g_usb_pkts, _fr = g_usb_frames;
+		uint32_t _nb = g_rx_nobuf, _zp = g_zero_pad;
+		printk("USBIN dt=%u sof=%u pk=%u fr=%u nb=%u sl=%u zp=%u\n",
+		       (unsigned)(_now2 - _lms), (unsigned)(_sof - _lsof),
+		       (unsigned)(_pk - _lpk), (unsigned)(_fr - _lfr),
+		       (unsigned)(_nb - _lnb), (unsigned)g_rx_slab_min,
+		       (unsigned)(_zp - _lzp));
+		_lms = _now2; _lsof = _sof; _lpk = _pk; _lfr = _fr;
+		_lnb = _nb; _lzp = _zp;
+		g_rx_slab_min = 0xFFFF;
+	}
+	emmc_dbg_wr_busy_max = 0u;   /* per-window worst, reset each print */
+	emmc_dbg_wr_busy_us_max = 0u;
+	emmc_dbg_rd_wait_us_max = 0u;
+	g_play_lowat = 0x7FFFFFFF;
+	g_rec_hiwat = 0u;
+	g_usb_lowat = 0x7FFFFFFF;
+	g_usb_hiwat = 0u;
 }
 
 /* ---- decode the ladders into named buttons (verified thresholds) ---- */
@@ -2313,6 +3087,14 @@ static void pwr_btn_arm_wake(void)
 		(GPIO_PIN_CNF_SENSE_Low     << GPIO_PIN_CNF_SENSE_Pos);
 }
 
+/* ========================================================================
+ *  POWER / PERSISTENCE  —  battery charger control, the graceful
+ *  stop_and_flush() (finalize any take, then flush the card's volatile write
+ *  cache so loops + the slot index survive a power cut), power_off() ->
+ *  SYSTEM_OFF (clean return to the bootloader; there is no reset pin),
+ *  enter_dfu() (a track combo forces the bootloader for reflashing), and
+ *  song-slot switching.
+ * ======================================================================== */
 /* ---------- battery charger ---------- */
 /* Explicitly enable charging by driving the BQ24232 /CE pin low, and set the
  * two status pins as inputs with pull-ups (they are open-drain on the charger). */
@@ -2359,6 +3141,17 @@ static void stop_and_flush(void)
 			if (trk[t].state == TS_REC || trk[t].state == TS_DONE) busy = 1;
 		if (!busy) break;
 		k_msleep(10);
+	}
+	/* Now flush the card's volatile write cache so the just-finished take + the
+	 * slot index are durable across the power cut. The recording is finalized and
+	 * we're shutting down, so the bus-blocking flush has nothing live to starve.
+	 * The streamer (only eMMC user) does it; we wait, feeding the WDT. */
+	if (g_cache_on) {
+		g_cache_flush_req = 1;
+		for (int i = 0; i < 1000 && g_cache_flush_req; i++) {  /* bounded ~10 s (flush itself is allowed 8 s) */
+			feed_wdt();
+			k_msleep(10);
+		}
 	}
 }
 
@@ -2440,16 +3233,74 @@ static void next_slot(void)
 	g_meta_save_req = 1;
 }
 
+/* WDT PRE-WARNING (nRF52: fires ~61 us before the reset): the reported crash
+ * was rr=2 = a WATCHDOG reset — something kept main (the feeder) off the CPU
+ * for 4 s. Stamp WHO was running into the fault breadcrumb: 'A'udio,
+ * 'S'treamer, 'M'IDI, 'm'ain (stuck in its own loop), 'I'dle (CPU idle =>
+ * main is BLOCKED on something, not starved) — printed next boot as
+ * flt=d09000XX@tcb. */
+extern struct k_thread z_main_thread;
+extern struct k_thread z_idle_threads[];
+static void wdt_prewarn(const struct device *dev, int ch)
+{
+	ARG_UNUSED(dev); ARG_UNUSED(ch);
+	k_tid_t t = k_current_get();
+	uint32_t who = '?';
+	if      (t == &audio_tcb)        who = 'A';
+	else if (t == &streamer_tcb)     who = 'S';
+	else if (t == &midi_tcb)         who = 'M';
+	else if (t == &z_main_thread)    who = 'm';
+	else if (t == &z_idle_threads[0]) who = 'I';
+	g_fault_reason = 0xD0900000u | who;
+	g_fault_pc = (uint32_t)t;
+	g_fault_key = 0xFA17FA17u;
+	/* RAM breadcrumbs did NOT survive a real WDT reset (the bootloader runs
+	 * first and scrubs that RAM) — GPREGRET2 is a RETAINED register that
+	 * survives every soft/WDT reset and the bootloader leaves it alone. */
+	NRF_POWER->GPREGRET2 = (uint8_t)who;
+}
+
 int main(void)
 {
+	/* Why did the last boot end? (bit0 pin reset, bit1 watchdog, bit2 soft
+	 * reset, bit3 CPU lockup — see nRF52840 POWER.RESETREAS.) */
+	g_resetreas = NRF_POWER->RESETREAS;
+	NRF_POWER->RESETREAS = 0xFFFFFFFFu;
+	if (g_fault_key == 0xFA17FA17u) {
+		g_last_fault_reason = g_fault_reason;   /* previous boot CRASHED */
+		g_last_fault_pc = g_fault_pc;
+		g_fault_key = 0u;
+	} else if (NRF_POWER->GPREGRET2 != 0u) {
+		/* RAM breadcrumb lost (bootloader scrub) but the retained register
+		 * survived: recover the watchdog culprit letter from it. */
+		g_last_fault_reason = 0xD0900000u | NRF_POWER->GPREGRET2;
+		g_last_fault_pc = 0u;
+	}
+	NRF_POWER->GPREGRET2 = 0u;
+	/* DWT cycle counter: feeds the audio-block exec-time watermark (aus=). */
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+	DWT->CYCCNT = 0;
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+	/* Main runs at PREEMPT(1): BELOW the audio engine (0), ABOVE the streamer
+	 * (5) and MIDI (6). History: main once defaulted to 0 and its blocking
+	 * ladder-ADC reads preempting the streamer caused rec overflows, so a
+	 * rescue round demoted it to (8) — but that turned "streamer busy" into
+	 * "lights, buttons and the WATCHDOG FEED all crawl", and a 4 s busy
+	 * stretch (easy with 4 independent tracks + record at 48 kHz) became a
+	 * watchdog reset: the field-reported freeze/crash (rr=2, lights slow).
+	 * Preempting the streamer is harmless NOW: the rings ride 341 ms and
+	 * every bus wait is fail-safe/time-bounded — a few ms of ladder reads or
+	 * CDC prints cannot overflow anything. Responsiveness is structural. */
+	k_thread_priority_set(k_current_get(), K_PRIO_PREEMPT(1));
+
 	const struct device *wdt = DEVICE_DT_GET(WDT_NODE);
 
-	/* Read the wake cause BEFORE clearing (write-1-to-clear). OFF = woken from
-	 * SYSTEM_OFF by a GPIO SENSE (the power button); DOG = watchdog recovery
-	 * (resume fast — the user was mid-session); anything else (VBUS plug-in,
-	 * soft reset after a flash, cold power-on) parks in charge-standby below. */
-	uint32_t wake_reas = NRF_POWER->RESETREAS;
-	NRF_POWER->RESETREAS = 0xFFFFFFFFu;   /* clear on boot */
+	/* Wake cause: captured ONCE at main() entry into g_resetreas (the register
+	 * is write-1-to-clear and is already cleared there — a second read here
+	 * returned 0 and broke this gate, parking watchdog recoveries in standby
+	 * and SYSTEM_OFF-wiping the crash breadcrumb on battery). OFF = woken from
+	 * SYSTEM_OFF by the power button; DOG = watchdog recovery (resume fast). */
+	uint32_t wake_reas = g_resetreas;
 
 	pwr_btn_cfg_input();
 	charger_init();                 /* make sure the battery actually charges */
@@ -2462,7 +3313,7 @@ int main(void)
 
 	if (device_is_ready(wdt)) {
 		wdt_install_timeout(wdt, &(struct wdt_timeout_cfg){
-			.window.max = 4000, .callback = NULL,
+			.window.max = 4000, .callback = wdt_prewarn,
 		});
 		wdt_setup(wdt, 0);
 	}
@@ -2476,7 +3327,11 @@ int main(void)
 	 * A power-button wake or watchdog recovery skips straight to full boot —
 	 * and even if the bootloader scrubs RESETREAS, the user waking the device
 	 * is already holding the button, so the hold path turns it on anyway. */
-	if (!(wake_reas & (POWER_RESETREAS_OFF_Msk | POWER_RESETREAS_DOG_Msk))) {
+	if (!(wake_reas & (POWER_RESETREAS_OFF_Msk | POWER_RESETREAS_DOG_Msk)) &&
+	    g_last_fault_reason == 0xFFFFFFFFu) {
+		/* (a valid fault breadcrumb also skips standby: the user was
+		 * mid-session, and the battery standby path would SYSTEM_OFF and
+		 * wipe the very forensics we just preserved) */
 		int64_t hold_t = -1;
 		uint32_t blink = 0;
 		while (1) {
@@ -2550,10 +3405,10 @@ int main(void)
 	while (1) {
 		feed_wdt();
 
-#if SP1_XFER_ENABLE
 		/* USB block-transfer in progress: audio is paused and the streamer is
-		 * servicing reads/writes. Ignore the controls and blink all four track
-		 * LEDs together so the device reads as mid-transfer, not frozen. */
+		 * servicing reads/writes. Ignore the controls and show a "busy" pattern
+		 * (all four track LEDs blinking together) so the device clearly reads as
+		 * mid-transfer rather than frozen. */
 		if (g_xfer_mode) {
 			static uint32_t xb;
 			int on = ((xb++ / 8u) & 1u);
@@ -2562,10 +3417,9 @@ int main(void)
 			k_msleep(20);
 			continue;
 		}
-#endif
 
-		/* Milestone 1: report the raw ladder codes ~6x/sec so we can map
-		 * each button. Only prints when a serial monitor is attached. */
+		/* Print one status line ~twice a second (the 500 ms gate below) for
+		 * monitoring. Only prints when a serial monitor is attached (DTR). */
 		int64_t now = k_uptime_get();
 		if (now - last_diag >= 500) {
 			last_diag = now;
@@ -2660,7 +3514,24 @@ int main(void)
 					int ti = (int)before;
 					if (armed_press[ti]) {
 						armed_press[ti] = 0;
-						g_stop_req = 1;                  /* end the take */
+						/* LATCHED RECORDING: releasing the arming hold
+						 * does NOT stop the take — it keeps recording
+						 * hands-free until the same track is tapped
+						 * again (below) or the track region fills. */
+					} else if ((g_rec_track == ti &&
+						    (trk[ti].state == TS_ARMED ||
+						     trk[ti].state == TS_REC)) ||
+						   trk[ti].state == TS_DONE) {
+						/* tap on the recording track = STOP the take
+						 * (tap on an ARMED-but-silent track = cancel).
+						 * A tap on a just-AUTO-finalized take (TS_DONE,
+						 * LED still solid) is swallowed here too — the
+						 * user is trying to stop it, so it must never
+						 * become a mute toggle + a delete window on
+						 * the take they just recorded. Never opens a
+						 * mute/delete tap window. */
+						g_stop_req = 1;   /* no-ops if nothing records */
+						tap_deadline[ti] = 0;
 					} else if (tap_deadline[ti] > 0 && tnow <= tap_deadline[ti]) {
 						tap_deadline[ti] = 0;            /* 2nd tap in time -> DOUBLE-TAP delete */
 						g_del_req[ti] = 1;
@@ -2680,7 +3551,15 @@ int main(void)
 			 * recording now (a quick tap releases before this, so it can't mis-arm). */
 			if (committed >= TRK_1 && committed <= TRK_4) {
 				int ti = (int)committed;
-				if (!armed_press[ti] && k_uptime_get() - press_t[ti] >= HOLD_RECORD_MS) {
+				if (!armed_press[ti] && g_rec_track < 0 &&
+				    trk[ti].state != TS_DONE &&
+				    k_uptime_get() - press_t[ti] >= HOLD_RECORD_MS) {
+					/* g_rec_track < 0: one take at a time — while a latched
+					 * take runs, holding ANY track does nothing (no phantom
+					 * arm, no forced g_playing). state != TS_DONE: a hold on
+					 * a just-auto-finalized take (user trying to stop it)
+					 * must not silently arm a latched re-record that would
+					 * overwrite the take it is still flushing. */
 					armed_press[ti] = 1;
 					tap_deadline[ti] = 0;            /* a hold cancels a pending single-tap */
 					g_arm_req[ti] = 1;

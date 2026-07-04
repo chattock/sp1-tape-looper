@@ -10,7 +10,7 @@
  *      insensitive, so simple software toggling is fine.
  *
  *    * The 512-byte DATA payloads — the throughput-critical part — ride the
- *      nRF's SPIM3 SPI engine with DMA at 16 MHz (eMMC default-speed mode
+ *      nRF's SPIM3 SPI engine with DMA at 32 MHz (M32; eMMC default-speed mode
  *      allows up to 26 MHz). This is ~40x faster than bit-banging the data and
  *      frees the CPU during each transfer. SPIM3 is the only SPI instance that
  *      runs above 8 MHz, and is otherwise unused in this firmware.
@@ -98,7 +98,7 @@ uint16_t emmc_dbg_rd_crc     = 0;    /* CRC16 the card appended to last read blo
 #define EDGE_SETTLE() __asm__ volatile("nop\nnop\nnop")
 #define HALF(hd)      do { if (hd) { k_busy_wait(hd); } } while (0)
 
-/* ===== SPIM2 hardware-accelerated DATA path ===================================
+/* ===== SPIM3 hardware-accelerated DATA path ===================================
  * The bit-bang moves data at ~1.3 Mbit/s with the CPU pinned for every bit;
  * SPIM3 + EasyDMA clocks the identical wire format at 16 MHz with the CPU free.
  * eMMC DAT0 at default speed is SPI-mode-0 compatible: the host launches data
@@ -107,14 +107,28 @@ uint16_t emmc_dbg_rd_crc     = 0;    /* CRC16 the card appended to last read blo
  * the CRC-status token and busy polling stay bit-banged (slow, protocol-
  * fiddly, timing-insensitive phases). SPIM3 (0x4002F000) is the only SPIM that
  * supports >8MHz and is otherwise unused (I2C=TWIM0, UARTE1 deleted). */
-/* 16 MHz on SPIM3 (the only instance with >8MHz). eMMC default-speed mode
- * allows <=26 MHz, so this is in spec; the CRC verify+retry layer catches any
- * signal-integrity errors at the higher rate (watch rerr=/werr= in the diag).
+/* SPIM3 (the only instance with >8MHz) flash clock. eMMC default-speed mode is
+ * spec'd to <=26 MHz; the nRF SPIM has no 26 MHz step, so the choices are
+ * M16 (16 MHz, in spec) or M32 (32 MHz, slightly over). M32 doubles the data
+ * rate -- it halves the ~4 ms per-read data floor AND speeds the record flush,
+ * which is what attacks the real 4-stream bottleneck (card-stall + flush-rate),
+ * not CPU. It is a calculated overclock: the CRC verify+retry layer catches any
+ * signal-integrity errors (watch rerr=/werr= in the diag) and a corrupted write
+ * is rejected by the card and retried, so the worst case is throughput loss /
+ * retries, never silent corruption. If werr climbs under load, revert to M16.
  * SPIM3 anomaly 198 (TX corruption on concurrent RAM access) is covered by the
- * same integrity layer: a corrupted write is rejected by the card and retried. */
+ * same integrity layer. */
 #define SPIM_FREQ_M16 0x0A000000u
+#define SPIM_FREQ_M32 0x14000000u
+/* 48 kHz overclocks to 32 MHz for bandwidth; 24 kHz stays at the in-spec 16 MHz
+ * (it has the headroom and the overclock was the 24 kHz white-noise cause). */
+#if SP1_BUILD_24K
+#define SPIM_FREQ_ACTIVE SPIM_FREQ_M16
+#else
+#define SPIM_FREQ_ACTIVE SPIM_FREQ_M32
+#endif
 static bool   s_spim_ok;
-static uint8_t s_dma_tx[517];        /* FF gap | FE start | 512 | CRC16 | FF */
+static uint8_t s_dma_tx[517];        /* FF gap | FE start | 512 data | CRC16  (trailing idle byte intentionally NOT sent — see write_data_block) */
 static uint8_t s_dma_rx[514];        /* 512 data | CRC16 (byte-aligned)      */
 
 static void spim_data_init(void)
@@ -124,7 +138,7 @@ static void spim_data_init(void)
 	NRF_SPIM3->PSEL.MOSI = 0xFFFFFFFFu;  /* attached per-transfer */
 	NRF_SPIM3->PSEL.MISO = 0xFFFFFFFFu;
 	NRF_SPIM3->PSEL.CSN  = 0xFFFFFFFFu;
-	NRF_SPIM3->FREQUENCY = SPIM_FREQ_M16;
+	NRF_SPIM3->FREQUENCY = SPIM_FREQ_ACTIVE;
 	NRF_SPIM3->CONFIG    = 0;            /* MSB first, CPOL0/CPHA0 (mode 0) */
 	NRF_SPIM3->ORC       = 0xFF;         /* idle-high filler */
 	s_spim_ok = true;
@@ -210,6 +224,15 @@ static uint8_t crc7(const uint8_t *data, uint8_t len)
  * token is enforced, with the caller retrying. These count the catches. */
 volatile uint32_t emmc_crc_rd_errs;
 volatile uint32_t emmc_crc_wr_errs;
+volatile uint32_t emmc_dbg_wr_busy_max;   /* diag: worst post-write program busy-wait, clk iterations */
+/* Wall-clock stall diagnostics (see header). k_cycle_get_32 runs on the 32768 Hz
+ * RTC (~30.5 us resolution) — plenty for ms-scale FTL stalls and nearly free. */
+volatile uint32_t emmc_dbg_wr_busy_us_max;
+volatile uint32_t emmc_dbg_wr_busy_us_peak;
+volatile uint32_t emmc_dbg_rd_wait_us_max;
+volatile uint32_t emmc_dbg_switch_busy_us_max;
+volatile uint32_t emmc_dbg_busy_timeouts;
+bool emmc_spim_active(void) { return s_spim_ok; }  /* diag: 32MHz SPIM3 DMA live vs slow bit-bang fallback */
 
 /* Table-driven CRC16-CCITT: the bitwise version costs ~14% CPU at the 48 kHz
  * read rate; the table costs ~1%. Built once at init. */
@@ -224,6 +247,11 @@ static void crc16_tab_init(void)
 		s_crc16_tab[i] = crc;
 	}
 }
+/* READ-ONLY -O2: -O2 just this CRC + the read bit-bang below. -O2 is proven safe
+ * for the flash READ path (read CRC errors stayed 0) but BREAKS the write bit-bang
+ * (write_data_block stays at the file's -Os). crc16 is pure computation, so -O2
+ * only speeds it -- the value (used by writes too) is unchanged. */
+__attribute__((optimize("O2")))
 static uint16_t crc16(const uint8_t *data, uint32_t len)
 {
 	uint16_t crc = 0;
@@ -304,21 +332,51 @@ static bool send_command_retry(uint8_t cmd, uint32_t arg, uint8_t *r1_out, int t
 }
 
 /* DATA read: per-bit CLK toggle uses the configurable (possibly 0) half-period. */
+__attribute__((optimize("O2")))   /* read path only: -O2 safe for reads, NOT writes */
 static bool read_data_block(uint8_t *buf)
 {
 	const uint32_t hd = g_emmc_clk_half_us;
 
 	DAT0_IN();
-	for (int timeout = 10000; timeout > 0; timeout--) {
-		RCLK_HIGH();
-		HALF(hd); EDGE_SETTLE();
-		if (!RDAT_GET()) {
-			break;
-		}
-		RCLK_LOW();
-		HALF(hd);
-		if (timeout == 1) {
-			return false;
+	/* START-BIT HUNT, TIME-BASED (was 10k iterations ~ 1-5 ms): a GC-busy card
+	 * can legitimately delay the first data token 100+ ms (this part declares
+	 * NO minimum write performance, so stalls are spec-unbounded). The old
+	 * short hunt false-failed the whole CMD18 mid-stall and the retry just
+	 * re-queued against the same busy card, collapsing play refill exactly
+	 * when the rings were draining. Waiting inside ONE command delivers data
+	 * the instant the card frees up. The card only advances its output on OUR
+	 * clock edges, so pausing the clock to yield can never miss the token. */
+	{
+		uint32_t t0 = k_cycle_get_32();
+		const uint32_t lim = k_us_to_cyc_ceil32(80000u);    /* 80 ms bound: rides real
+		                                                     * GC read delays, but caps the
+		                                                     * worst CMD18 at ~150+80 ms —
+		                                                     * under the 341 ms rec horizon */
+		const uint32_t yield_at = k_us_to_cyc_ceil32(5000u);
+		bool got_start = false;
+		for (;;) {
+			for (int burst = 0; burst < 64 && !got_start; burst++) {
+				RCLK_HIGH();
+				HALF(hd); EDGE_SETTLE();
+				if (!RDAT_GET()) {
+					got_start = true;    /* leave with RCLK HIGH (as before) */
+					break;
+				}
+				RCLK_LOW();
+				HALF(hd);
+			}
+			uint32_t el = k_cycle_get_32() - t0;
+			if (got_start) {
+				uint32_t us = k_cyc_to_us_floor32(el);
+				if (us > emmc_dbg_rd_wait_us_max) emmc_dbg_rd_wait_us_max = us;
+				break;
+			}
+			if (el >= lim) {
+				emmc_dbg_busy_timeouts++;
+				return false;
+			}
+			if (el >= yield_at)
+				k_usleep(50);   /* long stall: let MIDI/main breathe */
 		}
 	}
 	RCLK_LOW();
@@ -365,11 +423,6 @@ static bool read_data_block(uint8_t *buf)
 	DAT0_OUT();
 	DAT0_HIGH();
 	return true;
-}
-
-uint16_t emmc_calc_crc16(const uint8_t *data, uint32_t len)
-{
-	return crc16(data, len);
 }
 
 bool emmc_cmd13(uint8_t *r1_out)
@@ -462,14 +515,52 @@ static bool write_data_block(const uint8_t *buf)
 			break;
 		}
 	}
-	/* wait for programming to finish (card holds DAT0 low while busy) */
-	for (int timeout = 200000; timeout > 0; timeout--) {
-		clk_pulse();
-		if (READ_DAT0()) {
-			break;
+	/* wait for programming to finish (card holds DAT0 low while busy).
+	 * TIME-BASED (was 200k clk iterations, uncalibrated tens-of-ms): a GC
+	 * stall can hold busy for hundreds of ms and the old counter expired
+	 * SILENTLY as success — the next block's start token was then clocked
+	 * into a still-busy card, misframing the rest of the CMD25 burst into a
+	 * cascade of CRC-status failures (the corruption amplifier). Now: wait up
+	 * to 1 s wall-clock, measured + reported, yielding periodically so lower-
+	 * priority threads keep running; on expiry FAIL the write so the caller
+	 * retries with the data still intact in the ring. */
+	bool prog_done = false;
+	{
+		uint32_t _wbi = 0;
+		uint32_t t0 = k_cycle_get_32();
+		const uint32_t lim = k_us_to_cyc_ceil32(1000000u);  /* 1 s hard bound */
+		const uint32_t yield_at = k_us_to_cyc_ceil32(5000u);
+		for (;;) {
+			for (int burst = 0; burst < 64; burst++) {
+				clk_pulse();
+				_wbi++;
+				if (READ_DAT0()) { prog_done = true; break; }
+			}
+			uint32_t el = k_cycle_get_32() - t0;
+			if (prog_done || el >= lim) {
+				uint32_t us = k_cyc_to_us_floor32(el);
+				if (us > emmc_dbg_wr_busy_us_max)  emmc_dbg_wr_busy_us_max  = us;
+				if (us > emmc_dbg_wr_busy_us_peak) emmc_dbg_wr_busy_us_peak = us;
+				break;
+			}
+			if (el >= yield_at)
+				k_usleep(50);   /* long stall: let MIDI/main breathe */
 		}
+		if (_wbi > emmc_dbg_wr_busy_max) emmc_dbg_wr_busy_max = _wbi;
 	}
 
+	if (!prog_done) {
+		/* card STILL busy after 1 s: count separately from CRC errors (the
+		 * old conflation is how the first diagnostic missed the stall) and
+		 * fail the block — emmc_write_blocks aborts the burst with CMD12 and
+		 * the streamer retries the same blocks next pass. DAT0 stays an
+		 * INPUT: driving it push-pull HIGH against the card's active-low
+		 * busy driver would short two output stages together for the rest
+		 * of the (possibly multi-second) program; every subsequent bus
+		 * phase reconfigures the pin direction for itself anyway. */
+		emmc_dbg_busy_timeouts++;
+		return false;
+	}
 	DAT0_OUT();
 	DAT0_HIGH();
 	/* ENFORCE the CRC-status token: 0b010 = accepted. Anything else means the
@@ -573,6 +664,299 @@ bool emmc_is_ready(void)
 	return s_ready;
 }
 
+/* CMD8 SEND_EXT_CSD: an ADTC (read) command -- the card responds R1, then sends a
+ * single 512-byte EXT_CSD data block on DAT0 exactly like CMD17. Read-only and
+ * safe (no write-path touch). buf must be >= EMMC_BLOCK_SIZE (512). Used at boot
+ * to probe the write cache: CACHE_SIZE@249-252 and EXT_CSD_REV@192 (see
+ * streamer_thread). */
+bool emmc_read_ext_csd(uint8_t *buf)
+{
+	if (!s_ready) {
+		return false;
+	}
+	uint8_t r1[6];
+	if (!send_command_retry(8, 0, r1, 8)) {
+		return false;
+	}
+	return read_data_block(buf);
+}
+
+/* CMD6 SWITCH (R1b): write one EXT_CSD byte. arg = (0b11<<24)|(index<<8 ... );
+ * the card responds R1 then holds DAT0 LOW while it applies the change. Wait the
+ * busy out (same mechanism as the post-write program wait), then verify via
+ * CMD13: SWITCH_ERROR = card-status bit7 = r1[4]&0x80; READY_FOR_DATA = bit8 =
+ * r1[3]&0x01. Command-phase + DAT0 busy only -- does NOT touch the write bit-bang. */
+/* Busy-abort hook + HPI: during ABORTABLE R1b waits (idle cache flush, TRIM)
+ * the wait polls the app-registered callback ~1 kHz; when it returns true and
+ * HPI is enabled, we fire an HPI (CMD12 with the HPI bit) and the card must
+ * release the bus within its declared OUT_OF_INTERRUPT_TIME (100 ms on this
+ * part) — so a maintenance op can NEVER hold the bus while the audio rings
+ * drain toward a dropout. Power-off paths use the non-abortable waits. */
+static bool (*s_abort_cb)(void);
+static bool s_hpi_on;
+volatile uint32_t emmc_dbg_hpi_fires;
+
+/* Fire HPI: CMD12 with arg = RCA | HPI bit, then clock until DAT0 releases
+ * (bounded well above the 100 ms OUT_OF_INTERRUPT_TIME). On timeout DAT0 is
+ * left as an input — never drive against a busy card. */
+static bool emmc_hpi_break(void)
+{
+	uint8_t r1[6];
+	if (!s_hpi_on) {
+		return false;
+	}
+	emmc_dbg_hpi_fires++;
+	(void)send_command_retry(12, s_rca | 1u, r1, 4);
+	uint32_t t0 = k_cycle_get_32();
+	const uint32_t lim = k_us_to_cyc_ceil32(300000u);
+	DAT0_IN();
+	for (;;) {
+		for (int b = 0; b < 64; b++) {
+			clk_pulse();
+			if (READ_DAT0()) {
+				DAT0_OUT();
+				DAT0_HIGH();
+				return true;
+			}
+		}
+		if ((k_cycle_get_32() - t0) >= lim) {
+			return false;
+		}
+	}
+}
+
+/* Clock the bus while the card holds DAT0 low (R1b busy), up to max_us wall
+ * clock. Shared by CMD6 SWITCH (cache enable/flush, HPI_MGMT) and CMD38 TRIM —
+ * all delay-tolerant control phases. Yields while spinning so lower-priority
+ * threads keep running under a long (seconds) busy; duration lands in
+ * emmc_dbg_switch_busy_us_max. abortable=true adds the HPI escape hatch.
+ * Returns false if busy never released (DAT0 then STAYS an input — no push-
+ * pull contention against a still-busy card) or if the wait was HPI-aborted. */
+static bool dat0_busy_wait_impl(uint32_t max_us, bool abortable)
+{
+	uint32_t t0 = k_cycle_get_32();
+	const uint32_t lim = k_us_to_cyc_ceil32(max_us);
+	const uint32_t yield_at = k_us_to_cyc_ceil32(5000u);
+	bool done = false;
+	DAT0_IN();
+	for (;;) {
+		for (int burst = 0; burst < 64; burst++) {
+			clk_pulse();
+			if (READ_DAT0()) { done = true; break; }
+		}
+		uint32_t el = k_cycle_get_32() - t0;
+		if (done || el >= lim) {
+			uint32_t us = k_cyc_to_us_floor32(el);
+			if (us > emmc_dbg_switch_busy_us_max) emmc_dbg_switch_busy_us_max = us;
+			break;
+		}
+		if (el >= yield_at) {
+			if (abortable && s_abort_cb && s_hpi_on && s_abort_cb()) {
+				uint32_t us = k_cyc_to_us_floor32(el);
+				if (us > emmc_dbg_switch_busy_us_max)
+					emmc_dbg_switch_busy_us_max = us;
+				(void)emmc_hpi_break();  /* interrupted: caller re-tries later */
+				return false;
+			}
+			k_usleep(50);
+		}
+	}
+	if (!done) {
+		emmc_dbg_busy_timeouts++;   /* card still busy: DAT0 stays an input */
+		return false;
+	}
+	DAT0_OUT();
+	DAT0_HIGH();
+	return true;
+}
+
+static bool dat0_busy_wait_us(uint32_t max_us)
+{
+	return dat0_busy_wait_impl(max_us, false);
+}
+
+static bool emmc_switch_us(uint32_t arg, uint32_t busy_us)
+{
+	uint8_t r1[6];
+	if (!send_command_retry(6, arg, r1, 8)) {
+		return false;
+	}
+	if (!dat0_busy_wait_us(busy_us)) {
+		return false;                 /* busy never released */
+	}
+	if (!emmc_cmd13(r1)) {
+		return false;
+	}
+	if (r1[4] & 0x80) {                    /* SWITCH_ERROR */
+		return false;
+	}
+	if (!(r1[3] & 0x01)) {                 /* not READY_FOR_DATA */
+		return false;
+	}
+	return true;
+}
+
+static bool emmc_switch(uint32_t arg)
+{
+	return emmc_switch_us(arg, 1500000u);  /* 1.5 s default R1b bound */
+}
+
+void emmc_set_abort_cb(bool (*cb)(void))
+{
+	s_abort_cb = cb;
+}
+
+/* Enable HPI (EXT_CSD HPI_MGMT[161]=1, volatile per boot). Gate on
+ * HPI_FEATURES[503] bit0 at the call site. */
+bool emmc_hpi_enable(void)
+{
+	if (!s_ready) {
+		return false;
+	}
+	s_hpi_on = emmc_switch(0x03A10100u);
+	return s_hpi_on;
+}
+
+/* Enable the eMMC internal volatile write cache (EXT_CSD CACHE_CTRL[33] = 1) so
+ * the card acks write bursts into its RAM and programs/GCs in the background
+ * instead of stalling the bus mid-write. The cache is VOLATILE: it is explicitly
+ * flushed (emmc_cache_flush) ONLY at power-off, via g_cache_flush_req in
+ * stop_and_flush() -- NEVER during record/play, where a mid-stream flush would
+ * block the bus and starve playback. The card still programs to NAND on its own
+ * in the background; the power-off flush just forces the volatile remainder out. */
+bool emmc_cache_enable(void)
+{
+	if (!s_ready) {
+		return false;
+	}
+	return emmc_switch(0x03210100u);      /* access=write-byte, index=33, value=1 */
+}
+
+/* Force the cache to program to NAND (EXT_CSD FLUSH_CACHE[32] = 1). Blocks until
+ * the flush completes (the program time) -- call at SAFE points, not mid-record. */
+bool emmc_cache_flush(void)
+{
+	if (!s_ready) {
+		return false;
+	}
+	return emmc_switch_us(0x03200100u, 8000000u); /* write-byte FLUSH_CACHE[32]=1; up to 8 s for a full 4MB cache */
+}
+
+/* ABORTABLE cache flush for mid-session idle windows: if the busy-abort
+ * callback trips (take armed / ring draining), the wait fires an HPI and this
+ * returns false — the flush is simply re-tried at the next idle window. Only
+ * call when HPI is enabled; power-off uses the blocking emmc_cache_flush(). */
+bool emmc_cache_flush_try(void)
+{
+	if (!s_ready) {
+		return false;
+	}
+	uint8_t r1[6];
+	if (!send_command_retry(6, 0x03200100u, r1, 8)) {
+		return false;
+	}
+	if (!dat0_busy_wait_impl(8000000u, true)) {
+		return false;
+	}
+	if (!emmc_cmd13(r1)) {
+		return false;
+	}
+	if (r1[4] & 0x80) {
+		return false;
+	}
+	if (!(r1[3] & 0x01)) {
+		return false;
+	}
+	return true;
+}
+
+/* ---- FTL-maintenance ops (eMMC 4.5+/5.0) --------------------------------
+ * These attack the GC-stall problem at its ROOT: the FTL's spare-block pool.
+ * All are optional performance hygiene — every caller must treat a false
+ * return as "carry on exactly as before". */
+
+/* TRIM: CMD35 (range start) -> CMD36 (range end, inclusive) -> CMD38 arg=1,
+ * then R1b busy on DAT0. Marks the blocks as holding no valid data so they
+ * rejoin the FTL's spare pool (the datasheet budgets 300 ms per 4 MB erase
+ * group worst-case; callers chunk multi-GB ranges accordingly). */
+bool emmc_trim(uint32_t start_blk, uint32_t end_blk, uint32_t busy_us)
+{
+	uint8_t r1[6];
+	if (!s_ready) {
+		return false;
+	}
+	if (!send_command_retry(35, start_blk, r1, 8)) {
+		return false;
+	}
+	if (r1[1] & 0xFDu) {                   /* ERASE_SEQ/PARAM/ADDR errors */
+		return false;
+	}
+	if (!send_command_retry(36, end_blk, r1, 8)) {
+		return false;
+	}
+	if (r1[1] & 0xFDu) {
+		return false;
+	}
+	if (!send_command_retry(38, 0x00000001u, r1, 8)) {   /* arg 1 = TRIM */
+		return false;
+	}
+	if (r1[1] & 0xFDu) {
+		return false;
+	}
+	/* ABORTABLE: a mid-session TRIM must never outlast the audio cushions —
+	 * the busy-abort callback + HPI cut it short and the caller retries. */
+	if (!dat0_busy_wait_impl(busy_us, true)) {
+		return false;
+	}
+	if (!emmc_cmd13(r1)) {
+		return false;
+	}
+	/* r1[1] = card-status[31:24]: ADDRESS_OUT_OF_RANGE/MISALIGN, BLOCK_LEN,
+	 * ERASE_SEQ/PARAM, WP_VIOLATION, LOCK_UNLOCK_FAILED — mask out bit25
+	 * (CARD_IS_LOCKED state, not an error). */
+	if (r1[1] & 0xFDu) {
+		return false;
+	}
+	if (!(r1[3] & 0x01)) {                 /* not READY_FOR_DATA */
+		return false;
+	}
+	return true;
+}
+
+/* AUTO BKOPS: SET-BITS write of EXT_CSD[163] bit1 AUTO_EN (R/W/E, reversible).
+ * The card then self-schedules garbage collection in bus-idle gaps — which
+ * this looper provides between takes with the rings pinned full. NEVER write
+ * bit0 MANUAL_EN: it is ONE-TIME-PROGRAMMABLE per JEDEC and permanently
+ * obliges the host to service urgent-BKOPS forever. */
+bool emmc_bkops_auto_enable(void)
+{
+	if (!s_ready) {
+		return false;
+	}
+	return emmc_switch(0x01A30200u);   /* access=SET_BITS, index=163, value=0x02 */
+}
+
+/* POWER_OFF_NOTIFICATION (EXT_CSD[34]): declare managed power. POWERED_ON at
+ * boot licenses more aggressive cached-write paths on several FTLs; the
+ * datasheet explicitly instructs a power-off notification before power-down
+ * when the cache is in use. */
+bool emmc_pon_powered_on(void)
+{
+	if (!s_ready) {
+		return false;
+	}
+	return emmc_switch(0x03220100u);   /* write-byte PON=1 POWERED_ON */
+}
+
+bool emmc_pon_power_off_short(void)
+{
+	if (!s_ready) {
+		return false;
+	}
+	return emmc_switch(0x03220200u);   /* write-byte PON=2 POWER_OFF_SHORT */
+}
+
+
 bool emmc_read_blocks(uint32_t block_addr, uint8_t *buf, uint32_t count)
 {
 	if (!s_ready) {
@@ -589,7 +973,21 @@ bool emmc_read_blocks(uint32_t block_addr, uint8_t *buf, uint32_t count)
 	if (!send_command(18, block_addr, r1)) {
 		return false;
 	}
+	/* BURST DEADLINE: every per-block bound (80 ms access hunt) can be
+	 * ridden UNDER by a sustained-throttle card, pinning the streamer inside
+	 * one CMD18 for seconds while the sibling rings drain. Cap the whole
+	 * call, checked BEFORE each block (checking after let one command run
+	 * deadline+hunt = ~400 ms — past the 341 ms record-ring horizon): worst
+	 * single CMD18 is now ~150+80 ms. The caller only advances pointers on
+	 * success, so an abort + whole-burst retry is idempotent. */
+	uint32_t bt0 = k_cycle_get_32();
+	const uint32_t blim = k_us_to_cyc_ceil32(150000u);
 	for (uint32_t i = 0; i < count; i++) {
+		if (i && (k_cycle_get_32() - bt0) >= blim) {
+			send_command(12, 0, r1);
+			emmc_dbg_busy_timeouts++;
+			return false;
+		}
 		if (!read_data_block(buf + i * EMMC_BLOCK_SIZE)) {
 			send_command(12, 0, r1);
 			return false;
@@ -615,7 +1013,18 @@ bool emmc_write_blocks(uint32_t block_addr, const uint8_t *buf, uint32_t count)
 	if (!send_command(25, block_addr, r1)) {
 		return false;
 	}
+	/* BURST DEADLINE (see emmc_read_blocks): a per-block throttle under the
+	 * 1 s program bound must not pin the streamer inside one CMD25 for
+	 * 32 x 1 s. Abort + retry is idempotent (r_r only advances on success;
+	 * re-programming identical data to the same LBAs is harmless). */
+	uint32_t bt0 = k_cycle_get_32();
+	const uint32_t blim = k_us_to_cyc_ceil32(250000u);
 	for (uint32_t i = 0; i < count; i++) {
+		if (i && (k_cycle_get_32() - bt0) >= blim) {
+			send_command(12, 0, r1);
+			emmc_dbg_busy_timeouts++;
+			return false;
+		}
 		if (!write_data_block(buf + i * EMMC_BLOCK_SIZE)) {
 			send_command(12, 0, r1);
 			return false;
