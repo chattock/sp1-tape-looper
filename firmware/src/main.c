@@ -823,6 +823,13 @@ struct meta_blk {
 	uint32_t magic;
 	uint32_t cur_slot;
 	struct slot_state slot[NUM_SLOTS];
+	uint32_t fixed_len;        /* persisted loop-length mode (0=variable, 1=fixed).
+	                            * APPENDED after the slots: old metas read 0 here
+	                            * (the format zeroes the block), and the transfer
+	                            * site reads only the slots, so this is layout-safe. */
+	uint32_t trk_content[NUM_SLOTS][NTRK]; /* per-track recorded content length in blocks; 0 = whole
+	                                        * track. Also appended in the tail -> layout-safe; a website
+	                                        * upload zeroes it (0 = full track = correct for uploads). */
 };
 static struct meta_blk   g_meta;
 static volatile uint32_t g_slot;
@@ -854,7 +861,11 @@ struct looptrk {
 	 * "record until release, then figure out the length". len_blocks is the
 	 * track's total length; start_blk is the transport block where its segment 0
 	 * began (the phase anchor used to line playback up with where it was cut). */
-	uint32_t len_blocks;                 /* this track's total length in eMMC blocks (N * base) */
+	uint32_t len_blocks;                 /* this track's total LOOP length in eMMC blocks (N * base) */
+	uint32_t content_blocks;             /* blocks actually recorded; [content_blocks, len_blocks) plays
+	                                      * as SILENCE synthesised on read (never written to flash), so a
+	                                      * fixed-mode take finalises INSTANTLY instead of real-time-
+	                                      * padding a bar of zeros. 0 == whole track (old/variable/uploaded). */
 	uint32_t start_blk;                  /* transport block of this take's segment 0 (playback anchor) */
 	/* AUTO-START-ON-SOUND: a take ARMS on the button hold and the recorder only
 	 * begins capturing at the first input past SOUND_THRESHOLD (or SOUND_WAIT_TICKS
@@ -938,6 +949,10 @@ static int64_t           g_dec_acc;                /* live accumulator for recor
 static uint32_t          g_frames_since;           /* I2S frames since the last loop-sample tick */
 static uint32_t          g_pphase;                 /* Q16 playback phase */
 static volatile uint32_t g_play_speed_q16 = 65536; /* tape speed when playing (Q16, 65536=1.0x); rocker sets */
+static volatile uint8_t  g_fixed_len;              /* 0 = independent/variable loop lengths (default);
+                                                    * 1 = fixed: overdubs snap to a whole multiple of
+                                                    * track 1 so all tracks stay in sync. Toggled live by
+                                                    * the FUNCTION+PLAY gesture; see the control loop. */
 /* Tempo as an INTEGER BPM (rocker steps it 1 BPM per click for fine control).
  * Speed is derived exactly: speed = bpm * 65536 / LOOP_BPM_BASE, so 80 BPM is
  * exactly 1.0x — no detent/snap logic needed. Range 40..120 = 0.5x..1.5x. */
@@ -1129,11 +1144,12 @@ static void looper_audio_block(int16_t *s)
 		if (g_rec_track == i) g_rec_track = -1;
 		trk[i].state = TS_EMPTY;
 		trk[i].rec_silence = 0; trk[i].rec_target = 0; trk[i].rec_count = 0; trk[i].muted = 0;
-		trk[i].len_blocks = 0; trk[i].start_blk = 0;     /* drop all its segments */
+		trk[i].len_blocks = 0; trk[i].start_blk = 0; trk[i].content_blocks = 0;  /* drop all its segments */
 		if (g_slot < NUM_SLOTS) {
 			g_meta.slot[g_slot].present[i] = 0;
 			g_meta.slot[g_slot].trk_len[i] = 0;
 			g_meta.slot[g_slot].trk_start[i] = 0;
+			g_meta.trk_content[g_slot][i] = 0;   /* keep the on-flash block self-consistent */
 		}
 		int any = 0;
 		for (int k = 0; k < NTRK; k++)
@@ -1190,23 +1206,43 @@ static void looper_audio_block(int16_t *s)
 				 * so the eMMC streaming stays block-aligned. The FIRST take
 				 * of a song additionally defines the beat grid + BPM (LEDs,
 				 * MIDI clock); later tracks free-run on their own cycles. */
-				uint32_t blocks = (trk[i].rec_count + SAMP_PER_BLK / 2u)
-						  / SAMP_PER_BLK;
-				if (blocks < 1u) blocks = 1u;
-				else if (blocks > MAX_LOOP_BLOCKS) blocks = MAX_LOOP_BLOCKS;
+				/* CONTENT length = the audio actually recorded, rounded UP to a
+				 * whole block so nothing is lost. rec_target is set to CONTENT,
+				 * not the (possibly longer) loop length, so the recorder pads
+				 * only this final <1 block and finalises INSTANTLY on the tap. */
+				uint32_t content = (trk[i].rec_count + SAMP_PER_BLK - 1u)
+						   / SAMP_PER_BLK;
+				if (content < 1u) content = 1u;
+				else if (content > MAX_LOOP_BLOCKS) content = MAX_LOOP_BLOCKS;
 				if (g_loop_len == 0u) {
-					g_loop_len = blocks * SAMP_PER_BLK;
-					g_loop_blocks = blocks;
+					g_loop_len = content * SAMP_PER_BLK;
+					g_loop_blocks = content;
 					tempo_finish();         /* set the detected beat grid + BPM */
 					if (g_slot < NUM_SLOTS) {
 						g_meta.slot[g_slot].loop_len = g_loop_len;
 						g_meta_save_req = 1;
 					}
 				}
-				trk[i].rec_target = blocks * SAMP_PER_BLK;
-				trk[i].len_blocks = blocks;          /* THIS track's own cycle */
-				/* end the live phrase; the per-tick recorder pads silence (if
-				 * any) up to rec_target, then -> TS_DONE. */
+				uint32_t len = content;
+				if (g_fixed_len && g_loop_blocks) {
+					/* FIXED-LENGTH mode: the LOOP length snaps UP to a whole
+					 * multiple of track 1, so every track stays locked in
+					 * sync with track 1. The gap [content, len) is not
+					 * recorded or flushed — it plays as synthesised silence
+					 * (see the read paths), so this costs no time and no
+					 * flash writes. First take (content == g_loop_blocks) is
+					 * a no-op. */
+					uint32_t mult = (content + g_loop_blocks - 1u) / g_loop_blocks;
+					if (mult < 1u) mult = 1u;
+					if (mult * g_loop_blocks <= MAX_LOOP_BLOCKS)
+						len = mult * g_loop_blocks;
+					/* else len stays = content (can't exceed the region). */
+				}
+				trk[i].content_blocks = content;     /* audio ends here */
+				trk[i].len_blocks     = len;         /* loop length (>= content) */
+				trk[i].rec_target     = content * SAMP_PER_BLK;  /* -> instant TS_DONE */
+				/* end the live phrase; the recorder pads only the final sub-
+				 * block up to rec_target, then -> TS_DONE. */
 				trk[i].rec_silence = 1;
 			}
 		}
@@ -1246,7 +1282,7 @@ static void looper_audio_block(int16_t *s)
 			 * input, but DON'T capture yet — recording begins at the first sound
 			 * (auto-start), at which point the playhead is reset so that sound is
 			 * loop position 0. Snap the tape speed so no spin-up ramp is baked in. */
-			g_cur_speed_q16 = g_play_speed_q16;
+			g_cur_speed_q16 = g_play_speed_q16;   /* snap to the set tape speed */
 			g_loop_active = 1; g_consume_pos = 0;
 			g_pphase = 0; g_frames_since = 0; g_dec_acc = 0;
 		}
@@ -1300,8 +1336,10 @@ static void looper_audio_block(int16_t *s)
 				uint32_t L = g_meta.slot[g_slot].trk_len[i];
 				trk[i].len_blocks = L ? L : g_loop_blocks;
 				trk[i].start_blk  = g_meta.slot[g_slot].trk_start[i];
+				trk[i].content_blocks = g_meta.trk_content[g_slot][i]; /* 0 = whole track */
 			} else {
 				trk[i].len_blocks = 0; trk[i].start_blk = 0;
+				trk[i].content_blocks = 0;
 			}
 			if (pres) any = 1;
 		}
@@ -1388,8 +1426,15 @@ static void looper_audio_block(int16_t *s)
 			g_pphase += step;
 			while (g_pphase >= 65536u) {
 				g_pphase -= 65536u;
-				int16_t lsamp = (g_frames_since <= 1u) ? (int16_t)g_dec_acc
-					: (int16_t)(g_dec_acc / (int64_t)g_frames_since);
+				/* Decimate the live input to the current tape rate.
+				 * >1x (frames_since==0, a 2nd+ emit in one input frame):
+				 * HOLD the current sample instead of emitting a zero — the
+				 * old zero-stuffing was the metallic aliasing/bitcrush. 1x:
+				 * the one accumulated sample. <1x: average the frames. */
+				int16_t lsamp;
+				if (g_frames_since == 0u)      lsamp = (int16_t)live;
+				else if (g_frames_since == 1u) lsamp = (int16_t)g_dec_acc;
+				else lsamp = (int16_t)(g_dec_acc / (int64_t)g_frames_since);
 				g_dec_acc = 0; g_frames_since = 0;
 
 				int rt_i = g_rec_track;
@@ -1452,6 +1497,7 @@ static void looper_audio_block(int16_t *s)
 							}
 							rt->rec_target = MAX_LOOP_SAMPLES;
 							rt->len_blocks = MAX_LOOP_BLOCKS;
+							rt->content_blocks = MAX_LOOP_BLOCKS;  /* all content */
 							rt->state = TS_DONE; g_rec_track = -1;
 						}
 					} else if (rt->rec_count >= rt->rec_target) {
@@ -1992,6 +2038,7 @@ static void streamer_thread(void *a, void *b, void *c)
 		}
 	}
 	g_slot = g_meta.cur_slot;
+	g_fixed_len = g_meta.fixed_len ? 1u : 0u;   /* restore the saved length mode */
 	g_meta_loaded = 1;
 
 	while (1) {
@@ -2171,6 +2218,7 @@ static void streamer_thread(void *a, void *b, void *c)
 						g_meta.slot[slot].present[i]   = 1;
 						g_meta.slot[slot].trk_len[i]   = t->len_blocks;  /* SEGMENT: per-track length */
 						g_meta.slot[slot].trk_start[i] = t->start_blk;   /* + phase anchor */
+						g_meta.trk_content[slot][i]    = t->content_blocks; /* silence-pad boundary */
 					}
 					g_meta_save_req = 1;             /* persist the new recording */
 					/* PRIME the play ring before publishing TS_PLAY: read ~half-ring of
@@ -2198,8 +2246,16 @@ static void streamer_thread(void *a, void *b, void *c)
 						uint32_t _n   = 16u;
 						if (_n > (RING_SAMPLES / SAMP_PER_BLK) - 1u) _n = (RING_SAMPLES / SAMP_PER_BLK) - 1u;
 						if (_lb + _n > _gb) _n = _gb - _lb;
-						if (!emmc_read_blocks(trk_blk(slot, (uint32_t)i) + _lb, batchbuf, _n))
+						/* SILENCE PAD (see PASS 2): [content, _gb) is synthesised
+						 * zeros, never read from flash. */
+						uint32_t _content = t->content_blocks ? t->content_blocks : _gb;
+						bool _psil = (_lb >= _content);
+						if (!_psil && _lb + _n > _content) _n = _content - _lb;
+						if (_psil) {
+							memset(batchbuf, 0, (size_t)_n * EMMC_BLOCK_SIZE);
+						} else if (!emmc_read_blocks(trk_blk(slot, (uint32_t)i) + _lb, batchbuf, _n)) {
 							break;
+						}
 						/* DECODE the prime burst (_n blocks) into the play ring. */
 						uint32_t _ntot = _n * SAMP_PER_BLK;
 						codec_unpack(t->pring, RING_MASK, _pw & RING_MASK,
@@ -2284,8 +2340,19 @@ static void streamer_thread(void *a, void *b, void *c)
 				}
 				if (!n) continue;
 				if (loop_blk + n > gb) n = gb - loop_blk;  /* stop at the wrap */
+				/* SILENCE PAD: the loop length can exceed the recorded content
+				 * (fixed mode). [content, gb) was never written to flash — read
+				 * it as synthesised zeros instead of stale flash data. NOTE:
+				 * memset(0) is true silence ONLY for PCM. A compressed codec
+				 * (u-law/ADPCM) would need its own encoded-silence bytes here,
+				 * not zeros (u-law 0x00 decodes to a loud tone). */
+				uint32_t content = t->content_blocks ? t->content_blocks : gb;
+				bool _sil = (loop_blk >= content);
+				if (!_sil && loop_blk + n > content) n = content - loop_blk;
 				uint32_t blkno = trk_blk(slot, (uint32_t)i) + loop_blk;
-				bool _rok = emmc_read_blocks(blkno, batchbuf, n);
+				bool _rok;
+				if (_sil) { memset(batchbuf, 0, (size_t)n * EMMC_BLOCK_SIZE); _rok = true; }
+				else      { _rok = emmc_read_blocks(blkno, batchbuf, n); }
 				if (!_rok) {
 					work = true;       /* read failed (CRC/stall): retry later */
 					/* CRITICAL while a take is in flight: this failure may
@@ -3414,6 +3481,10 @@ int main(void)
 	}
 
 	int64_t press_start = -1;
+	int64_t combo_start = -1;   /* FUNCTION+PLAY: when the combo was first seen */
+	uint8_t combo_fired = 0;    /* mode already toggled this combo press */
+	uint8_t combo_seen  = 0;    /* PLAY was seen at all during this FUNCTION press */
+	uint8_t suppress_play = 0;  /* swallow a trailing PLAY held past combo exit */
 	int64_t last_diag = 0;      /* throttle the control read-out */
 
 	while (1) {
@@ -3449,6 +3520,59 @@ int main(void)
 			if (press_start < 0)
 				press_start = k_uptime_get();
 
+			/* MODE TOGGLE — FUNCTION + PLAY held together ~0.7 s flips the
+			 * fixed/variable loop-length mode. The normal ladder decode below
+			 * is skipped while FUNCTION is held, so read PLAY here. PLAY is at
+			 * the TOP of the AIN0 ladder (~1823); require >1600 so a Track-4
+			 * (~1220) or the 1+4 bootloader combo (~1325) can never be mistaken
+			 * for it. FUNCTION is a separate GPIO, so holding it does not shift
+			 * the ladder voltage. While the combo is engaged the power-off
+			 * countdown/shutdown is suppressed (this gesture must never risk a
+			 * power-off), and the FUNCTION-release song-change is suppressed. */
+			if (ladder_read(&adc_ladder[LAD_TRACKS]) > 1600) {
+				combo_seen = 1;
+				if (combo_start < 0) combo_start = k_uptime_get();
+				if (!combo_fired &&
+				    k_uptime_get() - combo_start >= 700) {
+					g_fixed_len ^= 1u;
+					combo_fired = 1;
+					g_meta.fixed_len = g_fixed_len;  /* persist across power-off */
+					g_meta_save_req = 1;
+					/* LED feedback: FIXED = all four blink together twice
+					 * ("locked"); VARIABLE = a 1->4->1 sweep ("independent"). */
+					all_off(); track_all_off();
+					if (g_fixed_len) {
+						for (int r = 0; r < 2; r++) {
+							for (int i = 0; i < NUM_LEDS; i++) led_on(i);
+							feed_wdt(); k_msleep(150);
+							for (int i = 0; i < NUM_LEDS; i++) led_off(i);
+							feed_wdt(); k_msleep(120);
+						}
+					} else {
+						for (int i = 0; i < NUM_LEDS; i++) {
+							led_on(i); feed_wdt(); k_msleep(110); led_off(i);
+						}
+						for (int i = NUM_LEDS - 2; i >= 0; i--) {
+							led_on(i); feed_wdt(); k_msleep(90); led_off(i);
+						}
+					}
+					all_off();
+				}
+				k_msleep(25);
+				continue;                /* combo owns the button */
+			}
+			combo_start = -1;            /* PLAY not held */
+			if (combo_seen) {
+				/* The combo has been engaged this FUNCTION press: once PLAY
+				 * is lifted, do NOTHING further for the rest of the hold —
+				 * no power-off countdown, no shutdown (press_start still
+				 * dates from the original FUNCTION-down, so the 2.5 s
+				 * power-off would otherwise fire). The FUNCTION press is
+				 * spent; it ends cleanly on release below. */
+				k_msleep(25);
+				continue;
+			}
+
 			int64_t held = k_uptime_get() - press_start;
 
 			if (held >= HOLD_MS_TO_OFF)
@@ -3469,10 +3593,19 @@ int main(void)
 		}
 
 		if (press_start >= 0) {                  /* just released */
-			if ((k_uptime_get() - press_start) < 600) next_slot();   /* short tap -> next song */
+			if (!combo_seen &&
+			    (k_uptime_get() - press_start) < 600) next_slot();   /* short tap -> next song */
 			all_off();
+			/* If the combo was ended by lifting FUNCTION FIRST while PLAY is
+			 * still down, swallow that trailing PLAY until it is released, so
+			 * it can't leak into the normal decode as a restart / play-stop. */
+			if (combo_seen &&
+			    ladder_read(&adc_ladder[LAD_TRACKS]) > 1600) suppress_play = 1;
 		}
 		press_start = -1;
+		combo_start = -1;
+		combo_fired = 0;
+		combo_seen  = 0;
 
 		/* ---- looper controls + LEDs ---- */
 		{
@@ -3492,6 +3625,13 @@ int main(void)
 			} else {
 				combo14_t = -1;
 				raw = decode_tracks(trk_raw);
+			}
+			/* trailing-PLAY guard (see the FUNCTION+PLAY combo exit): ignore
+			 * the ladder until it goes idle once, so a PLAY still held after
+			 * the mode toggle never triggers restart / play-stop. */
+			if (suppress_play) {
+				if (raw == TRK_NONE) suppress_play = 0;
+				else raw = TRK_NONE;
 			}
 
 			/* STICKY DEBOUNCE -> `committed` (the stable, settled button). Recording

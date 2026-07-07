@@ -17,16 +17,25 @@ re-flashing the firmware.
 - **Hands-free (latched) recording.** Hold a track button to start a take, then
   let go — it keeps recording until you tap the same button again. Long takes
   no longer mean holding a button down for their whole length.
-- **Independent loops.** Every take is exactly as long as you play it, and each
-  track cycles on its own length: a 3-second phrase on track 4 free-runs over a
-  17-second bed on track 1. No quantization to the first track, no silence
-  padding while you hunt for the loop point.
+- **Two loop-length modes, switchable live.** *Variable* (the default): every
+  take is exactly as long as you play it and each track free-runs on its own
+  length — a 3-second phrase over a 17-second bed. *Fixed*: overdubs snap to a
+  whole multiple of the first track, so everything stays locked in sync (the
+  classic quick-sketch workflow). Hold **FUNCTION + PLAY** together for about a
+  second to switch; the lights show which mode you're in (all four blink
+  together = fixed, a 1→4 sweep = variable). The mode is remembered across
+  power-off.
+- **Aliasing-free tape-speed recording.** Recording follows the tape speed like
+  a real tape machine — slow it down or speed it up and that's baked into the
+  take — but the metallic/bitcrush artifact older builds produced when recording
+  at high speed is fixed (it now holds samples instead of stuffing silence).
 - **Loop transfer fixed.** The upload/download website could not connect to the
   previous release (a USB receive bug on the device side, issue #1). It
   connects now, and it understands independent track lengths.
 - Reliability throughout: full four-track recording at 48 kHz without crackle,
-  and a scheduling bug that could make everything (lights included) slow down
-  and eventually reboot the device is fixed.
+  a scheduling bug that could make everything (lights included) slow down and
+  reboot the device, a battery drain (and stray sound) after power-off, and a
+  recording aliasing/bitcrush artifact are all fixed.
 
 ## Loop transfer tool
 
@@ -129,6 +138,16 @@ SP-1 custom firmware) — no soldering or opening the device required:
   (LED 1 = song 1 … LED 4 = song 4).
 - Tap the FUNCTION button to move to the next song. Each song remembers its own
   tracks, lengths and tempo.
+
+### Loop-length mode (FUNCTION + PLAY)
+- Hold **FUNCTION and PLAY together** for about a second to toggle between
+  **variable** and **fixed** loop lengths.
+- The lights confirm the new mode: **all four blink together twice = fixed**
+  (every overdub snaps to a whole multiple of track 1, locked in sync); **a
+  1→4 sweep = variable** (every take keeps its own length and free-runs).
+- The mode only affects the *next* take you record — tracks you've already laid
+  down keep their lengths, so you can freely mix free-running and locked loops
+  in one song. It's remembered across power-off.
 
 ### Headphones
 - Plug headphones into the headphone jack (the one nearest the headphone
