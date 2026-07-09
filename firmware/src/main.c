@@ -59,6 +59,13 @@
 #include <zephyr/usb/class/usbd_uac2.h>
 #include <zephyr/sys/ring_buffer.h>
 #include <sample_usbd.h>
+
+/* From the patched Zephyr UAC2 class (zephyr-patches/): selects the Full-Speed
+ * explicit-feedback wire format at runtime. false = 3-byte Q10.14 (USB spec —
+ * what Apple hosts require), true = 4-byte Q16.16 (what Microsoft's
+ * usbaudio2.sys requires). The two are mutually incompatible per host, so the
+ * main loop auto-negotiates: see the feedback-format watchdog in main(). */
+extern bool uac2_fs_fb_windows_fmt;
 #include <soc.h>
 #include <math.h>
 #include <string.h>
@@ -1636,24 +1643,55 @@ static void xfer_resync(uint8_t err_byte)
 	cdc_tx(&err_byte, 1);
 }
 
+/* Which track regions the host actually wrote this transfer session. At commit,
+ * only these take the host's trk_content (0 = whole track — correct for an
+ * upload, which writes full-length audio); every other track keeps the device's
+ * value. The website rebuilds block 0 from the legacy layout and writes the
+ * appended fields as zeros, and zero is NOT a safe default here: it would
+ * unmask never-written flash in the silence tail of fixed-mode takes and drop
+ * the saved loop-length mode. */
+static uint8_t g_xfer_dirty[NUM_SLOTS][NTRK];
+
 /* Commit host writes durably. The host writes land in the eMMC's volatile write
  * cache (and never touch the in-RAM g_meta), so without this an upload is lost on
- * the next power cut and the stale in-RAM index can overwrite it. This (1) flushes
- * the cache to NAND and (2) re-reads block 0 into g_meta so the index matches what
- * the host wrote. Runs from the streamer while g_xfer_mode is still set (audio is
- * silenced), so the bus-blocking flush has nothing live to starve. */
+ * the next power cut and the stale in-RAM index can overwrite it. This (1) reads
+ * block 0 back into g_meta (the write cache is read-coherent), (2) repairs the
+ * appended fields the host doesn't manage and writes the repaired index straight
+ * back, and (3) flushes the cache — host audio and repaired index become durable
+ * TOGETHER. Deferring the repair via g_meta_save_req would be wrong: the streamer
+ * only services it after transfer mode ends, so for a whole keepalive-extended
+ * session the host's zeroed copy would be the durable one, and a battery death
+ * mid-session would persist exactly the corruption this repairs. Runs from the
+ * streamer while g_xfer_mode is still set (audio is silenced), so the
+ * bus-blocking flush has nothing live to starve. */
 static void xfer_commit(void)
 {
 	static uint8_t mblk[EMMC_BLOCK_SIZE];
-	if (g_cache_on) {
-		(void)emmc_cache_flush();
-	}
 	if (g_emmc_ready && emmc_read_blocks(META_BLOCK, mblk, 1)) {
 		struct meta_blk *m = (struct meta_blk *)mblk;
 		if (m->magic == META_MAGIC && m->cur_slot < NUM_SLOTS) {
+			uint32_t keep[NUM_SLOTS][NTRK];
+			memcpy(keep, g_meta.trk_content, sizeof(keep));
 			memcpy(&g_meta, m, sizeof(g_meta));
 			g_slot = g_meta.cur_slot;
+			/* the host only manages the legacy fields (see g_xfer_dirty):
+			 * restore the mode setting and every untouched track's content
+			 * length, then write the repaired index back (skipped when the
+			 * host's copy already matches, e.g. a read-only session). */
+			g_meta.fixed_len = g_fixed_len;
+			for (int s = 0; s < NUM_SLOTS; s++)
+				for (int t = 0; t < NTRK; t++)
+					if (!g_xfer_dirty[s][t])
+						g_meta.trk_content[s][t] = keep[s][t];
+			if (memcmp(mblk, &g_meta, sizeof(g_meta)) != 0) {
+				memset(mblk, 0, EMMC_BLOCK_SIZE);
+				memcpy(mblk, &g_meta, sizeof(g_meta));
+				(void)emmc_write_blocks(META_BLOCK, mblk, 1);
+			}
 		}
+	}
+	if (g_cache_on) {
+		(void)emmc_cache_flush();
 	}
 }
 
@@ -1686,6 +1724,7 @@ static void xfer_service(void)
 					g_stop_req = 1;
 					break;
 				}
+				memset(g_xfer_dirty, 0, sizeof(g_xfer_dirty));
 				g_xfer_mode = 1;
 				g_playing = 0;           /* pause the transport during transfer */
 				last = k_uptime_get();
@@ -1728,6 +1767,11 @@ static void xfer_service(void)
 		} else {
 			if (!cdc_rx(sec, EMMC_BLOCK_SIZE, 4000)) { xfer_resync('E'); return; }
 			bool ok = (blk < total) && emmc_write_blocks(blk, sec, 1);
+			if (ok && blk >= SLOT0_BLOCK) {
+				uint32_t ti = (blk - SLOT0_BLOCK) / TRACK_BLOCKS;
+				if (ti < (uint32_t)NUM_SLOTS * NTRK)
+					g_xfer_dirty[ti / NTRK][ti % NTRK] = 1;
+			}
 			uint8_t h = ok ? 'w' : 'E';
 			cdc_tx(&h, 1);
 		}
@@ -2916,6 +2960,12 @@ static void usb_audio_start(void)
 		return;
 	}
 
+	/* Pin bcdDevice to a new release number. Windows caches USB descriptors
+	 * per VID/PID/version — without a version bump a PC that saw the old
+	 * (Code-10) audio descriptor keeps judging a re-flashed SP-1 by the
+	 * cached copy and can stay broken even after the fix. */
+	(void)usbd_device_set_bcd_device(usbd, 0x0200);
+
 	if (usbd_enable(usbd) != 0) {
 		printk("usbd enable failed\n");
 	}
@@ -3485,6 +3535,7 @@ int main(void)
 	uint8_t combo_fired = 0;    /* mode already toggled this combo press */
 	uint8_t combo_seen  = 0;    /* PLAY was seen at all during this FUNCTION press */
 	uint8_t suppress_play = 0;  /* swallow a trailing PLAY held past combo exit */
+	uint8_t ctl_flush = 0;      /* looper decode state went stale (FUNCTION page / USB transfer owned the loop) */
 	int64_t last_diag = 0;      /* throttle the control read-out */
 
 	while (1) {
@@ -3499,6 +3550,7 @@ int main(void)
 			int on = ((xb++ / 8u) & 1u);
 			for (int i = 0; i < NUM_TRACK_LEDS; i++)
 				on ? track_led_on(i) : track_led_off(i);
+			ctl_flush = 1;
 			k_msleep(20);
 			continue;
 		}
@@ -3512,11 +3564,47 @@ int main(void)
 			feed_wdt();      /* the diag print path can be slow; never starve the WDT */
 		}
 
+		/* USB FEEDBACK-FORMAT AUTO-NEGOTIATION. Windows and Apple disagree
+		 * about the Full-Speed feedback value format (4-byte Q16.16 vs the
+		 * spec's 3-byte Q10.14) and each kills or cripples the stream when
+		 * fed the other's. The wrong choice always shows up the same way:
+		 * the host holds the stream OPEN but delivers (almost) nothing, so
+		 * the mixer stitches silence (g_zero_pad counts it). If more than
+		 * half of each 100 ms window is stitched silence for ~400 ms
+		 * straight, flip the format and let the host try again — the flip
+		 * repeats until data flows, so the device converges on whatever
+		 * the connected host actually parses, on every OS. A closed
+		 * stream never pads, so this can't fire from mere silence. */
+		{
+			static int64_t fb_probe_t;
+			static uint32_t fb_zp_last;
+			static int fb_starve_streak;
+			if (fb_probe_t == 0) {
+				fb_probe_t = now;
+				fb_zp_last = g_zero_pad;
+			} else if (now - fb_probe_t >= 100) {
+				fb_probe_t = now;
+				uint32_t zpn = g_zero_pad;
+				uint32_t d = zpn - fb_zp_last;
+				fb_zp_last = zpn;
+				if (d >= (LOOP_RATE / 20u)) {   /* >50% of the window */
+					if (++fb_starve_streak >= 4) {
+						uac2_fs_fb_windows_fmt =
+							!uac2_fs_fb_windows_fmt;
+						fb_starve_streak = 0;
+					}
+				} else {
+					fb_starve_streak = 0;
+				}
+			}
+		}
+
 		/* (track LEDs are driven by the looper beat clock below) */
 
 		/* FUNCTION button: a SHORT tap changes song; a long HOLD powers off
 		 * (the same button does both, like the original device). */
 		if (pwr_pressed()) {
+			ctl_flush = 1;
 			if (press_start < 0)
 				press_start = k_uptime_get();
 
@@ -3615,6 +3703,12 @@ int main(void)
 			int trk_raw = ladder_read(&adc_ladder[LAD_TRACKS]);
 			static int64_t combo14_t = -1;     /* when the 1+4 band was first seen */
 			enum trk_btn raw;
+			/* This DFU check runs BEFORE ctl_flush is consumed below, so clear
+			 * the stale 1+4 timestamp here: after a FUNCTION+PLAY mode toggle
+			 * (which freezes this block for the whole combo) a PLAY release
+			 * sweeping through the 1280-1390 band must not find a >1.2 s-old
+			 * combo14_t and reboot to the bootloader mid-performance. */
+			if (ctl_flush) combo14_t = -1;
 			if (trk_raw >= 1280 && trk_raw <= 1390) {
 				/* time-based (not a +8/iter counter) so the diag-print path can't
 				 * skew the 1.2 s threshold; the oversampled read + the band needing
@@ -3627,10 +3721,13 @@ int main(void)
 				raw = decode_tracks(trk_raw);
 			}
 			/* trailing-PLAY guard (see the FUNCTION+PLAY combo exit): ignore
-			 * the ladder until it goes idle once, so a PLAY still held after
-			 * the mode toggle never triggers restart / play-stop. */
+			 * the ladder until the RAW reading goes fully idle once, so a PLAY
+			 * still held after the mode toggle — and its whole release sweep
+			 * down through the track bands — never reaches the decode. Idle
+			 * means the reading itself: 1280-1390 decodes as NONE but is NOT
+			 * idle, and clearing there would expose the rest of the sweep. */
 			if (suppress_play) {
-				if (raw == TRK_NONE) suppress_play = 0;
+				if (trk_raw >= 0 && trk_raw < 110) suppress_play = 0;
 				else raw = TRK_NONE;
 			}
 
@@ -3642,6 +3739,31 @@ int main(void)
 			 * value resets the counter, so a steady hold can never false-trigger. */
 			static enum trk_btn committed = TRK_NONE, cand = TRK_NONE;
 			static int cand_cnt;
+			static int64_t press_t[NTRK];        /* when committed first named this track */
+			static int64_t tap_deadline[NTRK];   /* >0: a single tap awaiting a possible 2nd */
+			static uint8_t armed_press[NTRK];    /* this press already armed a take */
+			static int64_t ep_time[TRK_PLAY + 1];/* committed ms per button, this episode */
+			static int64_t ep_since;             /* when `committed` last changed */
+			static uint8_t ep_open;              /* a press episode is in progress */
+			static uint8_t ep_play_held;         /* this episode's PLAY press became a hold */
+			static int64_t play_t = -1;          /* when PLAY was committed (hold timing) */
+			static int     play_held;            /* this PLAY press already fired the restart */
+			/* FUNCTION (or a USB transfer) owned the loop since the last pass
+			 * here, so every static above is stale: a PLAY committed just
+			 * before the combo froze this block would otherwise look like a
+			 * long hold (phantom restart) and its open episode would fire a
+			 * phantom play/stop on release. Reset everything and swallow the
+			 * ladder until it reads idle. */
+			if (ctl_flush) {
+				ctl_flush = 0;
+				committed = TRK_NONE; cand = TRK_NONE; cand_cnt = 0;
+				for (int k = TRK_1; k <= TRK_PLAY; k++) ep_time[k] = 0;
+				ep_open = 0; ep_play_held = 0;
+				play_t = -1; play_held = 0;
+				for (int k = 0; k < NTRK; k++) { tap_deadline[k] = 0; armed_press[k] = 0; }
+				if (!(trk_raw >= 0 && trk_raw < 110)) suppress_play = 1;
+				raw = TRK_NONE;
+			}
 			enum trk_btn before = committed;
 			if (raw == committed) {
 				cand_cnt = 0;
@@ -3658,48 +3780,106 @@ int main(void)
 			 *   DOUBLE-TAP (a 2nd tap within DTAP_GAP_MS of the 1st tap's release) -> DELETE.
 			 * Tap-vs-hold is decided by the PHYSICAL down-time and double-tap by the
 			 * rhythm of two quick taps, so taps/double-taps stay reliable regardless of
-			 * how fast recording arms (a quick ~HOLD_RECORD_MS hold instead of 300ms). */
-			static int64_t press_t[NTRK];        /* when committed first named this track */
-			static int64_t tap_deadline[NTRK];   /* >0: a single tap awaiting a possible 2nd */
-			static uint8_t armed_press[NTRK];    /* this press already armed a take */
+			 * how fast recording arms (a quick ~HOLD_RECORD_MS hold instead of 300ms).
+			 *
+			 * PRESS EPISODE tracker: one episode = the ladder leaving idle
+			 * until it settles back at idle. A finger pressing or releasing a
+			 * HIGHER ladder button sweeps the voltage THROUGH the lower
+			 * buttons' bands, and the debounce can commit one of them for a
+			 * beat (~24-32 ms) on the way — the old code treated every
+			 * committed change as a real release edge and fired PHANTOM taps
+			 * ("recording track 4 muted track 1"). Now committed-time is
+			 * accumulated per button and the release action fires ONCE, at
+			 * episode end, for the DOMINANT (longest-committed) button.
+			 * Three rules keep the phantom window closed:
+			 *   - a press edge wipes the accumulated time of every band BELOW
+			 *     it (provably the up-sweep in transit, not a press);
+			 *   - the episode only ends when the RAW reading is idle, so a
+			 *     slow release dwelling in the 1280-1390 no-man's band (which
+			 *     decodes as NONE) can't split one gesture into two;
+			 *   - a dominant under 40 ms fires nothing (a real tap commits
+			 *     ~40 ms+, a transit blip caps at ~32 ms per traversal).
+			 * Hold actions (arm, restart) are duration-based and transit-immune. */
 			if (committed != before) {
 				int64_t tnow = k_uptime_get();
-				if (before >= TRK_1 && before <= TRK_4) {       /* RELEASE edge */
-					int ti = (int)before;
-					if (armed_press[ti]) {
-						armed_press[ti] = 0;
-						/* LATCHED RECORDING: releasing the arming hold
-						 * does NOT stop the take — it keeps recording
-						 * hands-free until the same track is tapped
-						 * again (below) or the track region fills. */
-					} else if ((g_rec_track == ti &&
-						    (trk[ti].state == TS_ARMED ||
-						     trk[ti].state == TS_REC)) ||
-						   trk[ti].state == TS_DONE) {
-						/* tap on the recording track = STOP the take
-						 * (tap on an ARMED-but-silent track = cancel).
-						 * A tap on a just-AUTO-finalized take (TS_DONE,
-						 * LED still solid) is swallowed here too — the
-						 * user is trying to stop it, so it must never
-						 * become a mute toggle + a delete window on
-						 * the take they just recorded. Never opens a
-						 * mute/delete tap window. */
-						g_stop_req = 1;   /* no-ops if nothing records */
-						tap_deadline[ti] = 0;
-					} else if (tap_deadline[ti] > 0 && tnow <= tap_deadline[ti]) {
-						tap_deadline[ti] = 0;            /* 2nd tap in time -> DOUBLE-TAP delete */
-						g_del_req[ti] = 1;
-						trk[ti].muted = 0;
-					} else {
-						trk[ti].muted = !trk[ti].muted;  /* 1st tap -> mute + open dtap window */
-						tap_deadline[ti] = tnow + DTAP_GAP_MS;
-					}
+				if (before != TRK_NONE)
+					ep_time[(int)before] += tnow - ep_since;
+				ep_since = tnow;
+				if (committed != TRK_NONE) {
+					ep_open = 1;
+					for (int k = TRK_1; k < (int)committed; k++)
+						ep_time[k] = 0;  /* below = up-sweep transit */
 				}
 				if (committed >= TRK_1 && committed <= TRK_4) { /* PRESS edge */
 					int ti = (int)committed;
 					press_t[ti] = tnow;
 					armed_press[ti] = 0;
 				}
+			}
+			if (ep_open && committed == TRK_NONE &&
+			    trk_raw >= 0 && trk_raw < 110) {
+				/* EPISODE END (ladder settled at idle): attribute the
+				 * release to the button that was committed the longest. */
+				ep_open = 0;
+				int64_t tnow = k_uptime_get();
+				int b = -1; int64_t bt = 0;
+				for (int k = TRK_1; k <= TRK_PLAY; k++) {
+					if (ep_time[k] > bt) { bt = ep_time[k]; b = k; }
+				}
+				/* Stop-taps must stick: a lazy release that rolls off the
+				 * recording track and dwells on a LOWER band would otherwise
+				 * out-hold the tap and leave the take running to the region
+				 * end. Only bands below the tapped button can be roll-off
+				 * (the ladder never overshoots above the pressed button), and
+				 * >=40 ms committed is beyond any transit blip, so this can
+				 * never redirect a genuine tap on another (higher) track. */
+				if (g_rec_track >= 0 && g_rec_track < NTRK &&
+				    b >= TRK_1 && b < g_rec_track &&
+				    ep_time[g_rec_track] >= 40 &&
+				    ep_time[g_rec_track] * 2 >= bt) {
+					b = g_rec_track; bt = ep_time[b];
+				}
+				for (int k = TRK_1; k <= TRK_PLAY; k++) ep_time[k] = 0;
+				if (bt < 40) b = -1;     /* pure transit blip: fire nothing */
+				if (b >= TRK_1 && b <= TRK_4) {
+					int ti = b;
+					if (armed_press[ti]) {
+						armed_press[ti] = 0;
+						/* LATCHED RECORDING: releasing the arming
+						 * hold does NOT stop the take — it records
+						 * hands-free until the same track is
+						 * tapped again or the region fills. */
+					} else if ((g_rec_track == ti &&
+						    (trk[ti].state == TS_ARMED ||
+						     trk[ti].state == TS_REC)) ||
+						   trk[ti].state == TS_DONE) {
+						/* tap on the recording track = STOP
+						 * (on ARMED-but-silent = cancel; on a
+						 * just-auto-finalized TS_DONE take the
+						 * tap is swallowed — never a mute or
+						 * delete window on a fresh take). */
+						g_stop_req = 1;
+						tap_deadline[ti] = 0;
+					} else if (tap_deadline[ti] > 0 && tnow <= tap_deadline[ti]) {
+						tap_deadline[ti] = 0;   /* 2nd tap -> DELETE */
+						g_del_req[ti] = 1;
+						trk[ti].muted = 0;
+					} else {
+						trk[ti].muted = !trk[ti].muted;  /* tap -> mute */
+						tap_deadline[ti] = tnow + DTAP_GAP_MS;
+					}
+				} else if (b == TRK_PLAY) {
+					/* PLAY tap -> toggle play/stop. ep_play_held was set
+					 * the instant the hold-restart fired (a hold is not a
+					 * tap). Ignored while a take is in progress: stopping
+					 * would freeze the recording mid-take. */
+					if (!ep_play_held && g_rec_track < 0) {
+						g_playing = !g_playing;
+						if (g_playing) g_midi_start_pending = 1;
+						else           g_midi_stop_pending  = 1;
+					}
+				}
+				ep_play_held = 0;
 			}
 			/* HOLD-ARM: button physically held >= HOLD_RECORD_MS -> a real hold, ARM
 			 * recording now (a quick tap releases before this, so it can't mis-arm). */
@@ -3725,21 +3905,18 @@ int main(void)
 			/* PLAY/STOP button: a short TAP toggles play/stop in place (tape ramp);
 			 * a HOLD (>=400 ms) jumps to the START of the song and plays — a reliable
 			 * "play the whole thing from the top" that never depends on current state. */
-			static int64_t play_t = -1; static int play_held;
 			if (committed == TRK_PLAY) {
 				if (play_t < 0) { play_t = k_uptime_get(); play_held = 0; }
 				else if (!play_held && (k_uptime_get() - play_t) >= 400) {
 					g_restart_req = 1; play_held = 1;        /* hold -> play from start */
+					/* mark the episode a hold NOW — a clean PLAY->idle
+					 * release dispatches the episode end before this block
+					 * runs again; marking it at release was too late (the
+					 * "tap" toggle fired right after the restart and the
+					 * stale flag then swallowed the next genuine tap). */
+					ep_play_held = 1;
 				}
 			} else {
-				/* short tap -> toggle play/stop. Ignored while a take is in
-				 * progress: stopping would ramp the tape to 0 and freeze the
-				 * recording mid-take (it could never reach its end). */
-				if (play_t >= 0 && !play_held && g_rec_track < 0) {
-					g_playing = !g_playing;
-					if (g_playing) g_midi_start_pending = 1;
-					else           g_midi_stop_pending  = 1;
-				}
 				play_t = -1;
 			}
 

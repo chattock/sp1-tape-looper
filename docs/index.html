@@ -221,26 +221,34 @@ function trkBlk(slot, t){ return layout.slot0 + (slot*layout.ntrk + t)*layout.tr
 /* meta_blk: magic u32 | cur_slot u32 | slot[NUM_SLOTS] (each: speed_q16,loop_len,present[4],trk_len[4],trk_start[4]) */
 const SLOT_SZ = 44;
 function parseMeta(b){
-  const m = { magic: le32(b,0), cur: le32(b,4), slots: [] };
+  // keep the raw block: the device appends fields past the legacy layout
+  // (loop-length mode, per-track content lengths) that must survive a rebuild
+  const m = { magic: le32(b,0), cur: le32(b,4), slots: [], raw: b.slice(0) };
+  const co = 8 + layout.numSlots*SLOT_SZ + 4;   // trk_content[] (after fixed_len)
   for (let s=0; s<layout.numSlots; s++){
     const o = 8 + s*SLOT_SZ;
-    const slot = { speed: le32(b,o), loopLen: le32(b,o+4), present:[], trkLen:[], trkStart:[] };
+    const slot = { speed: le32(b,o), loopLen: le32(b,o+4), present:[], trkLen:[], trkStart:[], trkContent:[] };
     for (let t=0;t<4;t++) slot.present[t] = b[o+8+t];
     for (let t=0;t<4;t++) slot.trkLen[t]  = le32(b,o+12+t*4);
     for (let t=0;t<4;t++) slot.trkStart[t]= le32(b,o+28+t*4);
+    for (let t=0;t<4;t++) slot.trkContent[t]= le32(b,co+(s*4+t)*4);
     m.slots.push(slot);
   }
   return m;
 }
 function buildMeta(m){
-  const b = new Uint8Array(512);
+  // start from the device's own block so fields this tool doesn't manage
+  // (loop-length mode, and anything added later) survive an upload untouched
+  const b = m.raw ? Uint8Array.from(m.raw) : new Uint8Array(512);
   put32(b,0, layout.magic); put32(b,4, m.cur);
+  const co = 8 + layout.numSlots*SLOT_SZ + 4;
   for (let s=0;s<layout.numSlots;s++){
     const o = 8 + s*SLOT_SZ, slot = m.slots[s];
     put32(b,o, slot.speed||65536); put32(b,o+4, slot.loopLen);
     for (let t=0;t<4;t++) b[o+8+t] = slot.present[t]?1:0;
     for (let t=0;t<4;t++) put32(b,o+12+t*4, slot.trkLen[t]);
     for (let t=0;t<4;t++) put32(b,o+28+t*4, slot.trkStart[t]);
+    for (let t=0;t<4;t++) put32(b,co+(s*4+t)*4, slot.trkContent ? (slot.trkContent[t]||0) : 0);
   }
   return b;
 }
@@ -316,7 +324,7 @@ function render(){
       const acts = document.createElement("div"); acts.className = "acts";
       if (present){
         const dl = document.createElement("div"); dl.className="mini dl"; dl.textContent="Download";
-        dl.onclick = () => download(s, t, blocks); acts.appendChild(dl);
+        dl.onclick = () => download(s, t, blocks, slot.trkContent[t]||0); acts.appendChild(dl);
       }
       const up = document.createElement("label"); up.className="up"; up.textContent = present? "Replace…" : "Upload…";
       const inp = document.createElement("input"); inp.type="file"; inp.accept=".wav,.mp3,audio/*";
@@ -329,14 +337,19 @@ function render(){
 }
 
 /* ---- download: read the track's blocks -> int16 -> WAV ---- */
-async function download(slot, t, blocks){
+async function download(slot, t, blocks, content){
   await withLock(async () => {
     try{
       log(`Downloading song ${slot+1} track ${t+1} (${blocks} blocks)…`);
       const base = trkBlk(slot, t);
+      // a fixed-mode take only recorded `content` blocks; the tail up to the
+      // loop length is synthesized silence on the device and NEVER written to
+      // flash — reading it would export stale/old audio. Leave it zero (=PCM
+      // silence) in the WAV instead.
+      const readN = (content && content < blocks) ? content : blocks;
       const pcm = new Uint8Array(blocks*512);
-      for (let i=0;i<blocks;i++){ pcm.set(await readBlock(base+i), i*512);
-        if (i%64===0) $("#status").textContent = `Reading ${Math.round(100*i/blocks)}%`; }
+      for (let i=0;i<readN;i++){ pcm.set(await readBlock(base+i), i*512);
+        if (i%64===0) $("#status").textContent = `Reading ${Math.round(100*i/readN)}%`; }
       $("#status").textContent = "Connected to SP-1";
       const wav = makeWav(pcm, blocks*SAMP_PER_BLK);
       const a = document.createElement("a");
@@ -405,6 +418,7 @@ async function upload(slot, t, file){
 
       // update the index block, preserving every other song/track
       sl.present[t] = 1; sl.trkLen[t] = blocks; sl.trkStart[t] = 0;
+      sl.trkContent[t] = 0;   // uploaded audio fills the whole track
       if (!sl.speed) sl.speed = 65536;
       if (isBase) sl.loopLen = blocks*SAMP_PER_BLK;
       await writeBlock(0, buildMeta(meta));

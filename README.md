@@ -32,6 +32,25 @@ re-flashing the firmware.
 - **Loop transfer fixed.** The upload/download website could not connect to the
   previous release (a USB receive bug on the device side, issue #1). It
   connects now, and it understands independent track lengths.
+- **Works on Windows.** Earlier releases enumerated with a yellow triangle
+  ("this device cannot start", Code 10) under *Sound, video and game
+  controllers* — Windows' USB Audio 2.0 driver demands a feedback-endpoint
+  format that violates the USB spec, while Apple demands the spec format and
+  breaks on Windows'. The device now auto-detects which kind of host is
+  connected (within about half a second of the first playback) and speaks its
+  dialect, so one firmware works on Windows, macOS, iOS and Linux. If you
+  flashed an older build before, just flash this one and replug; if the
+  triangle persists on Windows, uninstall the *SP-1 Audio* entry in Device
+  Manager once and replug.
+- **No more phantom mutes.** Pressing or releasing a button could occasionally
+  register a ghost tap on a *lower-numbered* track (all five buttons share one
+  analogue sense line, and a moving finger sweeps through the other buttons'
+  bands on the way) — most visibly "recording track 4 muted track 1". Taps are
+  now attributed to the button your finger actually stayed on, so ghost taps
+  can't fire. Nothing about the gestures changed.
+- **iPhone / iPad friendly power claim.** The SP-1 runs from its own battery,
+  so it now asks the USB host for 100 mA instead of 250 mA — within what iOS
+  allows on a camera adapter. See *Connecting to phones* below.
 - Reliability throughout: full four-track recording at 48 kHz without crackle,
   a scheduling bug that could make everything (lights included) slow down and
   reboot the device, a battery drain (and stray sound) after power-off, and a
@@ -52,6 +71,17 @@ WAV/MP3 into a chosen song and track — clips are resampled to the device's rat
 (mono), and every track keeps its own length, exactly like recording on the
 device.
 
+### Connecting to phones
+
+- **USB-C iPhone / iPad / Android:** a normal USB-C to USB-C cable works — the
+  SP-1 shows up as an audio output (and the browser transfer tool works from
+  Android Chrome).
+- **Lightning iPhone / iPad:** a plain USB-C-to-Lightning cable does **not**
+  work — Lightning only speaks USB *host* through Apple's own adapter. Use the
+  Apple **Lightning to USB 3 Camera Adapter** (or "Camera Connection Kit"),
+  then any USB-A/USB-C cable to the SP-1. Third-party adapters must be
+  MFi-certified; most cheap ones aren't, and won't pass audio.
+
 ---
 
 ## 1. What's in this folder
@@ -67,6 +97,7 @@ sp1-tape-looper/
     │   └── sp1_emmc.h
     ├── app.overlay         hardware pin map (ADC channels for buttons/faders)
     ├── prj.conf            Zephyr build configuration
+    ├── zephyr-patches/     small Zephyr patch needed for the Windows fix
     ├── CMakeLists.txt
     └── Kconfig
 ```
@@ -248,6 +279,13 @@ against a custom board definition for the SP-1. With a Zephyr workspace and the
 nRF SDK set up, point a `west build` at the `firmware/` folder, then convert
 the resulting ELF to a bootloader-friendly `.bin` (the application is linked to
 load at `0x20000`).
+
+One extra step: the Windows compatibility fix lives partly in Zephyr itself.
+Apply `firmware/zephyr-patches/uac2-windows-fs-feedback.patch` to your Zephyr
+tree (it adds the `USBD_UAC2_FS_WINDOWS_WORKAROUND` option that `prj.conf`
+turns on — recent upstream Zephyr already has an equivalent option). If you'd
+rather build without it, delete that line from `prj.conf`; the device then
+works everywhere except Windows, as before.
 
 Build knobs:
 
