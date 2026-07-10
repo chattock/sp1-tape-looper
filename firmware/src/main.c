@@ -2342,12 +2342,28 @@ static void streamer_thread(void *a, void *b, void *c)
 			 * made PASS 2 under-fill the playing tracks during overdubs, the
 			 * residual negative-margin dips at take boundaries. */
 			cpos = g_consume_pos;
+			/* SERVICE ORDER (not plain emptiest-first): a starved track is
+			 * already GATED SILENT and won't sound again until it refills
+			 * half a ring, so it must never out-rank a still-audible track
+			 * — the old sort fed the silent ones first and dragged the
+			 * audible ones down with them (all three collapsed in lockstep
+			 * the moment a take started). And when several tracks are
+			 * starved on ~zero surplus, equal shares keep ALL of them
+			 * below the recovery threshold forever; serving the one
+			 * CLOSEST to recovery first concentrates the budget so they
+			 * come back one at a time instead of never. */
 			int order[NTRK];
-			for (int a = 0; a < NTRK; a++) order[a] = a;
-			for (int a = 0; a < NTRK - 1; a++)        /* sort needy tracks emptiest-first */
+			int32_t skey[NTRK];
+			for (int a = 0; a < NTRK; a++) {
+				order[a] = a;
+				int32_t av = (int32_t)(trk[a].p_w - cpos);
+				skey[a] = trk[a].starved
+					? (INT32_MAX / 2 - av)   /* starved: after audible; closest-to-recovery first */
+					: av;                    /* audible: most urgent first */
+			}
+			for (int a = 0; a < NTRK - 1; a++)
 				for (int b = a + 1; b < NTRK; b++)
-					if ((int32_t)(trk[order[b]].p_w - cpos) <
-					    (int32_t)(trk[order[a]].p_w - cpos)) {
+					if (skey[order[b]] < skey[order[a]]) {
 						int tmp = order[a]; order[a] = order[b]; order[b] = tmp;
 					}
 			for (int k = 0; k < NTRK; k++) {
@@ -2355,20 +2371,22 @@ static void streamer_thread(void *a, void *b, void *c)
 				struct looptrk *t = &trk[i];
 				if (t->state != TS_PLAY) continue;
 				int32_t avail = (int32_t)(t->p_w - cpos);
-				/* DEEP-DEFICIT SNAP: a long overdub can leave the playing
-				 * tracks SECONDS behind the playhead (their rings starved
-				 * while the recorder owned the bus). Reading through that
-				 * whole deficit sequentially is audio nobody will ever hear
-				 * — and with FOUR playing tracks on a GC-degraded card the
-				 * refill surplus can be ~zero, so the deficit never shrinks
-				 * AT ALL: tracks 1-3 stay silent until one is deleted (the
-				 * community "recording track 4 silences 1-3, delete brings
-				 * them back"). More than one full ring behind -> skip the
-				 * dead history and refill from the live playhead; loop_blk
-				 * below is fully modular, so the loop phase is untouched.
-				 * Recovery becomes one half-ring (~170 ms) regardless of
-				 * how deep the hole was. */
-				if (avail < -(int32_t)RING_SAMPLES ||
+				/* DEAD-HISTORY SNAP: a frontier BEHIND the playhead is pure
+				 * waste — the mixer reads exactly pring[cpos], so every
+				 * sample in [p_w, cpos) can never be played, yet the old
+				 * code ground through it sequentially. During an overdub
+				 * the three playing tracks live just below zero (each
+				 * write burst dips them), so nearly the WHOLE read budget
+				 * went on never-played history, which is what actually cut
+				 * the other tracks out while recording the 4th (measured
+				 * live: margins oscillating 0..-350 ms for the entire
+				 * take, full-rate reads, zero audible progress). Snap the
+				 * frontier to the live playhead the moment it falls more
+				 * than a block behind; loop_blk below is fully modular, so
+				 * the loop phase is untouched — the track simply rejoins
+				 * the transport where it is NOW, and every read from here
+				 * on buys audible audio. */
+				if (avail < -(int32_t)SAMP_PER_BLK ||
 				    avail > (int32_t)RING_SAMPLES) {
 					/* Test against the LIVE playhead, not the round's cpos
 					 * snapshot: a restart/slot-switch during an earlier
@@ -2382,7 +2400,7 @@ static void streamer_thread(void *a, void *b, void *c)
 					 * it within one streamer pass. */
 					uint32_t cnow = g_consume_pos;
 					int32_t a2 = (int32_t)(t->p_w - cnow);
-					if (a2 < -(int32_t)RING_SAMPLES ||
+					if (a2 < -(int32_t)SAMP_PER_BLK ||
 					    a2 > (int32_t)RING_SAMPLES) {
 						uint32_t anchor = (cnow / SAMP_PER_BLK) * SAMP_PER_BLK;
 						t->p_w = anchor;   /* audio thread sees starved either way */
