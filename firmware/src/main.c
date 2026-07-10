@@ -3020,6 +3020,37 @@ static void usb_audio_start(void)
 /* Stream the raw ladder codes, but ONLY when a host has opened the port
  * (DTR asserted). That keeps us from ever stalling the watchdog loop when
  * nothing is listening. Throttled by the caller. */
+/* =====================================================================
+ * SEMITONE grid for the tempo rocker's DOUBLE-CLICK: 2^(k/12) in Q16 for
+ * k = -12..+12 (0.5x..2.0x; the BPM clamp bounds the usable range). A
+ * double-click jumps the speed to the next exact equal-tempered semitone
+ * relative to 1.0x (= 80 BPM) — one musical pitch step instead of forty
+ * 1-BPM clicks — and a detuned speed SNAPS ONTO the grid rather than
+ * drifting off it. Integer-only; the exact Q16 speed is what the song
+ * saves, so semitone speeds survive power-off bit-exact. */
+static const uint32_t k_semi_q16[25] = {
+	32768u,  34716u,  36781u,  38968u,  41285u,  43740u,  46341u,
+	49097u,  52016u,  55109u,  58386u,  61858u,  65536u,  69433u,
+	73562u,  77936u,  82570u,  87480u,  92682u,  98193u,  104032u,
+	110218u, 116772u, 123715u, 131072u,
+};
+
+static uint32_t semitone_next(uint32_t sp, int dir)
+{
+	/* within ~0.4% of a grid point counts as ON it (absorbs BPM-integer
+	 * rounding; far below the 5.9% semitone spacing) */
+	if (dir > 0) {
+		for (int k = 0; k < 25; k++)
+			if (k_semi_q16[k] > sp + sp / 250u)
+				return k_semi_q16[k];
+		return k_semi_q16[24];
+	}
+	for (int k = 24; k >= 0; k--)
+		if (k_semi_q16[k] < sp - sp / 250u)
+			return k_semi_q16[k];
+	return k_semi_q16[0];
+}
+
 static void controls_diag(void)
 {
 	/* Stream one status line over USB-serial, but ONLY when a host has opened
@@ -4040,9 +4071,18 @@ int main(void)
 			/* FWD/RWD rocker -> tempo, 1 BPM PER CLICK for fine control (the old
 			 * version ramped ~37 BPM/s — way too coarse). Holding repeats slowly
 			 * (~12 BPM/s) after 600 ms so big jumps don't need 40 clicks. Speed is
-			 * derived exactly from the integer BPM, so 80 = exactly 1.0x. */
+			 * derived exactly from the integer BPM, so 80 = exactly 1.0x.
+			 * DOUBLE-CLICK (a 2nd click within 350 ms, same direction) = jump a
+			 * SEMITONE: snap to the next 2^(k/12) grid point (see k_semi_q16),
+			 * computed from the speed BEFORE the first click so the +/-1 BPM
+			 * that click already applied is absorbed, not compounded. Further
+			 * quick clicks chain more semitones. Single click and hold are
+			 * exactly as before. */
 			{
 				static int64_t tempo_t = -1, tempo_last;
+				static int64_t dclick_t;        /* last fresh click (0 = none) */
+				static int     dclick_dir;      /* its direction */
+				static uint32_t dclick_base;    /* the speed BEFORE that click */
 				/* tempo LOCKED while a take is in flight: a mid-take speed
 				 * glide records the warp into the loop (tape-bend artifact) */
 				int dir = (g_rec_track >= 0) ? 0 :
@@ -4052,10 +4092,34 @@ int main(void)
 				if (dir != 0) {
 					int64_t tnow = k_uptime_get();
 					if (vcommit != vbefore) {            /* fresh click */
-						step = 1; tempo_t = tnow; tempo_last = tnow;
+						if (dclick_t != 0 && dir == dclick_dir &&
+						    tnow - dclick_t <= 350) {
+							/* DOUBLE-CLICK -> next semitone */
+							uint32_t ns = semitone_next(dclick_base, dir);
+							int b = (int)(((uint64_t)ns * LOOP_BPM_BASE
+								       + 32768u) / 65536u);
+							if (b < BPM_MIN) {
+								b = BPM_MIN;
+								ns = (uint32_t)b * 65536u / LOOP_BPM_BASE;
+							} else if (b > BPM_MAX) {
+								b = BPM_MAX;
+								ns = (uint32_t)b * 65536u / LOOP_BPM_BASE;
+							}
+							g_play_bpm = b;
+							g_play_speed_q16 = ns;
+							dclick_base = ns;   /* chain steps the grid */
+							dclick_t = tnow;
+							tempo_t = -1;       /* a double never hold-repeats */
+						} else {
+							dclick_base = g_play_speed_q16;
+							dclick_dir  = dir;
+							dclick_t    = tnow;
+							step = 1; tempo_t = tnow; tempo_last = tnow;
+						}
 					} else if (tempo_t >= 0 && tnow - tempo_t >= 600 &&
 						   tnow - tempo_last >= 80) {  /* slow hold-repeat */
 						step = 1; tempo_last = tnow;
+						dclick_t = 0;   /* a hold is not a click */
 					}
 				} else {
 					tempo_t = -1;

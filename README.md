@@ -163,6 +163,11 @@ SP-1 custom firmware) — no soldering or opening the device required:
 - The FWD / RWD buttons change the tempo / playback speed, one BPM per press;
   hold to sweep faster. This is a tape-style speed change — faster also means
   higher pitch — and it bends all four loops together.
+- **Double-click** FWD or RWD to jump a whole **semitone** (an exact musical
+  pitch step) instead of 1 BPM. Keep clicking quickly to step further up or
+  down the scale; the speed lands on exact semitones relative to 1.0x /
+  80 BPM, so pitched material stays in key. A single press or a hold works
+  exactly as before.
 
 ### Songs
 - There are four song slots. The four side LEDs show which song is selected
