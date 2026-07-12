@@ -183,7 +183,8 @@ static inline void clk_pulse(void)
 
 static void cmd_send_bit(uint8_t bit)
 {
-	CMD_OUT();
+	/* caller (send_command) sets CMD_OUT() once — reconfiguring the pin
+	 * per bit was ~86 redundant HAL calls (~170 us) per command */
 	if (bit) {
 		CMD_HIGH();
 	} else {
@@ -194,7 +195,7 @@ static void cmd_send_bit(uint8_t bit)
 
 static uint8_t cmd_recv_bit(void)
 {
-	CMD_IN();
+	/* caller sets CMD_IN() once before the response read */
 	CLK_HIGH();
 	half_delay(s_cmd_half_us);
 	uint8_t b = (uint8_t)READ_CMD();
@@ -270,6 +271,19 @@ static bool send_command(uint8_t cmd_index, uint32_t arg, uint8_t *r1_out)
 	frame[4] = (uint8_t)(arg);
 	frame[5] = crc7(frame, 5);
 
+	/* PRE-COMMAND GAP on an UNDRIVEN line: a 48-bit response minus the
+	 * hunted start bit and the 38 bits read leaves ~9 bits the card is
+	 * still driving after the previous command, and JEDEC Nrc wants >=8
+	 * more clocks before the next command. The old code gave 8 clocks
+	 * while DRIVING the line push-pull into the card's final bits — the
+	 * measured ~30/s response misses under load. Clocking the gap HERE
+	 * (line released, pulled up) gives the card its tail + Nrc with no
+	 * contention, and never touches a read's data phase the way a post-
+	 * response trailer does. */
+	CMD_IN();
+	for (int i = 0; i < 24; i++) {
+		clk_pulse();
+	}
 	CMD_OUT();
 	cmd_send_bit(0);
 	cmd_send_bit(1);
@@ -310,23 +324,39 @@ static bool send_command(uint8_t cmd_index, uint32_t arg, uint8_t *r1_out)
 	}
 	memcpy(r1_out, resp, 6);
 
-	CMD_OUT();
-	CMD_HIGH();
-	for (int i = 0; i < 8; i++) {
-		clk_pulse();
-	}
+	/* Leave CMD as an INPUT (pulled up) — no trailer clocks here! A read
+	 * command's data block can start on DAT0 within ~2 clocks of the
+	 * response ending, so ANY post-response clocking eats the data token
+	 * and misframes the whole payload (hardware-confirmed: a 32-clock
+	 * trailer here CRC-failed every burst read = total silence). The
+	 * response tail + inter-command Nrc gap are honoured by the PRE-command
+	 * gap at the top of this function instead. */
 	return true;
 }
 
 /* Bit-banged MMC commands intermittently miss the response on the first try
  * (settling after the previous command); retry until the card answers. */
+volatile uint32_t emmc_dbg_cmd_retries;   /* first-try misses recovered (diag) */
 static bool send_command_retry(uint8_t cmd, uint32_t arg, uint8_t *r1_out, int tries)
 {
 	for (int t = 0; t < tries; t++) {
 		if (send_command(cmd, arg, r1_out)) {
 			return true;
 		}
-		k_msleep(2);
+		emmc_dbg_cmd_retries++;
+		if (t == 0) {
+			/* First miss = the card still settling after the previous
+			 * burst: a handful of idle clocks is all it needs. NEVER
+			 * sleep here — a 2 ms nap per miss at the measured ~50
+			 * misses/s during 4-track+record donated ~10% of the CPU
+			 * and stalled the refill pipeline (the residual cut-outs
+			 * after every other layer was fixed). */
+			for (int c = 0; c < 16; c++) {
+				clk_pulse();
+			}
+		} else {
+			k_msleep(2);
+		}
 	}
 	return false;
 }
@@ -352,7 +382,7 @@ static bool read_data_block(uint8_t *buf)
 		                                                     * GC read delays, but caps the
 		                                                     * worst CMD18 at ~150+80 ms —
 		                                                     * under the 341 ms rec horizon */
-		const uint32_t yield_at = k_us_to_cyc_ceil32(5000u);
+		const uint32_t yield_at = k_us_to_cyc_ceil32(500u);
 		bool got_start = false;
 		for (;;) {
 			for (int burst = 0; burst < 64 && !got_start; burst++) {
@@ -529,7 +559,7 @@ static bool write_data_block(const uint8_t *buf)
 		uint32_t _wbi = 0;
 		uint32_t t0 = k_cycle_get_32();
 		const uint32_t lim = k_us_to_cyc_ceil32(1000000u);  /* 1 s hard bound */
-		const uint32_t yield_at = k_us_to_cyc_ceil32(5000u);
+		const uint32_t yield_at = k_us_to_cyc_ceil32(500u);
 		for (;;) {
 			for (int burst = 0; burst < 64; burst++) {
 				clk_pulse();
@@ -752,7 +782,7 @@ static bool dat0_busy_wait_impl(uint32_t max_us, bool abortable)
 {
 	uint32_t t0 = k_cycle_get_32();
 	const uint32_t lim = k_us_to_cyc_ceil32(max_us);
-	const uint32_t yield_at = k_us_to_cyc_ceil32(5000u);
+	const uint32_t yield_at = k_us_to_cyc_ceil32(500u);
 	bool done = false;
 	DAT0_IN();
 	for (;;) {
@@ -986,7 +1016,12 @@ bool emmc_read_blocks(uint32_t block_addr, uint8_t *buf, uint32_t count)
 		}
 		return read_data_block(buf);
 	}
-	if (!send_command(18, block_addr, r1)) {
+	/* RETRY like CMD17 above: at high bus duty (4 playing tracks, or reads
+	 * interleaved with a take's writes) the card intermittently misses the
+	 * first command after the previous burst's CMD12 — measured live at
+	 * 20-100 fails/s, each costing a playing track its whole refill turn
+	 * (the actual audible cut-outs). One 2 ms-spaced retry recovers it. */
+	if (!send_command_retry(18, block_addr, r1, 4)) {
 		return false;
 	}
 	/* BURST DEADLINE: every per-block bound (80 ms access hunt) can be
@@ -1000,16 +1035,16 @@ bool emmc_read_blocks(uint32_t block_addr, uint8_t *buf, uint32_t count)
 	const uint32_t blim = k_us_to_cyc_ceil32(150000u);
 	for (uint32_t i = 0; i < count; i++) {
 		if (i && (k_cycle_get_32() - bt0) >= blim) {
-			send_command(12, 0, r1);
+			(void)send_command_retry(12, 0, r1, 3);
 			emmc_dbg_busy_timeouts++;
 			return false;
 		}
 		if (!read_data_block(buf + i * EMMC_BLOCK_SIZE)) {
-			send_command(12, 0, r1);
+			(void)send_command_retry(12, 0, r1, 3);
 			return false;
 		}
 	}
-	send_command(12, 0, r1);
+	(void)send_command_retry(12, 0, r1, 3);
 	return true;
 }
 
@@ -1026,7 +1061,7 @@ bool emmc_write_blocks(uint32_t block_addr, const uint8_t *buf, uint32_t count)
 		}
 		return write_data_block(buf);
 	}
-	if (!send_command(25, block_addr, r1)) {
+	if (!send_command_retry(25, block_addr, r1, 4)) {   /* see CMD18: settle-miss retry */
 		return false;
 	}
 	/* BURST DEADLINE (see emmc_read_blocks): a per-block throttle under the
@@ -1037,15 +1072,22 @@ bool emmc_write_blocks(uint32_t block_addr, const uint8_t *buf, uint32_t count)
 	const uint32_t blim = k_us_to_cyc_ceil32(250000u);
 	for (uint32_t i = 0; i < count; i++) {
 		if (i && (k_cycle_get_32() - bt0) >= blim) {
-			send_command(12, 0, r1);
+			(void)send_command_retry(12, 0, r1, 3);
 			emmc_dbg_busy_timeouts++;
 			return false;
 		}
 		if (!write_data_block(buf + i * EMMC_BLOCK_SIZE)) {
-			send_command(12, 0, r1);
+			(void)send_command_retry(12, 0, r1, 3);
 			return false;
 		}
 	}
-	send_command(12, 0, r1);
+	(void)send_command_retry(12, 0, r1, 3);
+	/* CMD12 after a write burst is R1b: the card holds DAT0 low while it
+	 * commits (prg state) and IGNORES data commands until done. Returning
+	 * with the card still busy made the NEXT command miss its response
+	 * window (a 200-clock hunt + resend) — the same wall time is cheaper
+	 * paid here, watching DAT0. Bounded; a timeout just falls through to
+	 * the existing miss/retry path. */
+	(void)dat0_busy_wait_impl(500000u, false);
 	return true;
 }

@@ -51,6 +51,15 @@ re-flashing the firmware.
 - **iPhone / iPad friendly power claim.** The SP-1 runs from its own battery,
   so it now asks the USB host for 100 mA instead of 250 mA — within what iOS
   allows on a camera adapter. See *Connecting to phones* below.
+- **Rock-solid four-track engine.** A deep, measured overhaul of the audio
+  and storage engines: the flash write-cache is now drained in the background
+  between takes (its silent filling across a session was the root cause of
+  tracks cutting out more and more as you recorded), the refill scheduler is
+  strictly fair so no track can be starved by its siblings, the storage bus
+  protocol was fixed at the wire level (command spacing per the eMMC spec),
+  and the mixer was restructured to half its processor cost. Four tracks at
+  full 48 kHz, recording a fifth-take overdub at 1.5x speed, now runs with
+  zero dropouts.
 - Reliability throughout: full four-track recording at 48 kHz without crackle,
   a scheduling bug that could make everything (lights included) slow down and
   reboot the device, a battery drain (and stray sound) after power-off, and a
