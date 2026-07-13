@@ -864,6 +864,9 @@ struct looptrk {
 	volatile uint8_t  muted;             /* tap-to-mute: track silenced but kept */
 	volatile uint8_t  starved;           /* ring underran; silent until half-refilled */
 	uint16_t          fade;              /* starve-recovery fade-in position (256 = full; mixer-only) */
+	uint16_t          vol_now;           /* gain actually applied last block (mixer-only; ramps toward fader/mute target) */
+	uint8_t           rec_fade;          /* stop-pad fade-down remaining, of 128 (recorder-only) */
+	uint8_t           rec_fstep;         /* fade decrement per sample (fits the fade inside the pad) */
 	uint32_t flush_blk;                  /* streamer: next loop block to write */
 	uint32_t flush_mod;                  /* wrap the flush at this many blocks (overdub = loop len) */
 	/* SEGMENT looper: a track's length is a whole multiple of the base loop. The
@@ -881,7 +884,7 @@ struct looptrk {
 	                                      * padding a bar of zeros. 0 == whole track (old/variable/uploaded). */
 	uint32_t start_blk;                  /* transport block of this take's segment 0 (playback anchor) */
 	/* AUTO-START-ON-SOUND: a take ARMS on the button hold and the recorder only
-	 * begins capturing at the first input past SOUND_THRESHOLD (or SOUND_WAIT_TICKS
+	 * begins capturing at the first input past SOUND_THRESHOLD (armed waits
 	 * as a fallback), so dead air before the first note never lands in the loop. */
 	volatile int32_t  wait_peak;
 	volatile uint32_t wait_ticks;
@@ -1145,6 +1148,14 @@ static void looper_audio_block(int16_t *s)
 		g_rec_track = only;
 	}
 
+	/* PROVISIONAL AUTO-CONFIRM (engine-side, control-loop-independent): once
+	 * a provisional take has captured ~150 ms of real material it is clearly
+	 * not a transit graze (grazes abort within ~100 ms via the press-edge
+	 * guard) — confirm it so the streamer starts flushing well inside the
+	 * rec ring's ~341 ms horizon even if the control loop is frozen
+	 * (FUNCTION page / USB transfer) before its own confirm could run.
+	 * Without this a frozen control loop left a zombie RAM-only take that
+	 * overflowed its ring and was discarded at the eventual stop tap. */
 	/* DOUBLE-TAP DELETE: clear the track — abort any take it has in flight,
 	 * drop it from the song, persist. If it was the song's only content, the
 	 * song resets to empty (the next take sets a fresh loop length). Ring
@@ -1187,7 +1198,14 @@ static void looper_audio_block(int16_t *s)
 		int i = g_rec_track;
 		if (i >= 0 && i < NTRK) {
 			if (trk[i].state == TS_ARMED) {
-				/* cancelled before any sound -> back to PLAY/EMPTY. */
+				/* cancelled before any sound — or while still PROVISIONAL
+				 * (an empty-track instant arm whose press turned out to be
+				 * a transit graze toward a higher button). A provisional
+				 * take has only captured into RAM (PASS 1 skips its flush),
+				 * so aborting leaves NO trace: no flash write, no junk
+				 * take, no grid/BPM hijack on an empty song, and the
+				 * transport state the arm forced is put back. */
+				/* -> back to PLAY/EMPTY. */
 				trk[i].state = (g_slot < NUM_SLOTS && g_meta.slot[g_slot].present[i])
 					       ? TS_PLAY : TS_EMPTY;
 				g_rec_track = -1;
@@ -1255,8 +1273,20 @@ static void looper_audio_block(int16_t *s)
 				trk[i].len_blocks     = len;         /* loop length (>= content) */
 				trk[i].rec_target     = content * SAMP_PER_BLK;  /* -> instant TS_DONE */
 				/* end the live phrase; the recorder pads only the final sub-
-				 * block up to rec_target, then -> TS_DONE. */
+				 * block up to rec_target, then -> TS_DONE. The pad used to be
+				 * hard zeros — an instant cut at the exact stop point, i.e. a
+				 * click baked into the take's loop seam every lap. Fade the
+				 * first 128 pad samples (~2.7 ms) down instead. */
 				trk[i].rec_silence = 1;
+				trk[i].rec_fade = 128;
+				/* the pad is only rec_target - rec_count samples (0..255);
+				 * steepen the slope so the fade always COMPLETES inside it
+				 * (a truncated fade would leave a scaled residual step). */
+				{
+					uint32_t pad = trk[i].rec_target - trk[i].rec_count;
+					trk[i].rec_fstep = (pad && pad < 128u)
+						? (uint8_t)((128u + pad - 1u) / pad) : 1u;
+				}
 			}
 		}
 	}
@@ -1432,14 +1462,18 @@ static void looper_audio_block(int16_t *s)
 
 				int rt_i = g_rec_track;
 				if (rt_i >= 0 && trk[rt_i].state == TS_ARMED) {
-					/* AUTO-START: hold armed until the input first crosses the
-					 * threshold (or a timeout), then begin recording. */
+					/* AUTO-START: hold armed until the input first crosses
+					 * the threshold. NO TIMEOUT any more: the old ~4 s
+					 * fallback started recording SILENCE on its own
+					 * (community: "once armed it should only rely on sound
+					 * input... after 8 tics it starts on its own"). An
+					 * armed track now waits indefinitely — tap it to
+					 * cancel; the blinking LED shows it is armed. */
 					struct looptrk *rt = &trk[rt_i];
 					int32_t aa = lsamp < 0 ? -lsamp : lsamp;
 					/* trigger directly on the first sample past threshold (no
 					 * running-peak tracking needed) -- one less op per armed sample */
-					if (aa >= SOUND_THRESHOLD ||
-					    ++rt->wait_ticks >= SOUND_WAIT_TICKS) {
+					if (aa >= SOUND_THRESHOLD) {
 						if (g_loop_len == 0u) {
 							/* first take: this sound is loop position 0 */
 							g_consume_pos = 0; g_midi_start_pending = 1; g_midi_cnt = 0;
@@ -1470,7 +1504,18 @@ static void looper_audio_block(int16_t *s)
 					struct looptrk *rt = &trk[g_rec_track];
 					if ((rt->r_w - rt->r_r) >= RRING_SAMPLES)
 						g_rec_overruns++;   /* take corrupting: flush too slow */
-					g_rring[rt->r_w & RRING_MASK] = rt->rec_silence ? 0 : lsamp;
+					int16_t wsamp = lsamp;
+					if (rt->rec_silence) {
+						uint8_t fg = rt->rec_fade;
+						if (fg) {
+							wsamp = (int16_t)(((int32_t)lsamp * fg) >> 7);
+							uint8_t st = rt->rec_fstep ? rt->rec_fstep : 1u;
+							rt->rec_fade = (fg > st) ? (uint8_t)(fg - st) : 0u;
+						} else {
+							wsamp = 0;
+						}
+					}
+					g_rring[rt->r_w & RRING_MASK] = wsamp;
 					rt->r_w++;
 					rt->rec_count++;
 					if (g_tempo.active) tempo_feed(lsamp, rt->rec_count);
@@ -1516,15 +1561,37 @@ static void looper_audio_block(int16_t *s)
 
 	/* ==== PASS B: accumulate each playing track over the whole block ==== */
 	for (int i = 0; i < NTRK; i++) {
-		if (trk[i].state != TS_PLAY || trk[i].muted) continue;
+		if (trk[i].state != TS_PLAY) continue;
+		/* GAIN SMOOTHING + CLICKLESS MUTE: the fader value used to be
+		 * applied as a hard step once per 5 ms block (and mute as an
+		 * instant gate) — fast fader rides audibly zipper-clicked and
+		 * every mute/unmute popped (community: "fast up-and-down fader
+		 * movement sounds a little clicky"). The applied gain now ramps
+		 * linearly across the block toward the target (mute = target 0),
+		 * spreading any change over 256 samples; a muted track is skipped
+		 * entirely once its ramp settles at zero. */
+		const int32_t vtar = trk[i].muted ? 0 : (int32_t)vol_s[i];
+		const int32_t vprev = (int32_t)trk[i].vol_now;
+		int32_t vd = vtar - vprev;                   /* 0 in the common case */
+		/* ADC DEADBAND: the fader ADC jitters +/-1 count between reads, so
+		 * without this vd was nonzero on nearly every block for every
+		 * track — which silently disqualified the mixer's healthy FAST
+		 * PATH (it requires vd==0) and re-cost the CPU that path had
+		 * freed. Measured on hardware as renewed starvation under load
+		 * (stv 59/67 in one session vs ~0 on the release). A 1-count step
+		 * is 0.03 dB — far below audibility and below any zipper — so
+		 * snap it instantly; only real movement (>=2 counts) ramps. */
+		if (vd == 1 || vd == -1) vd = 0;
+		if (vtar == 0 && vd == 0 && vprev == 0) continue;  /* silent and settled */
+		trk[i].vol_now = (uint16_t)vtar;
 		const int16_t *const pr = trk[i].pring;
-		const int32_t vol = (int32_t)vol_s[i];
+		const int32_t vol = vtar;
 		/* STOPPED fast path: the transport is frozen (no phase steps this
 		 * block), so this track contributes ONE constant sample — compute
 		 * it once instead of 256 times. Falls back to the exact per-frame
 		 * loop whenever a starve or fade boundary is in flight so those
 		 * transitions keep their per-frame behavior. */
-		if (step == 0u && !trk[i].starved && trk[i].fade >= 256u) {
+		if (step == 0u && !trk[i].starved && trk[i].fade >= 256u && vd == 0) {
 			int32_t avail = (int32_t)(trk[i].p_w - posb[0]);
 			if (avail < 2) {
 				trk[i].starved = 1; g_starve_cnt[i]++;
@@ -1556,7 +1623,7 @@ static void looper_audio_block(int16_t *s)
 		 * exact slow path below. Read demand scales with tape speed
 		 * (1.5x = 1125 blk/s for 4 tracks), and the CPU this returns to
 		 * the streamer is what lifts the refill ceiling past that. */
-		if (!trk[i].starved && trk[i].fade >= 256u &&
+		if (vd == 0 && !trk[i].starved && trk[i].fade >= 256u &&
 		    (int32_t)(trk[i].p_w - posb[BLK_FRAMES - 1u]) >= 258) {
 			for (uint32_t f = 0; f < BLK_FRAMES; f++) {
 				uint32_t cpos = posb[f];
@@ -1615,15 +1682,23 @@ static void looper_audio_block(int16_t *s)
 				}
 				if (g < 256) sv = (int16_t)(((int32_t)sv * g) >> 8);
 			}
-			mix32[f] += ((int32_t)sv * vol) >> 8;
+			int32_t vf = vd ? (vprev + ((vd * (int32_t)(f + 1)) >> 8)) : vol;
+			mix32[f] += ((int32_t)sv * vf) >> 8;
 		}
 	}
 
 	/* ==== PASS C: master volume + soft limiter -> stereo out ==== */
 	{
+		/* the VOL buttons step ~3 dB at a time — ramp each step across the
+		 * block instead of applying it as a hard gain jump (a click). */
 		const int32_t mv = (int32_t)g_master_vol_q8;
+		static int32_t mv_prev;
+		const int32_t md = mv - mv_prev;
+		const int32_t m0 = mv_prev;
+		mv_prev = mv;
 		for (uint32_t f = 0; f < BLK_FRAMES; f++) {
-			int16_t out = soft_limit((mix32[f] * mv) >> 8);
+			int32_t m = md ? (m0 + ((md * (int32_t)(f + 1)) >> 8)) : mv;
+			int16_t out = soft_limit((mix32[f] * m) >> 8);
 			s[2 * f] = out; s[2 * f + 1] = out;
 		}
 	}
@@ -2262,6 +2337,15 @@ static void streamer_thread(void *a, void *b, void *c)
 						uint32_t to_page = 16u - mis;
 						if (n > to_page) n = to_page;
 					} else if (n >= 16u) {
+						/* SINGLE whole pages deliberately: a 32-block
+						 * double-burst experiment saved command overhead
+						 * but each burst held the bus ~9 ms uninterrupted
+						 * — at high tape speed the playing tracks can't
+						 * ride out blackouts that long (hardware-measured:
+						 * rec ring peaked 78%, a track fell 209 ms behind,
+						 * MORE starves). Frequent small write bursts keep
+						 * read latency bounded; total overhead matters
+						 * less than its distribution here. */
 						n &= ~15u;        /* whole pages only */
 					} else if (t->state == TS_REC && n < to_wrap) {
 						break;            /* let a full page accumulate */
@@ -2365,6 +2449,26 @@ static void streamer_thread(void *a, void *b, void *c)
 						g_meta.trk_content[slot][i]    = t->content_blocks; /* silence-pad boundary */
 					}
 					g_meta_save_req = 1;             /* persist the new recording */
+#if SP1_CODEC == SP1_CODEC_PCM
+					/* LOOP-SEAM DECLICK (write side): ramp the take's first
+					 * ~1.3 ms in, ONCE, on flash. Every lap of the loop plays
+					 * last-sample -> first-sample; with a hard start that seam
+					 * clicks ("loop in/out transient" in community feedback).
+					 * The stop side is faded live by the recorder (rec_fade),
+					 * so with both ends tapered the seam is silent-to-silent.
+					 * 64 samples barely soften a real attack transient. PCM
+					 * only: in-place sample math on packed flash bytes. */
+					{
+						uint32_t _b0 = trk_blk(slot, (uint32_t)i);
+						if (emmc_read_blocks(_b0, batchbuf, 1)) {
+							int16_t *_sm = (int16_t *)batchbuf;
+							for (int _k = 0; _k < 64; _k++)
+								_sm[_k] = (int16_t)(((int32_t)_sm[_k] * _k) >> 6);
+							if (!emmc_write_blocks(_b0, batchbuf, 1))
+								(void)emmc_write_blocks(_b0, batchbuf, 1);
+						}
+					}
+#endif
 					/* PRIME the play ring before publishing TS_PLAY: read ~half-ring of
 					 * the loop into pring so a freshly-promoted track starts with read-
 					 * ahead cushion instead of avail=0. Empty promotion made the last-
@@ -4089,14 +4193,31 @@ int main(void)
 					}
 				}
 				for (int k = TRK_1; k <= TRK_PLAY; k++) ep_time[k] = 0;
+				/* PHANTOM-ARM SWEEP GUARD: the empty-track 40 ms instant
+				 * arm can be tripped by a slow roll toward a HIGHER button
+				 * dwelling on an empty track in transit. The episode's
+				 * dominant button tells the truth at release: any track
+				 * that armed during this episode but is NOT the dominant
+				 * was a transit artifact — cancel it (an ARMED take
+				 * cancels losslessly; one that already caught sound
+				 * finalizes tiny and double-tap deletes). */
+				for (int x = 0; x < NTRK; x++) {
+					if (!armed_press[x] || x == b) continue;
+					armed_press[x] = 0;
+					if (g_rec_track == x) {
+						g_stop_req = 1;
+						tap_deadline[x] = 0;
+					}
+				}
 				if (b >= TRK_1 && b <= TRK_4) {
 					int ti = b;
 					if (armed_press[ti]) {
 						armed_press[ti] = 0;
-						/* LATCHED RECORDING: releasing the arming
-						 * hold does NOT stop the take — it records
-						 * hands-free until the same track is
-						 * tapped again or the region fills. */
+						/* LATCHED RECORDING: releasing the arming hold
+						 * does NOT stop the take — it records hands-free
+						 * until the same track is tapped again or the
+						 * region fills. (See the HOLD-ARM comment for why
+						 * the momentary variant was rolled back.) */
 					} else if ((g_rec_track == ti &&
 						    (trk[ti].state == TS_ARMED ||
 						     trk[ti].state == TS_REC)) ||
@@ -4129,8 +4250,17 @@ int main(void)
 				}
 				ep_play_held = 0;
 			}
-			/* HOLD-ARM: button physically held >= HOLD_RECORD_MS -> a real hold, ARM
-			 * recording now (a quick tap releases before this, so it can't mis-arm). */
+			/* HOLD-ARM: held >= HOLD_RECORD_MS arms recording, always
+			 * LATCHED on release. Two community variants were tried on
+			 * hardware and ROLLED BACK as a pair: the 40 ms empty-track
+			 * instant-arm (its provisional RAM-only phase released each
+			 * take's first ~150 ms to flash as one clumped write burst —
+			 * measurably starving playback at high tape speed) and the
+			 * hold-duration MOMENTARY mode (with a 200 ms arm the latch
+			 * window shrank to a 300 ms sliver, so natural holds stopped
+			 * at release: "hands-free recording is gone"). They only work
+			 * as a pair: redo both atop a trickle-flush provisional, or
+			 * neither. */
 			if (committed >= TRK_1 && committed <= TRK_4) {
 				int ti = (int)committed;
 				if (!armed_press[ti] && g_rec_track < 0 &&
