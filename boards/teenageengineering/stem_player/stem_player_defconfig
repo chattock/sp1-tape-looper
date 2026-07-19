@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+CONFIG_GPIO=y
+CONFIG_PINCTRL=y
+CONFIG_SERIAL=y
+# MPU on: satisfies prj.conf's CONFIG_HW_STACK_PROTECTION=y (stack-overflow
+# guard) — without the MPU that option has unmet dependencies.
+CONFIG_ARM_MPU=y
+# App image is placed by the SP-1 bootloader at 0x20000 (slot0_partition).
+CONFIG_USE_DT_CODE_PARTITION=y
+# No 32.768 kHz crystal driven for the app; synthesize LFCLK (bootloader
+# compatible; the looper's prj.conf sets this too).
+CONFIG_CLOCK_CONTROL_NRF_K32SRC_SYNTH=y

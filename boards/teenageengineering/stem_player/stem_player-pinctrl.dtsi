@@ -1,0 +1,41 @@
+/*
+ * Pin control for the Teenage Engineering SP-1 (looper firmware topology).
+ * Pin map source: timknapen/SP-1-dev src/stemplayer_pins.h.
+ *
+ * I2S NOTE: unlike the sp1-midi BSP (nRF as I2S master), the looper runs the
+ * board the way TE designed it — the 3.072 MHz oscillator drives SCK and the
+ * CS42L42 codec masters LRCK, so the nRF's SCK/LRCK pins are INPUTS. The
+ * _S PSEL variants configure them as such; SDOUT remains the nRF's output.
+ */
+
+&pinctrl {
+	i2c0_default: i2c0_default {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 1, 7)>,   /* P1.07 */
+				<NRF_PSEL(TWIM_SCL, 1, 11)>;  /* P1.11 */
+		};
+	};
+	i2c0_sleep: i2c0_sleep {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 1, 7)>,
+				<NRF_PSEL(TWIM_SCL, 1, 11)>;
+			low-power-enable;
+		};
+	};
+
+	i2s0_default: i2s0_default {
+		group1 {
+			psels = <NRF_PSEL(I2S_SCK_S, 0, 12)>,   /* P0.12 BCLK in (osc-driven) */
+				<NRF_PSEL(I2S_LRCK_S, 0, 11)>,  /* P0.11 LRCK in (CS42L42 master) */
+				<NRF_PSEL(I2S_SDOUT, 1, 9)>;    /* P1.09 audio data out */
+		};
+	};
+	i2s0_sleep: i2s0_sleep {
+		group1 {
+			psels = <NRF_PSEL(I2S_SCK_S, 0, 12)>,
+				<NRF_PSEL(I2S_LRCK_S, 0, 11)>,
+				<NRF_PSEL(I2S_SDOUT, 1, 9)>;
+			low-power-enable;
+		};
+	};
+};

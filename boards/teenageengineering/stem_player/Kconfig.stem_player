@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+config BOARD_STEM_PLAYER
+	select SOC_NRF52840_QIAA
+	# NOTE on prj.conf's CONFIG_PM=y: mainline Zephyr's nRF52 SoC tree
+	# provides no system-PM glue (no HAS_PM, no pm_state_set), so that
+	# assignment cannot take effect here — it downgrades to a non-fatal
+	# Kconfig warning and PM stays off. Verified consequence: idle uses
+	# plain WFI (cortex-m default); power-off is unaffected (the app
+	# drives SYSTEM_OFF registers directly). Do NOT 'select HAS_PM' to
+	# silence the warning — that links a PM core with no SoC backend
+	# (undefined reference to pm_state_set).
+
+# SHIM: the looper's prj.conf assigns SAMPLE_USBD_VID, a symbol Zephyr only
+# gained in v4.4 — on our pinned v4.3.1 it is undefined, which aborts Kconfig.
+# Defining it here lets the configuration parse. v4.3.1's sample_usbd_init.c
+# does NOT consume it (VID is hardcoded to Zephyr's 0x2fe3 there), so the
+# device enumerates as 2fe3:5210 instead of the author's 1915:5210 — a purely
+# cosmetic, documented deviation with no functional effect.
+config SAMPLE_USBD_VID
+	hex "USB device sample Vendor ID (shim, unused on v4.3.x)"
+	default 0x2fe3

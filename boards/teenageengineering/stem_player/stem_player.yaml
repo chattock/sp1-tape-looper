@@ -1,0 +1,15 @@
+identifier: stem_player
+name: Stem Player SP-1
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+  - gnuarmemb
+ram: 256
+flash: 892
+supported:
+  - adc
+  - i2c
+  - i2s
+  - usb_device
+  - watchdog
