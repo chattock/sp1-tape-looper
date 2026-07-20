@@ -3764,21 +3764,22 @@ static void enter_dfu(void)
 	for (;;) { }
 }
 
-/* Advance to the next song slot: save the current song's BPM, load the next
- * one's BPM, and signal the audio thread to reload that slot's tracks. */
-static void next_slot(void)
+/* Jump to song slot ns (M4b: FUNCTION+Track bank jump, and the tap-advance).
+ * Saves the current song's BPM, loads the target's, signals the audio thread
+ * to reload that slot's tracks. Refuses while a take is armed/recording/
+ * flushing — the reload would trample the take and strand unflushed audio. */
+static void jump_to_slot(uint32_t ns)
 {
 	if (!g_meta_loaded || g_slot_switch_req) return;    /* ignore until the last switch lands */
-	/* never switch songs while a take is armed/recording/flushing — the slot
-	 * reload would trample the take's state and strand its unflushed audio */
 	if (g_rec_track >= 0) return;
 	for (int i = 0; i < NTRK; i++) {
 		uint8_t st = trk[i].state;
 		if (st == TS_ARMED || st == TS_REC || st == TS_DONE) return;
 	}
+	if (ns >= NUM_SLOTS) return;
 	if (g_slot >= NUM_SLOTS) g_slot = 0;
+	if (ns == g_slot) return;
 	g_meta.slot[g_slot].speed_q16 = g_play_speed_q16;   /* remember where you left it */
-	uint32_t ns = (g_slot + 1u) % NUM_SLOTS;
 	g_meta.cur_slot = ns;
 	g_slot = ns;
 	g_play_speed_q16 = g_meta.slot[ns].speed_q16;        /* resume the new song's BPM */
@@ -3787,6 +3788,13 @@ static void next_slot(void)
 	if (g_play_bpm > BPM_MAX) g_play_bpm = BPM_MAX;
 	g_slot_switch_req = 1;
 	g_meta_save_req = 1;
+}
+
+/* Advance to the next song slot (FUNCTION tap). */
+static void next_slot(void)
+{
+	if (g_slot >= NUM_SLOTS) g_slot = 0;
+	jump_to_slot((g_slot + 1u) % NUM_SLOTS);
 }
 
 /* WDT PRE-WARNING (nRF52: fires ~61 us before the reset): the reported crash
@@ -3991,6 +3999,9 @@ int main(void)
 	uint8_t combo_fired = 0;    /* mode already toggled this combo press */
 	uint8_t combo_seen  = 0;    /* PLAY was seen at all during this FUNCTION press */
 	uint8_t suppress_play = 0;  /* swallow a trailing PLAY held past combo exit */
+	enum trk_btn bj_cand = TRK_NONE; /* FUNCTION+Track bank jump: sticky candidate band */
+	int bj_cnt = 0;                  /*   consecutive passes the candidate has held     */
+	int bj_fired = -1;               /*   band already jumped during this FUNCTION press */
 	uint8_t ctl_flush = 0;      /* looper decode state went stale (FUNCTION page / USB transfer owned the loop) */
 	int64_t last_diag = 0;      /* throttle the control read-out */
 
@@ -4073,7 +4084,8 @@ int main(void)
 			 * the ladder voltage. While the combo is engaged the power-off
 			 * countdown/shutdown is suppressed (this gesture must never risk a
 			 * power-off), and the FUNCTION-release song-change is suppressed. */
-			if (ladder_read(&adc_ladder[LAD_TRACKS]) > 1600) {
+			int fraw = ladder_read(&adc_ladder[LAD_TRACKS]);
+			if (fraw > 1600) {
 				combo_seen = 1;
 				if (combo_start < 0) combo_start = k_uptime_get();
 				if (!combo_fired &&
@@ -4106,6 +4118,38 @@ int main(void)
 				continue;                /* combo owns the button */
 			}
 			combo_start = -1;            /* PLAY not held */
+
+			/* BANK JUMP — FUNCTION + Track N -> first song of bank N (M4b).
+			 * POWER-OFF SAFETY (the whole point): committing a track band
+			 * during a FUNCTION hold sets combo_seen — the same flag the
+			 * FUNCTION+PLAY combo uses — which suppresses the power-off
+			 * countdown, the shutdown itself, and the release song-advance
+			 * for the remainder of this press. Turning the device off now
+			 * requires a CLEAN FUNCTION-only hold, exactly as before.
+			 * Sticky commit: the same band must be seen on 3 consecutive
+			 * passes (~75 ms) — a finger transiting the ladder can't fire.
+			 * Keeping FUNCTION held and pressing another track jumps again
+			 * (bank surfing). While recording, jump_to_slot() refuses, as
+			 * the tap-advance always has. Note: physically pressing T1+T4
+			 * with FUNCTION held reads as the Track-4 band -> bank 4; the
+			 * DFU combo remains a no-FUNCTION gesture. */
+			{
+				enum trk_btn tb = (fraw >= 110 && fraw < 1500)
+						  ? decode_tracks(fraw) : TRK_NONE;
+				if (tb >= TRK_1 && tb <= TRK_4) {
+					if (tb == bj_cand) bj_cnt++;
+					else { bj_cand = tb; bj_cnt = 1; }
+					if (bj_cnt >= 3 && (int)tb != bj_fired) {
+						combo_seen = 1;      /* never a power-off now */
+						bj_fired = (int)tb;
+						jump_to_slot((uint32_t)tb * 4u);
+					}
+					led_service();           /* live song display mid-hold */
+					k_msleep(25);
+					continue;                /* track held: combo owns the button */
+				}
+				bj_cand = TRK_NONE; bj_cnt = 0;
+			}
 			if (combo_seen) {
 				/* The combo has been engaged this FUNCTION press: once PLAY
 				 * is lifted, do NOTHING further for the rest of the hold —
@@ -4113,6 +4157,7 @@ int main(void)
 				 * dates from the original FUNCTION-down, so the 2.5 s
 				 * power-off would otherwise fire). The FUNCTION press is
 				 * spent; it ends cleanly on release below. */
+				led_service();
 				k_msleep(25);
 				continue;
 			}
@@ -4144,12 +4189,13 @@ int main(void)
 			 * still down, swallow that trailing PLAY until it is released, so
 			 * it can't leak into the normal decode as a restart / play-stop. */
 			if (combo_seen &&
-			    ladder_read(&adc_ladder[LAD_TRACKS]) > 1600) suppress_play = 1;
+			    ladder_read(&adc_ladder[LAD_TRACKS]) >= 110) suppress_play = 1;
 		}
 		press_start = -1;
 		combo_start = -1;
 		combo_fired = 0;
 		combo_seen  = 0;
+		bj_cand = TRK_NONE; bj_cnt = 0; bj_fired = -1;
 
 		/* ---- looper controls + LEDs ---- */
 		{
