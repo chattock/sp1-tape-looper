@@ -3875,6 +3875,11 @@ int main(void)
 	}
 	feed_wdt();
 
+	/* EARLY controls_init: the battery gauge in charge-standby below needs the
+	 * ladder rail + ADC channels, which used to come up only after standby.
+	 * Idempotent (pure register config); the original call later is unchanged. */
+	controls_init();
+
 	/* ---- CHARGE-STANDBY: the device no longer springs to life on its own ----
 	 * Plugging USB in (or finishing a flash, or inserting a battery) lands here:
 	 * silent, looper untouched, LED 1 blinking while charging / solid when full.
@@ -3901,10 +3906,36 @@ int main(void)
 				hold_t = -1;
 				if (!usb_present())
 					power_off();              /* battery, idle -> off */
-				/* charge indication: blink = charging, solid = full */
-				if (charging()) ((++blink / 12u) & 1u) ? led_on(0) : led_off(0);
-				else            led_on(0);
-				for (int i = 1; i < NUM_LEDS; i++) led_off(i);
+				/* BATTERY GAUGE (plan §3.5): 1-4 LEDs = approximate
+				 * charge level. LEDs below the level are solid; the top
+				 * one blinks while charging and goes solid when the
+				 * charger reports done (all four solid = full).
+				 * Thresholds are RAW 12-bit readings of the AIN4
+				 * battery divider (gain 1/6, 0.6 V internal ref) —
+				 * PLACEHOLDERS until calibrated: note the diag line's
+				 * batt= value when full and when nearly empty, then
+				 * space these three between those readings. If the ADC
+				 * read fails (<0), lvl stays 1 and this degrades to the
+				 * original single-LED blink/solid display. */
+				/* Interim calibration 2026-07-20: full anchor MEASURED
+				 * at raw ~2380 (resting, plugged-not-charging = ~4.21 V);
+				 * empty end is a ~3.35 V physics estimate pending a real
+				 * low reading. Spread at 25/50/75% of that range. Refine
+				 * batt_thr once a near-empty batt= value is logged. */
+				static const int batt_thr[3] = { 2020, 2140, 2260 };
+				int braw = ladder_read(&adc_ladder[LAD_BATT]);
+				int lvl = 1;
+				if (braw >= 0)
+					for (int k = 0; k < 3; k++)
+						if (braw > batt_thr[k]) lvl = k + 2;
+				int bl = ((++blink / 12u) & 1u) == 0u;
+				for (int i = 0; i < NUM_LEDS; i++) {
+					int on;
+					if (i < lvl - 1)       on = 1;
+					else if (i == lvl - 1) on = charging() ? bl : 1;
+					else                   on = 0;
+					on ? led_on(i) : led_off(i);
+				}
 			}
 			k_msleep(40);
 		}
