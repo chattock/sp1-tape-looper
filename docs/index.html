@@ -351,21 +351,25 @@ async function download(slot, t, blocks, content){
       for (let i=0;i<readN;i++){ pcm.set(await readBlock(base+i), i*512);
         if (i%64===0) $("#status").textContent = `Reading ${Math.round(100*i/readN)}%`; }
       $("#status").textContent = "Connected to SP-1";
-      const wav = makeWav(pcm, blocks*SAMP_PER_BLK);
+      const spd = (meta.slots[slot].speed || 65536) / 65536;   // song tape speed
+      const hz  = Math.max(8000, Math.round(RATE * spd));      // heard-rate stamp
+      const wav = makeWav(pcm, blocks*SAMP_PER_BLK, hz);
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([wav], {type:"audio/wav"}));
       a.download = `sp1_song${slot+1}_track${t+1}.wav`; a.click();
-      log("Downloaded.", "ok");
+      log(Math.abs(spd-1)>0.001
+          ? `Downloaded — stamped ${hz} Hz to match the song's tape speed (~${Math.round(spd*80)} BPM), so it sounds like the device.`
+          : "Downloaded.", "ok");
     }catch(e){ log("Download failed: "+e.message, "err"); }
   });
 }
-function makeWav(pcmBytes, nSamples){
+function makeWav(pcmBytes, nSamples, hz){
   const hdr = new ArrayBuffer(44), v = new DataView(hdr);
   const dataLen = nSamples*2;
   const wr = (o,str)=>{ for(let i=0;i<str.length;i++) v.setUint8(o+i, str.charCodeAt(i)); };
   wr(0,"RIFF"); v.setUint32(4, 36+dataLen, true); wr(8,"WAVE"); wr(12,"fmt ");
   v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
-  v.setUint32(24,RATE,true); v.setUint32(28,RATE*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
+  v.setUint32(24,hz,true); v.setUint32(28,hz*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
   wr(36,"data"); v.setUint32(40,dataLen,true);
   const out = new Uint8Array(44+dataLen); out.set(new Uint8Array(hdr)); out.set(pcmBytes.slice(0,dataLen),44);
   return out;
@@ -377,8 +381,10 @@ async function upload(slot, t, file){
     log(`Reading ${file.name}…`);
     const ac = new (window.AudioContext||window.webkitAudioContext)();
     const decoded = await ac.decodeAudioData(await file.arrayBuffer());
-    const frames = Math.ceil(decoded.duration*RATE);
-    const off = new OfflineAudioContext(1, Math.max(1,frames), RATE);
+    const uspd = ((meta.slots[slot] && meta.slots[slot].speed) || 65536) / 65536;
+    const uhz  = Math.min(96000, Math.max(8000, Math.round(RATE * uspd)));
+    const frames = Math.ceil(decoded.duration*uhz);
+    const off = new OfflineAudioContext(1, Math.max(1,frames), uhz);
     const src = off.createBufferSource(); src.buffer = decoded; src.connect(off.destination); src.start();
     const mono = (await off.startRendering()).getChannelData(0);
     ac.close();
@@ -396,7 +402,7 @@ async function upload(slot, t, file){
       log(`Clip too long — truncated to ${fmtLen(blocks)}.`, "err");
     }
 
-    const clipS = (mono.length/RATE).toFixed(1);
+    const clipS = (mono.length/uhz).toFixed(1);   // seconds as HEARD at the song's speed
     if (isBase) log(`First track in song ${slot+1}: its ${clipS}s also sets the song's beat grid (${fmtLen(blocks)}).`);
     else log(`Clip is ${clipS}s — the track loops at its own length (${fmtLen(blocks)}).`);
 
