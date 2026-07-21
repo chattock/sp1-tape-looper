@@ -1,6 +1,7 @@
 # Changelog
 
-All notable changes in this fork of chattock/sp1-tape-looper.
+All notable changes in this fork of Technics' sp1-tape-looper
+(chattock on GitHub).
 Base: upstream commit c60941c (2026-07-14).
 
 ## [1.0.0] - 2026-07-21
@@ -21,7 +22,8 @@ Base: upstream commit c60941c (2026-07-14).
   constant is backdated out of the take. (A beat-snap experiment lives on
   the experiments/beat-snap branch.)
 - Always-dim LEDs via soft-PWM with a zero-latency ISR; FUNCTION+PLAY
-  double-tap toggles dim/full, persisted. Credit: TechnicsOP.
+  double-tap toggles dim/full, persisted. Credit: Technics (also the
+  upstream author).
 - Battery gauge while charging: 1-4 LEDs from pack voltage, top LED blinks
   until the charger reports done; thresholds anchored to a measured full
   reading.
@@ -51,5 +53,6 @@ Base: upstream commit c60941c (2026-07-14).
   v4.3.1 (MPU stack guard active; idle is plain WFI).
 
 ### Credits
-chattock (upstream looper), TechnicsOP (dim-LED build), Tim Knapen
-(SP-1-dev wiki), ericlewis (sp1-midi board reference).
+Technics (chattock on GitHub) wrote both the upstream looper this repo
+forks and the dim-LED build it merges. Also: Tim Knapen (SP-1-dev wiki),
+ericlewis (sp1-midi board reference).
