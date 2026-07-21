@@ -10,6 +10,24 @@ headphones. The rocker changes playback speed and pitch together, like tape.
 Loops are saved to the SP-1's internal flash, so they survive power-off and
 re-flashing the firmware.
 
+## About this fork (16-song edition)
+
+This fork extends the looper into a 16-song performance sketchbook:
+16 remembered songs in 4 banks (FUNCTION cycles banks, FUNCTION+Track
+jumps straight to one), per-song memory of tempo, chop window and
+fixed/variable mode, a global loop chop, press-accurate loop capture,
+always-dim LEDs with an FN+PLAY double-tap toggle, a battery gauge
+while charging, and full-scale headphone volume. See CHANGELOG.md for
+the complete list, credits, and compatibility notes (the SE16 index is
+a format break from stock - export your songs first via the transfer
+page in docs/).
+
+Build it yourself: Zephyr v4.3.1 + SDK 0.17.4, apply
+zephyr-patches/uac2-windows-fs-feedback.patch to the Zephyr tree, then
+`west build -p -b stem_player firmware -- -DBOARD_ROOT=$(pwd)`.
+Flash: hold Track 1 + Track 4 while plugging in USB, then use
+solderless.engineering with sp1_looper.bin.
+
 ## What's new in this release
 
 - **48 kHz.** The firmware now records and plays at the full 48 kHz — earlier
