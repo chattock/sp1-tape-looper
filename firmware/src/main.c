@@ -1020,6 +1020,11 @@ static volatile int g_play_bpm = 80;
 /* auto-start thresholds (loop-sample domain @ LOOP_RATE) */
 #define SOUND_THRESHOLD  1000              /* int16 level (~ -30 dBFS) */
 #define SOUND_WAIT_TICKS (LOOP_RATE * 4u)  /* ~4 s fallback */
+/* PERFECT-LOOP R2: the stop gesture's CONSTANT pipeline latency — ladder
+ * debounce (~24 ms) + sustained-commit gate (~24 ms) + control pass (~8 ms)
+ * ~= 55 ms — backdated out of every take so the captured end lands where the
+ * finger did, not where the pipeline noticed. */
+#define STOP_COMP_SAMPLES 2600u             /* ~55 ms at 48 kHz */
 /* track-button gesture timing */
 #define HOLD_RECORD_MS   180   /* physical button-down this long (ms) => RECORD; shorter => TAP */
 #define DTAP_GAP_MS      420   /* 2nd tap within this of the 1st tap's release => DOUBLE-TAP delete */
@@ -1283,7 +1288,13 @@ static void looper_audio_block(int16_t *s)
 				 * whole block so nothing is lost. rec_target is set to CONTENT,
 				 * not the (possibly longer) loop length, so the recorder pads
 				 * only this final <1 block and finalises INSTANTLY on the tap. */
-				uint32_t content = (trk[i].rec_count + SAMP_PER_BLK - 1u)
+				/* R2 (perfect-loop): backdate the stop by the constant
+				 * gesture latency so the end lands on the finger, not
+				 * on the pipeline. */
+				uint32_t rc = trk[i].rec_count;
+				if (rc > STOP_COMP_SAMPLES + SAMP_PER_BLK)
+					rc -= STOP_COMP_SAMPLES;
+				uint32_t content = (rc + SAMP_PER_BLK - 1u)
 						   / SAMP_PER_BLK;
 				if (content < 1u) content = 1u;
 				else if (content > MAX_LOOP_BLOCKS) content = MAX_LOOP_BLOCKS;
@@ -4458,6 +4469,8 @@ int main(void)
 			static int64_t press_t[NTRK];        /* when committed first named this track */
 			static int64_t tap_deadline[NTRK];   /* >0: a single tap awaiting a possible 2nd */
 			static uint8_t armed_press[NTRK];    /* this press already armed a take */
+			static int stop_tap_trk = -1;        /* R1: stop already fired at press;
+			                                      * swallow that press's release */
 			static int64_t ep_time[TRK_PLAY + 1];/* committed ms per button, this episode */
 			static int64_t ep_since;             /* when `committed` last changed */
 			static uint8_t ep_open;              /* a press episode is in progress */
@@ -4477,6 +4490,7 @@ int main(void)
 				ep_open = 0; ep_play_held = 0;
 				play_t = -1; play_held = 0;
 				for (int k = 0; k < NTRK; k++) { tap_deadline[k] = 0; armed_press[k] = 0; }
+				stop_tap_trk = -1;
 				if (!(trk_raw >= 0 && trk_raw < 110)) suppress_play = 1;
 				raw = TRK_NONE;
 			}
@@ -4587,7 +4601,10 @@ int main(void)
 				}
 				if (b >= TRK_1 && b <= TRK_4) {
 					int ti = b;
-					if (armed_press[ti]) {
+					if (ti == stop_tap_trk) {
+						stop_tap_trk = -1;   /* R1: stop fired at press;
+						                      * this release is spent */
+					} else if (armed_press[ti]) {
 						armed_press[ti] = 0;
 						/* LATCHED RECORDING: releasing the arming hold
 						 * does NOT stop the take — it records hands-free
@@ -4625,6 +4642,31 @@ int main(void)
 					}
 				}
 				ep_play_held = 0;
+			}
+			/* R1 STOP-ON-PRESS (perfect-loop): on the RECORDING track a
+			 * press can only mean STOP — no mute/delete/arm ambiguity —
+			 * so fire it once the commit has SUSTAINED ~48 ms (transit
+			 * grazes commit for at most ~32 ms per the episode notes)
+			 * instead of waiting for the release: the tap's physical
+			 * duration (50-150 ms, different every time) no longer
+			 * stretches the loop. CRITICAL: armed_press excludes the
+			 * press that ARMED this take — releasing the arming hold
+			 * stays latched (it must never read as a stop; without this
+			 * the arm cancelled itself ~50 ms after arming). The
+			 * episode-end handler above swallows this press's release;
+			 * R2 backdates the remaining constant. */
+			if (committed >= TRK_1 && committed <= TRK_4) {
+				int ti = (int)committed;
+				if (ti != stop_tap_trk && !armed_press[ti] &&
+				    ((g_rec_track == ti &&
+				      (trk[ti].state == TS_ARMED ||
+				       trk[ti].state == TS_REC)) ||
+				     trk[ti].state == TS_DONE) &&
+				    k_uptime_get() - press_t[ti] >= 48) {
+					g_stop_req = 1;
+					tap_deadline[ti] = 0;
+					stop_tap_trk = ti;
+				}
 			}
 			/* HOLD-ARM, always LATCHED on release. EMPTY tracks arm after
 			 * just 100 ms: a tap has no meaning there (nothing to mute or
