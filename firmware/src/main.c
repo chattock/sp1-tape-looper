@@ -109,6 +109,11 @@ static const struct led track_leds[] = {
 };
 #define NUM_TRACK_LEDS (sizeof(track_leds) / sizeof(track_leds[0]))
 
+/* 1 = dim LEDs (soft-PWM render), 0 = full brightness. Toggled by the
+ * FUNCTION+PLAY double-tap; persisted in the song index tail (led_full).
+ * Declared here (not with the dimmer) because xfer_commit persists it. */
+static volatile uint8_t g_led_dim = 1;
+
 static void track_led_on(int i);
 static void track_all_off(void);
 static bool usb_present(void);
@@ -845,6 +850,9 @@ struct meta_blk {
 	uint32_t trk_content[NUM_SLOTS][NTRK]; /* per-track recorded content length in blocks; 0 = whole
 	                                        * track. Also appended in the tail -> layout-safe; a website
 	                                        * upload zeroes it (0 = full track = correct for uploads). */
+	uint32_t led_full;         /* 0 = dim LEDs (default), 1 = full brightness.
+	                            * Tail-appended like fixed_len -> layout-safe;
+	                            * repaired in xfer_commit like fixed_len. */
 };
 /* The index must fit its reserved blocks: 16 songs = 972 of 1024 bytes — the
  * exact maximum of a 2-block index (17 would need three). Compile error here
@@ -1897,6 +1905,7 @@ static void xfer_commit(void)
 			 * length, then write the repaired index back (skipped when the
 			 * host's copy already matches, e.g. a read-only session). */
 			g_meta.fixed_len = g_fixed_len;
+			g_meta.led_full = g_led_dim ? 0u : 1u;
 			for (int s = 0; s < NUM_SLOTS; s++)
 				for (int t = 0; t < NTRK; t++)
 					if (!g_xfer_dirty[s][t])
@@ -3512,6 +3521,70 @@ static enum vol_btn decode_vol(int v)
 	return VOL_UP;                       /* ~1820 */
 }
 
+/* ================= ALWAYS-DIM LEDs (soft PWM) =========================
+ * Adapted unchanged from TechnicsOP's dimmed-LED build (shared on the SP-1
+ * Discord 2026-07-15, MIT) — merged into this fork as ALWAYS-ON dimming.
+ * The panel LEDs are plain on/off GPIO with no current control, so "dim" =
+ * software PWM: every LED write (led_service, sweeps, gauges, our two-light
+ * song display) goes into a shadow mask; a tiny TIMER3 ISR renders that
+ * shadow at a low duty cycle. Single writer (control thread), ISR only
+ * reads. ~1 kHz frame = flicker-free. LED_PWM_ON_US is the brightness. */
+#define LED_PWM_PERIOD_US 1000u    /* 1 kHz frame */
+#define LED_PWM_ON_US       60u    /* ~6% duty — clearly dim, no sparkle.
+                                    * (6u was TechnicsOP's untested "lowest
+                                    * glow": at 6 us on-time, ordinary IRQ
+                                    * latency multiplies a frame's brightness
+                                    * 10-80x = visible flicker. 60 us is both
+                                    * brighter and 10x less jitter-sensitive.) */
+#define LED_PWM_TIMER      NRF_TIMER3
+#define LED_PWM_TIMER_IRQn TIMER3_IRQn
+/* every LED pin on each port (leds[]+track_leds[]) — for the OFF phase */
+#define LED_ALL_P0 ((1u<<0)|(1u<<1)|(1u<<29)|(1u<<26))
+#define LED_ALL_P1 ((1u<<13)|(1u<<12)|(1u<<15)|(1u<<14))
+static volatile uint32_t g_led_p0_on;   /* P0 LED pins logically lit */
+static volatile uint32_t g_led_p1_on;   /* P1 LED pins logically lit */
+
+/* DIRECT ISR (required for IRQ_ZERO_LATENCY): pure register IO, no kernel
+ * calls, returns 0 = never asks for a reschedule. */
+ISR_DIRECT_DECLARE(led_pwm_isr)
+{
+	if (LED_PWM_TIMER->EVENTS_COMPARE[1]) {         /* period wrap: render shadow */
+		LED_PWM_TIMER->EVENTS_COMPARE[1] = 0;
+		(void)LED_PWM_TIMER->EVENTS_COMPARE[1];
+		NRF_P0->OUTSET = g_led_p0_on;
+		NRF_P0->OUTCLR = LED_ALL_P0 & ~g_led_p0_on;
+		NRF_P1->OUTSET = g_led_p1_on;
+		NRF_P1->OUTCLR = LED_ALL_P1 & ~g_led_p1_on;
+	}
+	if (LED_PWM_TIMER->EVENTS_COMPARE[0]) {         /* on-time elapsed */
+		LED_PWM_TIMER->EVENTS_COMPARE[0] = 0;
+		(void)LED_PWM_TIMER->EVENTS_COMPARE[0];
+		if (g_led_dim) {                        /* dim: dark for the rest of
+		                                         * the frame. Full mode: skip
+		                                         * the clear -> LEDs solid. */
+			NRF_P0->OUTCLR = LED_ALL_P0;
+			NRF_P1->OUTCLR = LED_ALL_P1;
+		}
+	}
+	return 0;
+}
+
+static void led_pwm_init(void)
+{
+	LED_PWM_TIMER->MODE      = TIMER_MODE_MODE_Timer;
+	LED_PWM_TIMER->BITMODE   = TIMER_BITMODE_BITMODE_16Bit;
+	LED_PWM_TIMER->PRESCALER = 4;                    /* 16 MHz/16 = 1 us tick */
+	LED_PWM_TIMER->CC[0]     = LED_PWM_ON_US;        /* -> OFF phase */
+	LED_PWM_TIMER->CC[1]     = LED_PWM_PERIOD_US;    /* -> wrap + ON phase */
+	LED_PWM_TIMER->SHORTS    = TIMER_SHORTS_COMPARE1_CLEAR_Msk;
+	LED_PWM_TIMER->INTENSET  = TIMER_INTENSET_COMPARE0_Msk |
+				   TIMER_INTENSET_COMPARE1_Msk;
+	IRQ_DIRECT_CONNECT(LED_PWM_TIMER_IRQn, 0, led_pwm_isr, IRQ_ZERO_LATENCY);
+	irq_enable(LED_PWM_TIMER_IRQn);
+	LED_PWM_TIMER->TASKS_CLEAR = 1;
+	LED_PWM_TIMER->TASKS_START = 1;
+}
+
 /* ---------- LED helpers ---------- */
 static void led_cfg_output(const struct led *l)
 {
@@ -3520,8 +3593,16 @@ static void led_cfg_output(const struct led *l)
 		(GPIO_PIN_CNF_DRIVE_S0S1    << GPIO_PIN_CNF_DRIVE_Pos) |
 		(GPIO_PIN_CNF_INPUT_Connect << GPIO_PIN_CNF_INPUT_Pos);
 }
-static void led_on(int i)  { leds[i].port->OUTSET = (1u << leds[i].pin); }
-static void led_off(int i) { leds[i].port->OUTCLR = (1u << leds[i].pin); }
+static void led_on(int i)
+{
+	if (leds[i].port == NRF_P0) g_led_p0_on |= (1u << leds[i].pin);
+	else                        g_led_p1_on |= (1u << leds[i].pin);
+}
+static void led_off(int i)
+{
+	if (leds[i].port == NRF_P0) g_led_p0_on &= ~(1u << leds[i].pin);
+	else                        g_led_p1_on &= ~(1u << leds[i].pin);
+}
 static void all_off(void)  { for (int i = 0; i < NUM_LEDS; i++) led_off(i); }
 /* Status row = song indicator, 16 songs via TWO LIGHTS ("scheme E", chosen
  * in the LED lab): the POSITION LED (song % 4) is SOLID, and the BANK LED
@@ -3551,14 +3632,28 @@ static void show_song_leds(void)
 	}
 }
 
-static void track_led_on(int i)  { track_leds[i].port->OUTSET = (1u << track_leds[i].pin); }
-static void track_led_off(int i) { track_leds[i].port->OUTCLR = (1u << track_leds[i].pin); }
+static void track_led_on(int i)
+{
+	if (track_leds[i].port == NRF_P0) g_led_p0_on |= (1u << track_leds[i].pin);
+	else                              g_led_p1_on |= (1u << track_leds[i].pin);
+}
+static void track_led_off(int i)
+{
+	if (track_leds[i].port == NRF_P0) g_led_p0_on &= ~(1u << track_leds[i].pin);
+	else                              g_led_p1_on &= ~(1u << track_leds[i].pin);
+}
 static void track_all_off(void)  { for (int i = 0; i < NUM_TRACK_LEDS; i++) track_led_off(i); }
 
 /* Clear BOTH LED rows. Used on power-off so nothing is left lit when SYSTEM_OFF
  * freezes the GPIO levels (the old power_off cleared only the status row, which
  * is exactly why the track/fader lights stayed on after powering down). */
-static void shutdown_leds(void) { all_off(); track_all_off(); }
+static void shutdown_leds(void)
+{
+	all_off(); track_all_off();          /* clear the shadow */
+	LED_PWM_TIMER->TASKS_STOP = 1;       /* stop the dimmer */
+	NRF_P0->OUTCLR = LED_ALL_P0;         /* force every LED pin low */
+	NRF_P1->OUTCLR = LED_ALL_P1;
+}
 
 /* The single owner of the LEDs in normal running. Status row = song indicator.
  * Track row = per-track looper state (rec solid / armed blink / playing pulse),
@@ -3874,6 +3969,9 @@ int main(void)
 		led_cfg_output(&track_leds[i]);
 	all_off();
 	track_all_off();
+	led_pwm_init();   /* ALWAYS-DIM: start the LED soft-PWM now, before the
+	                   * charge-standby loop, so the battery gauge is dim too
+	                   * (TechnicsOP's build started it later in boot). */
 
 	if (device_is_ready(wdt)) {
 		wdt_install_timeout(wdt, &(struct wdt_timeout_cfg){
@@ -3991,6 +4089,7 @@ int main(void)
 		g_play_bpm = (int)(((uint64_t)g_play_speed_q16 * LOOP_BPM_BASE + 32768u) / 65536u);
 		if (g_play_bpm < BPM_MIN) g_play_bpm = BPM_MIN;
 		if (g_play_bpm > BPM_MAX) g_play_bpm = BPM_MAX;
+		g_led_dim = g_meta.led_full ? 0u : 1u;   /* restore brightness mode */
 		g_slot_switch_req = 1;
 	}
 
@@ -4002,6 +4101,7 @@ int main(void)
 	enum trk_btn bj_cand = TRK_NONE; /* FUNCTION+Track bank jump: sticky candidate band */
 	int bj_cnt = 0;                  /*   consecutive passes the candidate has held     */
 	int bj_fired = -1;               /*   band already jumped during this FUNCTION press */
+	int64_t fnp_edge = -1;           /* FUNCTION+PLAY dim toggle: last PLAY press edge */
 	uint8_t ctl_flush = 0;      /* looper decode state went stale (FUNCTION page / USB transfer owned the loop) */
 	int64_t last_diag = 0;      /* throttle the control read-out */
 
@@ -4087,7 +4187,25 @@ int main(void)
 			int fraw = ladder_read(&adc_ladder[LAD_TRACKS]);
 			if (fraw > 1600) {
 				combo_seen = 1;
-				if (combo_start < 0) combo_start = k_uptime_get();
+				if (combo_start < 0) {           /* fresh PLAY press edge */
+					int64_t fnp_now = k_uptime_get();
+					/* DIM TOGGLE — FUNCTION + PLAY DOUBLE-TAP: a second
+					 * PLAY press edge within 450 ms flips dim<->full
+					 * (persisted). Distinct from the 0.7 s CONTINUOUS
+					 * hold (loop-length toggle, untouched); firing also
+					 * blocks that hold-toggle for the rest of this press
+					 * so one gesture can't do both. The brightness
+					 * change itself is the feedback. */
+					if (fnp_edge >= 0 && fnp_now - fnp_edge <= 450 &&
+					    !combo_fired) {
+						g_led_dim ^= 1u;
+						g_meta.led_full = g_led_dim ? 0u : 1u;
+						g_meta_save_req = 1;
+						combo_fired = 1;
+					}
+					fnp_edge = fnp_now;
+					combo_start = fnp_now;
+				}
 				if (!combo_fired &&
 				    k_uptime_get() - combo_start >= 700) {
 					g_fixed_len ^= 1u;
@@ -4195,7 +4313,7 @@ int main(void)
 		combo_start = -1;
 		combo_fired = 0;
 		combo_seen  = 0;
-		bj_cand = TRK_NONE; bj_cnt = 0; bj_fired = -1;
+		bj_cand = TRK_NONE; bj_cnt = 0; bj_fired = -1; fnp_edge = -1;
 
 		/* ---- looper controls + LEDs ---- */
 		{
