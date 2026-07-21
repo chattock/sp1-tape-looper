@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:,">
-<title>SP-1 loop transfer</title>
+<title>SP-1 loop transfer — 16-song fork edition</title>
 <style>
   :root{
     --bg:#ffffff; --ink:#1d1d1f; --muted:#6e6e73; --line:#e5e5e7;
@@ -55,7 +55,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>SP-1 loop transfer</h1>
+  <h1>SP-1 loop transfer <small style="font-size:.5em;opacity:.6">16-song fork edition</small></h1>
   <p class="sub">Move loops between your computer and the stem player, as WAV or MP3.</p>
 
   <div class="bar">
@@ -83,7 +83,7 @@
 const SAMP_PER_BLK = 256;
 let RATE = 24000;                          // device rate, confirmed from the device after connect
 // The on-flash format magic encodes the device's sample rate; the device reports 24 kHz.
-function rateFromMagic(magic){ return (magic === 0x53453234 || magic === 0x53453241) ? 24000 : 48000; } // 'SE24'/'SE2A' = 24 kHz
+function rateFromMagic(magic){ return (magic === 0x53453234 || magic === 0x53453241) ? 24000 : 48000; } // 'SE24'/'SE2A' = 24 kHz; 'SE4A'/'SE8A'/'SE16' (fork) fall through to 48 kHz — correct
 const $ = s => document.querySelector(s);
 const logEl = $("#log");
 function log(msg, cls){ const t = new Date().toLocaleTimeString();
@@ -239,7 +239,8 @@ function parseMeta(b){
 function buildMeta(m){
   // start from the device's own block so fields this tool doesn't manage
   // (loop-length mode, and anything added later) survive an upload untouched
-  const b = m.raw ? Uint8Array.from(m.raw) : new Uint8Array(512);
+  const b = m.raw ? Uint8Array.from(m.raw)
+                  : new Uint8Array(layout.numSlots > 8 ? 1024 : 512);
   put32(b,0, layout.magic); put32(b,4, m.cur);
   const co = 8 + layout.numSlots*SLOT_SZ + 4;
   for (let s=0;s<layout.numSlots;s++){
@@ -298,7 +299,14 @@ function setConnected(on){
 }
 
 async function refresh(){
-  const b0 = await readBlock(0);
+  const nMetaBlocks = layout.numSlots > 8 ? 2 : 1;   // 2-block index past 8 songs
+  let b0 = await readBlock(0);
+  if (nMetaBlocks === 2){
+    const b1 = await readBlock(1);
+    const joined = new Uint8Array(512 * 2);
+    joined.set(b0, 0); joined.set(b1, 512);
+    b0 = joined;
+  }
   meta = parseMeta(b0);
   if (meta.magic !== layout.magic) log("Note: the index block looks unformatted/empty.", "err");
   render();
@@ -427,7 +435,12 @@ async function upload(slot, t, file){
       sl.trkContent[t] = 0;   // uploaded audio fills the whole track
       if (!sl.speed) sl.speed = 65536;
       if (isBase) sl.loopLen = blocks*SAMP_PER_BLK;
-      await writeBlock(0, buildMeta(meta));
+      { const mb = buildMeta(meta);
+        // MAGIC-LAST ordering (mirrors firmware M4b5): block 1 first, block 0
+        // (which holds the magic) last — an interrupted index write can never
+        // leave a torn half-new index; the old one stays authoritative.
+        if (layout.numSlots > 8) await writeBlock(1, mb.slice(512, 1024));
+        await writeBlock(0, mb.slice(0, 512)); }
       $("#status").textContent = "Saving to device…";
       await commitToDevice();                            // flush to NAND so it survives unplug
       $("#status").textContent = "Connected to SP-1";
