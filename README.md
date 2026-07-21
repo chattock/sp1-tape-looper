@@ -12,9 +12,7 @@ re-flashing the firmware.
 
 ## About this fork (16-song edition)
 
-This fork extends Technics' looper (chattock on GitHub) — author of both
-the upstream firmware and the dim-LED build this fork merges — into a
-16-song performance sketchbook:
+This fork extends the looper into a 16-song performance sketchbook:
 16 remembered songs in 4 banks (FUNCTION cycles banks, FUNCTION+Track
 jumps straight to one), per-song memory of tempo, chop window and
 fixed/variable mode, a global loop chop, press-accurate loop capture,
@@ -22,8 +20,7 @@ always-dim LEDs with an FN+PLAY double-tap toggle, a battery gauge
 while charging, and full-scale headphone volume. See CHANGELOG.md for
 the complete list, credits, and compatibility notes (the SE16 index is
 a format break from stock - export your songs first via the transfer
-page). This fork's transfer page (16-song aware):
-https://marcabisamra.github.io/sp1-tape-looper/
+page in docs/).
 
 Build it yourself: Zephyr v4.3.1 + SDK 0.17.4, apply
 zephyr-patches/uac2-windows-fs-feedback.patch to the Zephyr tree, then
@@ -31,69 +28,53 @@ zephyr-patches/uac2-windows-fs-feedback.patch to the Zephyr tree, then
 Flash: hold Track 1 + Track 4 while plugging in USB, then use
 solderless.engineering with sp1_looper.bin.
 
-## What's new in this release
+## Features
 
-- **48 kHz.** The firmware now records and plays at the full 48 kHz — earlier
-  releases ran at half rate for reliability, and that reliability work is done.
-- **Hands-free (latched) recording.** Hold a track button to start a take, then
-  let go — it keeps recording until you tap the same button again. Long takes
-  no longer mean holding a button down for their whole length.
-- **Two loop-length modes, switchable live.** *Variable* (the default): every
-  take is exactly as long as you play it and each track free-runs on its own
-  length — a 3-second phrase over a 17-second bed. *Fixed*: overdubs snap to a
-  whole multiple of the first track, so everything stays locked in sync (the
-  classic quick-sketch workflow). Hold **FUNCTION + PLAY** together for about a
-  second to switch; the lights show which mode you're in (all four blink
-  together = fixed, a 1→4 sweep = variable). The mode is remembered across
-  power-off.
-- **Aliasing-free tape-speed recording.** Recording follows the tape speed like
-  a real tape machine — slow it down or speed it up and that's baked into the
-  take — but the metallic/bitcrush artifact older builds produced when recording
-  at high speed is fixed (it now holds samples instead of stuffing silence).
-- **Loop transfer fixed.** The upload/download website could not connect to the
-  previous release (a USB receive bug on the device side, issue #1). It
-  connects now, and it understands independent track lengths.
-- **Works on Windows.** Earlier releases enumerated with a yellow triangle
-  ("this device cannot start", Code 10) under *Sound, video and game
-  controllers* — Windows' USB Audio 2.0 driver demands a feedback-endpoint
-  format that violates the USB spec, while Apple demands the spec format and
-  breaks on Windows'. The device now auto-detects which kind of host is
-  connected (within about half a second of the first playback) and speaks its
-  dialect, so one firmware works on Windows, macOS, iOS and Linux. If you
-  flashed an older build before, just flash this one and replug; if the
-  triangle persists on Windows, uninstall the *SP-1 Audio* entry in Device
-  Manager once and replug.
-- **No more phantom mutes.** Pressing or releasing a button could occasionally
-  register a ghost tap on a *lower-numbered* track (all five buttons share one
-  analogue sense line, and a moving finger sweeps through the other buttons'
-  bands on the way) — most visibly "recording track 4 muted track 1". Taps are
-  now attributed to the button your finger actually stayed on, so ghost taps
-  can't fire. Nothing about the gestures changed.
-- **iPhone / iPad friendly power claim.** The SP-1 runs from its own battery,
-  so it now asks the USB host for 100 mA instead of 250 mA — within what iOS
-  allows on a camera adapter. See *Connecting to phones* below.
-- **Rock-solid four-track engine.** A deep, measured overhaul of the audio
-  and storage engines: the flash write-cache is now drained in the background
-  between takes (its silent filling across a session was the root cause of
-  tracks cutting out more and more as you recorded), the refill scheduler is
-  strictly fair so no track can be starved by its siblings, the storage bus
-  protocol was fixed at the wire level (command spacing per the eMMC spec),
-  and the mixer was restructured to half its processor cost. Four tracks at
-  full 48 kHz, recording a fifth-take overdub at 1.5x speed, now runs with
-  zero dropouts.
-- Reliability throughout: full four-track recording at 48 kHz without crackle,
-  a scheduling bug that could make everything (lights included) slow down and
-  reboot the device, a battery drain (and stray sound) after power-off, and a
-  recording aliasing/bitcrush artifact are all fixed.
+What this fork adds on top of the upstream looper:
+
+- **16 songs in 4 banks**, each a fully remembered performance state — loops,
+  tempo/pitch, chop window and loop mode all persist per song across
+  power-off. Tap FUNCTION for the next song; hold FUNCTION and press a track
+  button to jump straight to that bank.
+- **Loop chop** — a live performance window over every playing track: shrink,
+  grow, slide or reset it from the FUNCTION layer (see Controls).
+  Non-destructive, and saved with the song.
+- **Press-accurate loop capture** — the stop lands on your press-down (the
+  variable release latency is gone, and the remaining constant is backdated
+  out of the take), so seams land where you play them.
+- **Two-layer loop-length mode** — the fixed/variable toggle now has a global
+  default plus a per-song memory (see Controls).
+- **Dimmable lights** — LEDs run dim by default; FUNCTION + double-tap PLAY
+  toggles full brightness.
+- **Battery gauge** — 1–4 LEDs while charging in standby, top LED blinking
+  until the charger reports full.
+- **Full-scale headphones** — the −19 dB output pad in the codec init is
+  gone; max headphone volume matches the stock firmware.
+- **Transfer page, fork edition** — 16-song aware, and WAVs round-trip at the
+  pitch you actually hear on the device (fixes the upstream export-pitch
+  bug): <https://marcabisamra.github.io/sp1-tape-looper/>
+
+Inherited from the upstream release — Technics' work, summarized (full notes
+in the [upstream repo](https://github.com/chattock/sp1-tape-looper)):
+
+- Full 48 kHz; four independent tracks per song, each looping at its own
+  length; hands-free latched recording that starts on the first sound.
+- Fixed and variable loop-length modes, switchable live.
+- Tape-style tempo/pitch rocker: 1 BPM per click, double-click for an exact
+  semitone.
+- Aliasing-free recording at any tape speed, on a deeply hardened
+  audio/storage engine (four tracks plus an overdub at 1.5× with zero
+  dropouts).
+- Works on Windows, macOS, iOS and Linux (the USB Audio 2.0 host quirk is
+  auto-detected); iPhone-friendly 100 mA power claim.
+- Phantom-tap-proof buttons (all five share one analogue sense line); MIDI
+  clock out on the sync jack; loops survive power-off and re-flashing.
 
 ## Loop transfer tool
 
 Move loops between your computer and the SP-1 as WAV or MP3:
 
-### → https://marcabisamra.github.io/sp1-tape-looper/
-
-(That's this fork's page — required for 16-song builds; the upstream page at
-chattock.github.io reads at most 8 songs and stamps WAVs at a flat rate.)
+### → https://chattock.github.io/sp1-tape-looper/
 
 Open it in Chrome or Edge with the SP-1 plugged in and powered on **normally**
 (no button combo — not the bootloader mode), click Connect, and pick the
@@ -122,11 +103,7 @@ device.
 ```
 sp1-tape-looper/
 ├── README.md               you are here
-├── CHANGELOG.md            what this fork adds/fixes, per release
 ├── sp1_looper.bin          the firmware — flash this one
-├── boards/                 the SP-1 board definition (makes the repo buildable)
-├── zephyr-patches/         patch for the Zephyr tree (Windows USB fix)
-├── docs/                   the loop-transfer web page (GitHub Pages)
 └── firmware/               full source code (for reading / rebuilding)
     ├── src/
     │   ├── main.c          the whole looper: audio engine, controls, power, USB
@@ -159,6 +136,7 @@ SP-1 custom firmware) — no soldering or opening the device required:
 > Note: loops you record survive re-flashing this firmware. The first time you
 > install it (coming from the stock firmware or an older release) it reformats
 > the loop storage once, so anything previously on the device is cleared.
+> Between 16-song builds of this fork, flashing preserves your songs.
 
 ---
 
@@ -182,6 +160,9 @@ SP-1 custom firmware) — no soldering or opening the device required:
 
 - **Every track loops at its own length.** Takes are never stretched, padded or
   snapped to another track's length.
+- **The stop is press-accurate** in this fork: the take ends on your
+  press-down rather than the release, and the button latency is backdated out
+  of the recording — tap the stop exactly on the "1".
 - The **first take of a song** also sets the beat grid for the LEDs and the
   MIDI clock; every take after that is free.
 - Only one track records at a time. Recording onto a non-empty track replaces
@@ -206,11 +187,32 @@ SP-1 custom firmware) — no soldering or opening the device required:
   80 BPM, so pitched material stays in key. A single press or a hold works
   exactly as before.
 
-### Songs
-- There are four song slots. The four side LEDs show which song is selected
-  (LED 1 = song 1 … LED 4 = song 4).
-- Tap the FUNCTION button to move to the next song. Each song remembers its own
-  tracks, lengths and tempo.
+### Loop chop (hold FUNCTION)
+- FUNCTION + FWD halves the playback window (down to 1/64th of the loop);
+  FUNCTION + RWD doubles it back toward the full loop.
+- FUNCTION + Vol +/− slides the window right/left.
+- FUNCTION + rocker double-click resets to the full loop.
+- Non-destructive: recorded audio, loop lengths, the beat grid and the MIDI
+  clock are untouched. The chop is saved with the song. In fixed mode it
+  slices the shared bar across all layers together; in variable mode each
+  track slices its own length.
+
+### Lights and battery
+- LEDs run dim by default; FUNCTION + double-tap PLAY toggles dim/full
+  (remembered across power-off).
+- Charging in standby shows a battery gauge: 1–4 LEDs for the level, with the
+  top LED blinking until the charger reports full. Mid-charge readings run
+  slightly optimistic; "full" is authoritative.
+
+### Songs and banks
+- There are 16 song slots, in 4 banks of 4. Each song remembers its own
+  tracks, lengths, tempo/pitch, chop window and loop mode — everything
+  restores when you come back to it, even across power-off.
+- Tap FUNCTION to move to the next song. Hold FUNCTION and press Track N to
+  jump straight to bank N (keep holding and press other tracks to surf).
+- The side LEDs show where you are with two lights: solid = position within
+  the bank; blinking = which bank. One light blinking alone means both landed
+  on the same LED (songs 1, 6, 11 and 16).
 
 ### Loop-length mode (FUNCTION + PLAY)
 - Hold **FUNCTION and PLAY together** for about a second to toggle between
@@ -221,11 +223,17 @@ SP-1 custom firmware) — no soldering or opening the device required:
 - The mode only affects the *next* take you record — tracks you've already laid
   down keep their lengths, so you can freely mix free-running and locked loops
   in one song. It's remembered across power-off.
+- In this fork the toggle is two-layer: on an **empty** song it sets your
+  global default (all empty songs follow it); on a **recorded** song it
+  changes only that song. A song's first take stamps the mode it was recorded
+  in, and deleting all its tracks returns it to the global default.
 
 ### Headphones
 - Plug headphones into the headphone jack (the one nearest the headphone
   symbol, not the second/sync jack). The speaker mutes automatically while
   headphones are connected and returns when you unplug them.
+- Headphone output runs at full scale in this fork (the upstream −19 dB pad
+  was removed) — mind your ears at maximum volume.
 
 ### MIDI clock out (the second / sync jack)
 - The sync jack sends a MIDI clock to external gear, locked to the looper's
@@ -288,8 +296,8 @@ Threads, in priority order:
   recording out and reads the playing tracks ahead of the playhead.
 
 Storage. Tracks are independent; there is no mixdown. Each track has its own
-fixed region on the flash (block 0 holds a small metadata header, then four
-track regions per song, for four songs) and its own length in that header.
+fixed region on the flash (blocks 0–1 hold the song index, then four
+track regions per song, for 16 songs) and its own length in that header.
 Recording a track writes only that track's audio to its own region; the others
 are never rewritten, only read. Mixing happens live in the audio engine and is
 never stored. The flash is driven through the nRF's hardware SPI engine with a
@@ -317,7 +325,9 @@ immediately actionable.
 ## 6. Building from source
 
 The firmware is a [Zephyr](https://www.zephyrproject.org/) application built
-against a custom board definition for the SP-1. With a Zephyr workspace and the
+against a custom board definition for the SP-1 (it ships in this repo under
+`boards/` — the build command in the fork section above uses it via
+`BOARD_ROOT`). With a Zephyr workspace and the
 nRF SDK set up, point a `west build` at the `firmware/` folder, then convert
 the resulting ELF to a bootloader-friendly `.bin` (the application is linked to
 load at `0x20000`).
