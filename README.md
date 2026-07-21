@@ -12,7 +12,9 @@ re-flashing the firmware.
 
 ## About this fork (16-song edition)
 
-This fork extends the looper into a 16-song performance sketchbook:
+This fork extends Technics' looper (chattock on GitHub) — author of both
+the upstream firmware and the dim-LED build this fork merges — into a
+16-song performance sketchbook:
 16 remembered songs in 4 banks (FUNCTION cycles banks, FUNCTION+Track
 jumps straight to one), per-song memory of tempo, chop window and
 fixed/variable mode, a global loop chop, press-accurate loop capture,
@@ -20,7 +22,8 @@ always-dim LEDs with an FN+PLAY double-tap toggle, a battery gauge
 while charging, and full-scale headphone volume. See CHANGELOG.md for
 the complete list, credits, and compatibility notes (the SE16 index is
 a format break from stock - export your songs first via the transfer
-page in docs/).
+page). This fork's transfer page (16-song aware):
+https://marcabisamra.github.io/sp1-tape-looper/
 
 Build it yourself: Zephyr v4.3.1 + SDK 0.17.4, apply
 zephyr-patches/uac2-windows-fs-feedback.patch to the Zephyr tree, then
@@ -74,7 +77,10 @@ in the [upstream repo](https://github.com/chattock/sp1-tape-looper)):
 
 Move loops between your computer and the SP-1 as WAV or MP3:
 
-### → https://chattock.github.io/sp1-tape-looper/
+### → https://marcabisamra.github.io/sp1-tape-looper/
+
+(That's this fork's page — required for 16-song builds; the upstream page at
+chattock.github.io reads at most 8 songs and stamps WAVs at a flat rate.)
 
 Open it in Chrome or Edge with the SP-1 plugged in and powered on **normally**
 (no button combo — not the bootloader mode), click Connect, and pick the
@@ -103,7 +109,11 @@ device.
 ```
 sp1-tape-looper/
 ├── README.md               you are here
+├── CHANGELOG.md            what this fork adds/fixes, per release
 ├── sp1_looper.bin          the firmware — flash this one
+├── boards/                 the SP-1 board definition (makes the repo buildable)
+├── zephyr-patches/         patch for the Zephyr tree (Windows USB fix)
+├── docs/                   the loop-transfer web page (GitHub Pages)
 └── firmware/               full source code (for reading / rebuilding)
     ├── src/
     │   ├── main.c          the whole looper: audio engine, controls, power, USB
