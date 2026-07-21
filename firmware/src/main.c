@@ -490,7 +490,9 @@ static void hp_codec_init(int pllcfg)
 	 * generated at exactly 48 kHz, the nRF and TAS2505 follow as slaves.
 	 * Every value below is from github.com/timknapen/SP-1-dev/wiki/I2C, the
 	 * config proven to play headphone audio on this exact hardware. The ONLY
-	 * deviation: mixer volume -19 dB instead of his example's full scale. */
+	 * deviation was mixer volume -19 dB; RESTORED to his full-scale 0x00 —
+	 * the -19 dB pad capped max headphone loudness ~1/9th of stock. The
+	 * digital path already soft-limits before the codec, so 0 dB is safe. */
 	(void)tpw(0x1508, 0x10);   /* PLL Control 3                         */
 	(void)tpw(0x1504, 0x80);   /* PLL Division Fractional Byte 2        */
 	(void)tpw(0x1505, 0x3E);   /* PLL Division Integer                  */
@@ -517,8 +519,8 @@ static void hp_codec_init(int pllcfg)
 	(void)tpw(0x2609, 0x4C);   /* SRC Output Sample Rate                */
 	(void)tpw(0x2A01, 0x0C);   /* ASP Receive Enable                    */
 	(void)tpw(0x240E, 0x01);   /* Equalizer Input Mute Control          */
-	(void)tpw(0x2301, 0x13);   /* Mixer A vol (-19 dB; Tim's ex. = 0x00)*/
-	(void)tpw(0x2303, 0x13);   /* Mixer B vol                           */
+	(void)tpw(0x2301, 0x00);   /* Mixer A vol 0 dB (Tim's full scale)   */
+	(void)tpw(0x2303, 0x00);   /* Mixer B vol                           */
 	(void)tpw(0x1101, 0x96);   /* power up the codec                    */
 	k_msleep(10);              /* HP amp operational after 10 ms        */
 	(void)tpw(0x1121, 0x41);   /* Headset switch control                */
@@ -526,8 +528,8 @@ static void hp_codec_init(int pllcfg)
 	(void)tpw(0x1129, 0x01);   /* Headset clamp disable                 */
 	(void)tpw(0x2001, 0x0D);   /* HP Control: mute all                  */
 	(void)tpw(0x1F06, 0x84);   /* DAC Control 2                         */
-	(void)tpw(0x2301, 0x13);   /* Mixer A vol again                     */
-	(void)tpw(0x2303, 0x13);   /* Mixer B vol again                     */
+	(void)tpw(0x2301, 0x00);   /* Mixer A vol again                     */
+	(void)tpw(0x2303, 0x00);   /* Mixer B vol again                     */
 	(void)tpw(0x1B73, 0xC2);   /* Tip Sense Control                     */
 	(void)tpw(0x1B75, 0x9F);   /* Mic detect control 1                  */
 	(void)tpw(0x2001, 0x01);   /* UNMUTE headphones                     */
