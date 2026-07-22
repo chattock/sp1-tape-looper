@@ -4,6 +4,23 @@ All notable changes in this fork of Technics' sp1-tape-looper
 (chattock on GitHub).
 Base: upstream commit c60941c (2026-07-14).
 
+## [Unreleased]
+
+### Added
+- Tapped grid (phase 1): tap FUNCTION 4+ times to give a song a tempo grid —
+  first tap = downbeat, lights become a metronome, the bank light blinks on
+  the beat, MIDI clock locks to the tapped tempo (runs while stopped). Tempo
+  persists per song in a self-validating flash-block-2 extension (no format
+  break; the transfer page is unaffected). Hold FUNCTION after tapping to
+  clear. Groundwork for quantized capture (phase 2).
+
+### Changed
+- Navigation: FUNCTION-tap no longer advances songs. Hold FUNCTION and press
+  a track to jump to its bank; press the same track again to step through
+  that bank's songs. FN-taps are the tap-tempo surface (1-3 taps are inert).
+- Stopped transport: tracks with content now read solid instead of freezing
+  dark like an empty track.
+
 ## [1.1.0] - 2026-07-22
 
 ### Added

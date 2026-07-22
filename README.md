@@ -31,9 +31,14 @@ solderless.engineering with sp1_looper.bin.
 What this fork adds on top of the upstream looper:
 
 - **16 songs in 4 banks**, each a fully remembered performance state — loops,
-  tempo/pitch, chop window, loop mode and mutes all persist per song across
-  power-off. Tap FUNCTION for the next song; hold FUNCTION and press a track
-  button to jump straight to that bank.
+  tempo/pitch, chop window, loop mode, mutes and grid tempo all persist per
+  song across power-off. Hold FUNCTION and press a track button to jump to
+  that bank; press the same track again to step through its four songs — all
+  16 songs under one hold.
+- **Tapped grid** — tap FUNCTION 4+ times along any music and that song gets
+  a tempo grid: first tap marks the downbeat, the lights become a metronome,
+  the bank light blinks on the beat, and the sync jack sends MIDI clock at
+  your tapped tempo (even while stopped). Groundwork for quantized capture.
 - **Loop chop** — a live performance window over every playing track: shrink,
   grow, slide or reset it from the FUNCTION layer (see Controls).
   Non-destructive, and saved with the song.
@@ -215,11 +220,30 @@ SP-1 custom firmware) — no soldering or opening the device required:
 - There are 16 song slots, in 4 banks of 4. Each song remembers its own
   tracks, lengths, tempo/pitch, chop window, loop mode and mutes — everything
   restores when you come back to it, even across power-off.
-- Tap FUNCTION to move to the next song. Hold FUNCTION and press Track N to
-  jump straight to bank N (keep holding and press other tracks to surf).
+- Hold FUNCTION and press Track N to jump to bank N; press Track N again
+  (still holding) to step through that bank's four songs, wrapping. Other
+  tracks hop to their banks — all 16 songs under one FUNCTION hold.
+- Tapping FUNCTION no longer changes songs — taps are TAP TEMPO now (below).
 - The side LEDs show where you are with two lights: solid = position within
   the bank; blinking = which bank. One light blinking alone means both landed
   on the same LED (songs 1, 6, 11 and 16).
+
+### Tap tempo — the grid (FUNCTION taps)
+
+- Tap FUNCTION **4 or more times** in rhythm and the song gets a grid: tempo
+  from your tap spacing, the downbeat from your **first tap** (start tapping
+  on a "1"). 1–3 taps do nothing at all. More taps keep refining the tempo.
+- The lights show it: on an empty song the track row runs a 1-2-3-4 metronome
+  chase; on a loaded song the beat pulse follows the tapped tempo; the bank
+  light blinks on the beat instead of its usual 2 Hz.
+- The sync jack sends MIDI clock at the tapped tempo, even while stopped —
+  tap along to your decks and the SP-1 clocks your gear to them.
+- Hold FUNCTION for ~1 s right after tapping to **clear** the grid (that hold
+  can never power the device off).
+- The grid's tempo is remembered per song across power-off; its downbeat
+  re-anchors to your next tap run. Bars are fixed 4/4; accepted range is
+  roughly 50–200 BPM. The tape speed is untouched — the grid is the
+  metronome, not the varispeed.
 
 ### Loop-length mode (FUNCTION + PLAY)
 - Hold **FUNCTION and PLAY together** for about a second to toggle between
