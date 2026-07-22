@@ -857,9 +857,13 @@ struct meta_blk {
 	                            * repaired in xfer_commit like fixed_len. */
 	uint8_t  chop[NUM_SLOTS][2]; /* M7a: per-song chop window: [0]=div (0/1=none,
 	                              * 2..64), [1]=offset. Zeros = unchopped. */
-	uint8_t  song_mode[NUM_SLOTS]; /* M7c: recorded-with mode stamp: 0 = unset
-	                                * (inherit the global preference),
-	                                * 1 = variable, 2 = fixed. */
+	uint8_t  song_mode[NUM_SLOTS]; /* LOW nibble, M7c: recorded-with mode stamp:
+	                                * 0 = unset (inherit the global preference),
+	                                * 1 = variable, 2 = fixed.
+	                                * HIGH nibble, M7-r4: per-track MUTE bits
+	                                * (bit4 = track 1 .. bit7 = track 4) — a
+	                                * song's muted tracks come back muted. Old
+	                                * indexes read 0 = no mutes; same 'SE16'. */
 };
 /* The index must fit its reserved blocks: 16 songs = 972 of 1024 bytes — the
  * exact maximum of a 2-block index (17 would need three). Compile error here
@@ -1234,6 +1238,7 @@ static void looper_audio_block(int16_t *s)
 			g_meta.slot[g_slot].trk_len[i] = 0;
 			g_meta.slot[g_slot].trk_start[i] = 0;
 			g_meta.trk_content[g_slot][i] = 0;   /* keep the on-flash block self-consistent */
+			g_meta.song_mode[g_slot] &= (uint8_t)~(uint8_t)(0x10u << i); /* M7-r4: unmute */
 		}
 		int any = 0;
 		for (int k = 0; k < NTRK; k++)
@@ -1324,8 +1329,9 @@ static void looper_audio_block(int16_t *s)
 					tempo_finish();         /* set the detected beat grid + BPM */
 					if (g_slot < NUM_SLOTS) {
 						g_meta.slot[g_slot].loop_len = g_loop_len;
-						g_meta.song_mode[g_slot] =
-							g_fixed_len ? 2u : 1u; /* M7c stamp */
+						g_meta.song_mode[g_slot] = (uint8_t)
+							((g_meta.song_mode[g_slot] & 0xF0u) |
+							 (g_fixed_len ? 2u : 1u)); /* M7c stamp */
 						g_meta_save_req = 1;
 					}
 				}
@@ -1432,6 +1438,8 @@ static void looper_audio_block(int16_t *s)
 		trk[i].r_w = 0; trk[i].r_r = 0; trk[i].flush_blk = 0;
 		trk[i].flush_mod = MAX_LOOP_BLOCKS;
 		trk[i].rec_count = 0; trk[i].rec_silence = 0; trk[i].rec_target = 0; trk[i].muted = 0;
+		if (g_slot < NUM_SLOTS)   /* M7-r4: a fresh take is audible — unmute */
+			g_meta.song_mode[g_slot] &= (uint8_t)~(uint8_t)(0x10u << i);
 		trk[i].wait_peak = 0; trk[i].wait_ticks = 0;
 		/* NOTE: len_blocks/start_blk are NOT reset here -- they are set when the
 		 * first sound lands (TS_REC). Leaving them intact means a re-record that
@@ -1480,7 +1488,10 @@ static void looper_audio_block(int16_t *s)
 			uint8_t pres = (g_slot < NUM_SLOTS) ? g_meta.slot[g_slot].present[i] : 0;
 			trk[i].state = pres ? TS_PLAY : TS_EMPTY;
 			trk[i].p_w = 0;
-			trk[i].rec_silence = 0; trk[i].rec_target = 0; trk[i].rec_count = 0; trk[i].muted = 0;
+			trk[i].rec_silence = 0; trk[i].rec_target = 0; trk[i].rec_count = 0;
+			/* M7-r4: the song's saved mutes come back with it */
+			trk[i].muted = (pres && g_slot < NUM_SLOTS &&
+			                (g_meta.song_mode[g_slot] & (0x10u << i))) ? 1u : 0u;
 			/* SEGMENT: restore this track's own length + phase anchor (older saves
 			 * with trk_len==0 fall back to the base length = one segment). */
 			if (pres && g_slot < NUM_SLOTS) {
@@ -1981,14 +1992,16 @@ static void xfer_commit(void)
 				if (cd < 1u || cd > 64u) cd = 1u;
 				uint32_t co = g_meta.chop[g_slot][1]; if (co >= cd) co = 0u;
 				g_chop_div = cd; g_chop_off = co;
-				g_fixed_len = g_meta.song_mode[g_slot]
-					    ? (g_meta.song_mode[g_slot] == 2u ? 1u : 0u)
+				g_fixed_len = (g_meta.song_mode[g_slot] & 0x0Fu)
+					    ? ((g_meta.song_mode[g_slot] & 0x0Fu) == 2u ? 1u : 0u)
 					    : g_mode_pref;
 			}
 			for (int s = 0; s < NUM_SLOTS; s++)
 				for (int t = 0; t < NTRK; t++)
 					if (!g_xfer_dirty[s][t])
 						g_meta.trk_content[s][t] = keep[s][t];
+					else   /* M7-r4: freshly uploaded audio is audible */
+						g_meta.song_mode[s] &= (uint8_t)~(uint8_t)(0x10u << t);
 			if (memcmp(mblk, &g_meta, sizeof(g_meta)) != 0) {
 				memset(mblk, 0, sizeof(mblk));
 				memcpy(mblk, &g_meta, sizeof(g_meta));
@@ -4053,8 +4066,8 @@ static void jump_to_slot(uint32_t ns)
 		uint32_t cd = g_meta.chop[ns][0]; if (cd < 1u || cd > 64u) cd = 1u;
 		uint32_t co = g_meta.chop[ns][1]; if (co >= cd) co = 0u;
 		g_chop_div = cd; g_chop_off = co;
-		g_fixed_len = g_meta.song_mode[ns]
-			    ? (g_meta.song_mode[ns] == 2u ? 1u : 0u) : g_mode_pref;
+		g_fixed_len = (g_meta.song_mode[ns] & 0x0Fu)
+			    ? ((g_meta.song_mode[ns] & 0x0Fu) == 2u ? 1u : 0u) : g_mode_pref;
 	}
 	g_slot_switch_req = 1;
 	g_meta_save_req = 1;
@@ -4269,8 +4282,8 @@ int main(void)
 			uint32_t cd = g_meta.chop[g_slot][0]; if (cd < 1u || cd > 64u) cd = 1u;
 			uint32_t co = g_meta.chop[g_slot][1]; if (co >= cd) co = 0u;
 			g_chop_div = cd; g_chop_off = co;
-			g_fixed_len = g_meta.song_mode[g_slot]
-				    ? (g_meta.song_mode[g_slot] == 2u ? 1u : 0u)
+			g_fixed_len = (g_meta.song_mode[g_slot] & 0x0Fu)
+				    ? ((g_meta.song_mode[g_slot] & 0x0Fu) == 2u ? 1u : 0u)
 				    : g_mode_pref;
 		}
 		g_slot_switch_req = 1;
@@ -4409,8 +4422,9 @@ int main(void)
 							     g_meta.slot[g_slot].present[k]))
 								has = 1;
 						if (has && g_slot < NUM_SLOTS) {
-							g_meta.song_mode[g_slot] =
-								g_fixed_len ? 2u : 1u;
+							g_meta.song_mode[g_slot] = (uint8_t)
+								((g_meta.song_mode[g_slot] & 0xF0u) |
+								 (g_fixed_len ? 2u : 1u));
 						} else {
 							g_mode_pref = g_fixed_len;
 							g_meta.fixed_len = g_fixed_len;
@@ -4776,6 +4790,12 @@ int main(void)
 						trk[ti].muted = 0;
 					} else {
 						trk[ti].muted = !trk[ti].muted;  /* tap -> mute */
+						if (g_slot < NUM_SLOTS) {  /* M7-r4: remember per song */
+							uint8_t mb = (uint8_t)(0x10u << ti);
+							if (trk[ti].muted) g_meta.song_mode[g_slot] |= mb;
+							else               g_meta.song_mode[g_slot] &= (uint8_t)~mb;
+							g_meta_save_req = 1;
+						}
 						tap_deadline[ti] = tnow + DTAP_GAP_MS;
 					}
 				} else if (b == TRK_PLAY) {
