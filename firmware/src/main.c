@@ -5018,7 +5018,8 @@ int main(void)
 				int ti = (int)committed;
 				int empt = (trk[ti].state == TS_EMPTY &&
 					    !(g_slot < NUM_SLOTS && g_meta.slot[g_slot].present[ti]));
-				if (!armed_press[ti] && g_rec_track < 0 &&
+				if (!armed_press[ti] && ti != stop_tap_trk &&
+				    g_rec_track < 0 &&
 				    trk[ti].state != TS_DONE &&
 				    k_uptime_get() - press_t[ti] >= (empt ? 100 : HOLD_RECORD_MS)) {
 					/* g_rec_track < 0: one take at a time — while a latched
@@ -5026,7 +5027,14 @@ int main(void)
 					 * arm, no forced g_playing). state != TS_DONE: a hold on
 					 * a just-auto-finalized take (user trying to stop it)
 					 * must not silently arm a latched re-record that would
-					 * overwrite the take it is still flushing. */
+					 * overwrite the take it is still flushing.
+					 * ti != stop_tap_trk: the press that STOPPED a take is
+					 * SPENT — R1 stops fire at press-down, so the finger is
+					 * still on the button while the take flushes; once back
+					 * in TS_PLAY the TS_DONE guard no longer covers it and
+					 * a deliberate 200-400 ms stop press re-armed a
+					 * re-record over the fresh loop. Arming needs a FRESH
+					 * press (latch clears at episode end). */
 					armed_press[ti] = 1;
 					tap_deadline[ti] = 0;            /* a hold cancels a pending single-tap */
 					g_arm_req[ti] = 1;
