@@ -874,6 +874,26 @@ static struct meta_blk   g_meta;
 static volatile uint32_t g_slot;
 static volatile int      g_slot_switch_req;   /* main -> audio: reload tracks for the new slot */
 static volatile int      g_meta_save_req;     /* -> streamer: persist g_meta to eMMC */
+/* ---- TAPPED GRID (M8a): per-song tempo grid taught by FN-taps ----
+ * 4+ taps in rhythm set it (first tap = downbeat); independent of the tape.
+ * bpm persists in flash block 2 — unused spare, self-validating 'GRD1' tag +
+ * sum, so NO format break, the site never touches it (blocks 0-1 only), and
+ * older firmware simply ignores it. Phase is session-only by design: after
+ * boot it re-anchors to the next tap run (or provisionally to "now"). */
+#define GRID_EXT_BLOCK  2u
+#define GRID_EXT_MAGIC  0x31445247u   /* 'GRD1' */
+struct grid_ext {
+	uint32_t magic;
+	uint16_t bpm_q8[NUM_SLOTS];   /* Q8.8 BPM per song, 0 = no grid */
+	uint16_t sum;                 /* 16-bit sum of bpm_q8[] (torn-write guard) */
+};
+BUILD_ASSERT(sizeof(struct grid_ext) <= 512, "grid ext must fit one block");
+static volatile uint16_t g_grid_bpm_q8[NUM_SLOTS];
+static volatile uint64_t g_grid_anchor;       /* sample-clock frame of a downbeat */
+static volatile uint32_t g_grid_beat_frames;  /* I2S frames per grid beat (current song) */
+static volatile uint64_t g_grid_next_tick;    /* next 24-PPQN tick, sample-clock domain */
+static volatile uint8_t  g_grid_active;       /* current song has a live grid */
+static volatile uint8_t  g_grid_save_req;     /* control -> streamer: write block 2 */
 /* PASS 2 forensics (printed + zeroed each diag window): blocks delivered per
  * track, dead-history snaps per track, and round aborts (rec yield / read fail). */
 static volatile uint32_t g_p2blk[4];
@@ -1678,7 +1698,7 @@ static void looper_audio_block(int16_t *s)
 				 * g_midi_div is precomputed when the tempo is detected) -- no
 				 * runtime divide here. The beat-phase display moved to once-per-
 				 * block (after this loop); it only drives the LED + diag. */
-				if (g_midi_div && ++g_midi_cnt >= g_midi_div) {
+				if (!g_grid_active && g_midi_div && ++g_midi_cnt >= g_midi_div) {
 					g_midi_cnt = 0; g_midi_clk_produced++;
 				}
 			}
@@ -1829,6 +1849,17 @@ static void looper_audio_block(int16_t *s)
 		}
 	}
 	g_sample_clock += BLK_FRAMES;
+	/* TAPPED GRID: MIDI clock in wall (I2S) time, produced block-wise, even
+	 * with the transport stopped — the grid is the decks' clock, not the
+	 * tape's. Bounded catch-up: a block is ~5 ms, ticks are >=10 ms. */
+	if (g_grid_active && g_grid_beat_frames) {
+		uint32_t gtick = g_grid_beat_frames / 24u;
+		if (!gtick) gtick = 1u;
+		while (g_sample_clock >= g_grid_next_tick) {
+			g_grid_next_tick += gtick;
+			g_midi_clk_produced++;
+		}
+	}
 	/* Beat-phase display computed ONCE per block now (was per loop-sample). It
 	 * only feeds the LED + MIDI-grid diag, so block granularity (~5 ms) is plenty
 	 * -- this lifts three runtime divides off the per-sample hot path. */
@@ -2404,6 +2435,16 @@ static void streamer_thread(void *a, void *b, void *c)
 			(void)meta_write_blocks(metabuf);
 		}
 	}
+	/* M8a: grid extension (block 2). Bad tag/sum -> all zeros = no grids. */
+	if (g_emmc_ready && emmc_read_blocks(GRID_EXT_BLOCK, metabuf, 1)) {
+		struct grid_ext *ge = (struct grid_ext *)metabuf;
+		uint16_t gsum = 0;
+		for (uint32_t gi = 0; gi < NUM_SLOTS; gi++)
+			gsum = (uint16_t)(gsum + ge->bpm_q8[gi]);
+		if (ge->magic == GRID_EXT_MAGIC && gsum == ge->sum)
+			for (uint32_t gi = 0; gi < NUM_SLOTS; gi++)
+				g_grid_bpm_q8[gi] = ge->bpm_q8[gi];
+	}
 	g_slot = g_meta.cur_slot;
 	g_mode_pref = g_meta.fixed_len ? 1u : 0u;   /* M7c: global mode preference */
 	g_fixed_len = g_mode_pref;                  /* effective refined when the
@@ -2445,6 +2486,22 @@ static void streamer_thread(void *a, void *b, void *c)
 				memset(metabuf, 0, sizeof(metabuf));
 				memcpy(metabuf, &g_meta, sizeof(g_meta));
 				(void)meta_write_blocks(metabuf);
+				work = true;
+			}
+		}
+		if (g_grid_save_req) {                       /* persist grids (block 2) */
+			g_grid_save_req = 0;
+			if (g_emmc_ready) {
+				memset(metabuf, 0, 512);
+				struct grid_ext *ge = (struct grid_ext *)metabuf;
+				ge->magic = GRID_EXT_MAGIC;
+				uint16_t gsum = 0;
+				for (uint32_t gi = 0; gi < NUM_SLOTS; gi++) {
+					ge->bpm_q8[gi] = g_grid_bpm_q8[gi];
+					gsum = (uint16_t)(gsum + ge->bpm_q8[gi]);
+				}
+				ge->sum = gsum;
+				(void)emmc_write_blocks(GRID_EXT_BLOCK, metabuf, 1);
 				work = true;
 			}
 		}
@@ -3785,14 +3842,24 @@ static void show_song_leds(void)
 	uint32_t pos  = slot & 3u;              /* slot % 4 */
 	uint32_t bank = slot >> 2;              /* 0..3 */
 	uint32_t t    = k_uptime_get_32();
+	/* Bank-blink phase: fixed ~2 Hz normally; with a TAPPED GRID the blink
+	 * locks to the beat (on for the first half of each beat, off for the
+	 * second — 50% duty keeps "which bank" as readable as the 2 Hz square,
+	 * unlike the brief 1/8-beat track pulses). The whole face keeps time. */
+	int blink = ((t / 250u) & 1u) == 0u;
+	if (g_grid_active && g_grid_beat_frames) {
+		uint64_t ph = g_sample_clock - g_grid_anchor;
+		blink = ((uint32_t)(ph % g_grid_beat_frames) <
+		         g_grid_beat_frames / 2u);
+	}
 	for (int i = 0; i < NUM_LEDS; i++) {
 		int on;
 		if ((uint32_t)i == pos && pos == bank)
-			on = ((t / 250u) & 1u) == 0u;   /* both roles: same ~2 Hz blink */
+			on = blink;                     /* both roles: same blink */
 		else if ((uint32_t)i == pos)
 			on = 1;                         /* position: solid */
 		else if ((uint32_t)i == bank)
-			on = ((t / 250u) & 1u) == 0u;   /* bank: ~2 Hz blink */
+			on = blink;                     /* bank: blink */
 		else
 			on = 0;
 		on ? led_on(i) : led_off(i);
@@ -3863,7 +3930,24 @@ static void led_service(void)
 			((uint32_t)i == pos) ? track_led_on(i) : track_led_off(i);
 	} else {
 		int on_beat = (g_beat_phase < (BEAT_SAMPLES_L / 8u));
-		for (int i = 0; i < NUM_TRACK_LEDS; i++) {
+		int gbeat = -1;            /* tapped grid: beat 0..3 within the bar */
+		if (g_grid_active && g_grid_beat_frames) {
+			uint64_t ph = g_sample_clock - g_grid_anchor;
+			uint32_t bf = g_grid_beat_frames;
+			gbeat  = (int)((ph / bf) & 3u);
+			on_beat = ((uint32_t)(ph % bf) < bf / 8u);  /* grid outranks
+			                                             * the take beat */
+		}
+		int loaded = 0;
+		for (int i = 0; i < NUM_TRACK_LEDS; i++)
+			if (trk[i].state != TS_EMPTY) loaded = 1;
+		if (gbeat >= 0 && !loaded) {
+			/* gridded song, nothing recorded yet: 1-2-3-4 metronome
+			 * chase (downbeat = LED 1) — the tapped grid made visible. */
+			for (int i = 0; i < NUM_TRACK_LEDS; i++)
+				((i == gbeat) && on_beat) ? track_led_on(i)
+				                          : track_led_off(i);
+		} else for (int i = 0; i < NUM_TRACK_LEDS; i++) {
 			uint8_t st = trk[i].state;
 			if (st == TS_REC || st == TS_DONE)      track_led_on(i);
 			else if (st == TS_ARMED)                (on_beat ? track_led_on(i) : track_led_off(i));
@@ -4071,6 +4155,17 @@ static void jump_to_slot(uint32_t ns)
 		g_chop_div = cd; g_chop_off = co;
 		g_fixed_len = (g_meta.song_mode[ns] & 0x0Fu)
 			    ? ((g_meta.song_mode[ns] & 0x0Fu) == 2u ? 1u : 0u) : g_mode_pref;
+		/* M8a: the song's grid tempo follows it; phase re-anchors
+		 * provisionally to "now" (a fresh tap run re-anchors properly). */
+		if (g_grid_bpm_q8[ns]) {
+			g_grid_beat_frames = (uint32_t)((48000ULL * 60u * 256u) /
+			                                g_grid_bpm_q8[ns]);
+			g_grid_anchor = g_sample_clock;
+			g_grid_next_tick = g_sample_clock;
+			g_grid_active = 1;
+		} else {
+			g_grid_active = 0;
+		}
 	}
 	g_slot_switch_req = 1;
 	g_meta_save_req = 1;
@@ -4288,11 +4383,21 @@ int main(void)
 			g_fixed_len = (g_meta.song_mode[g_slot] & 0x0Fu)
 				    ? ((g_meta.song_mode[g_slot] & 0x0Fu) == 2u ? 1u : 0u)
 				    : g_mode_pref;
+			if (g_grid_bpm_q8[g_slot]) {   /* M8a: boot grid tempo */
+				g_grid_beat_frames = (uint32_t)((48000ULL * 60u * 256u) /
+				                                g_grid_bpm_q8[g_slot]);
+				g_grid_anchor = g_sample_clock;
+				g_grid_next_tick = g_sample_clock;
+				g_grid_active = 1;
+			}
 		}
 		g_slot_switch_req = 1;
 	}
 
 	int64_t press_start = -1;
+	int64_t tap_first = 0, tap_last = 0;  /* M8a FN-tap tempo run */
+	int      tap_n = 0;
+	uint64_t tap_first_s = 0;             /* sample-clock at first tap */
 	int64_t combo_start = -1;   /* FUNCTION+PLAY: when the combo was first seen */
 	uint8_t combo_fired = 0;    /* mode already toggled this combo press */
 	uint8_t combo_seen  = 0;    /* PLAY was seen at all during this FUNCTION press */
@@ -4479,10 +4584,19 @@ int main(void)
 				if (tb >= TRK_1 && tb <= TRK_4) {
 					if (tb == bj_cand) bj_cnt++;
 					else { bj_cand = tb; bj_cnt = 1; }
-					if (bj_cnt >= 3 && (int)tb != bj_fired) {
+					if (bj_cnt == 3) {   /* exact edge: once per press */
 						combo_seen = 1;      /* never a power-off now */
 						bj_fired = (int)tb;
-						jump_to_slot((uint32_t)tb * 4u);
+						uint32_t bank = (uint32_t)tb * 4u;
+						/* M8a: pressing the SAME track again steps
+						 * through that bank's four songs; another
+						 * track jumps to its bank. All 16 songs
+						 * under one FUNCTION hold (FN-tap is tap
+						 * tempo now, not next-song). */
+						if (g_slot / 4u == (uint32_t)tb)
+							jump_to_slot(bank + ((g_slot % 4u) + 1u) % 4u);
+						else
+							jump_to_slot(bank);
 					}
 					led_service();           /* live song display mid-hold */
 					k_msleep(25);
@@ -4553,6 +4667,21 @@ int main(void)
 
 			int64_t held = k_uptime_get() - press_start;
 
+			/* M8a: a HOLD right after a tap run = CLEAR this song's grid.
+			 * The run also spends the press — never a power-off. */
+			if (tap_n > 0 && k_uptime_get() - tap_last < 1500) {
+				if (held >= 1000 && !combo_seen) {
+					g_grid_bpm_q8[g_slot] = 0;
+					g_grid_active = 0;
+					g_grid_save_req = 1;
+					tap_n = 0;
+					combo_seen = 1;      /* spend the press */
+				}
+				led_service();
+				k_msleep(25);
+				continue;
+			}
+
 			if (held >= HOLD_MS_TO_OFF)
 				power_off();             /* never returns */
 
@@ -4572,7 +4701,38 @@ int main(void)
 
 		if (press_start >= 0) {                  /* just released */
 			if (!combo_seen &&
-			    (k_uptime_get() - press_start) < 600) next_slot();   /* short tap -> next song */
+			    (k_uptime_get() - press_start) < 600) {
+				/* M8a: FN-tap = TAP TEMPO (navigation moved into the
+				 * FN hold). 1-3 taps: nothing. 4+ taps in steady
+				 * rhythm: commit the grid — tempo from mean spacing,
+				 * downbeat = the first tap. Every further tap refines. */
+				int64_t tnow = k_uptime_get();
+				uint64_t snow = g_sample_clock;
+				if (tap_n > 0 && (tnow - tap_last > 1500 ||
+				                  tnow - tap_last < 200)) tap_n = 0;
+				if (tap_n > 1) {
+					int64_t mean = (tap_last - tap_first) / (tap_n - 1);
+					int64_t dvi = (tnow - tap_last) - mean;
+					if (dvi < 0) dvi = -dvi;
+					if (dvi * 5 > mean) tap_n = 0;  /* >20% off: new run */
+				}
+				if (tap_n == 0) { tap_first = tnow; tap_first_s = snow; }
+				tap_last = tnow; tap_n++;
+				if (tap_n >= 4) {
+					int64_t mean = (tap_last - tap_first) / (tap_n - 1);
+					if (mean >= 300 && mean <= 1200) {  /* 50..200 BPM */
+						uint32_t bpmq8 =
+							(uint32_t)((60000LL << 8) / mean);
+						g_grid_bpm_q8[g_slot] = (uint16_t)bpmq8;
+						g_grid_beat_frames = (uint32_t)
+							((48000ULL * 60u * 256u) / bpmq8);
+						g_grid_anchor = tap_first_s;
+						g_grid_next_tick = g_sample_clock;
+						g_grid_active = 1;
+						g_grid_save_req = 1;
+					}
+				}
+			}
 			all_off();
 			/* If the combo was ended by lifting FUNCTION FIRST while PLAY is
 			 * still down, swallow that trailing PLAY until it is released, so
