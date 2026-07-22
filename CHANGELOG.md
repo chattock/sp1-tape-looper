@@ -14,10 +14,26 @@ Base: upstream commit c60941c (2026-07-14).
   break; the transfer page is unaffected). Hold FUNCTION after tapping to
   clear. Groundwork for quantized capture (phase 2).
 
+- Quantized capture on gridded songs: the first take punches in the moment
+  you arm and places the downbeat; stops snap to the last whole beat (no
+  silence in loops, ever; near-miss stops run on to the line with a
+  double-blink cue); overdubs count in (fast-blinking armed light) and punch
+  exactly on the next bar line, lengths snapping to shared beat multiples.
+  Songs without a grid record exactly as before.
+
+### Fixed
+- A long, firm stop press could silently re-arm a re-record that overwrote
+  the loop it had just captured (the stop fires at press-down since the
+  perfect-loop work, so the finger is still on the button while the take
+  flushes). A press that stops a take is now spent — arming requires a
+  fresh press. Latent since v1.0.0 for long stop presses with live input.
+
 ### Changed
 - Navigation: FUNCTION-tap no longer advances songs. Hold FUNCTION and press
   a track to jump to its bank; press the same track again to step through
   that bank's songs. FN-taps are the tap-tempo surface (1-3 taps are inert).
+- Re-record hold on gridded songs trimmed 180 ms -> 120 ms (the punch waits
+  for the grid anyway; the shorter hold only shrinks the felt constant).
 - Stopped transport: tracks with content now read solid instead of freezing
   dark like an empty track.
 

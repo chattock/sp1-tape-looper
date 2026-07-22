@@ -35,10 +35,14 @@ What this fork adds on top of the upstream looper:
   song across power-off. Hold FUNCTION and press a track button to jump to
   that bank; press the same track again to step through its four songs — all
   16 songs under one hold.
-- **Tapped grid** — tap FUNCTION 4+ times along any music and that song gets
-  a tempo grid: first tap marks the downbeat, the lights become a metronome,
-  the bank light blinks on the beat, and the sync jack sends MIDI clock at
-  your tapped tempo (even while stopped). Groundwork for quantized capture.
+- **Tapped grid + quantized capture** — tap FUNCTION 4+ times along any
+  music and that song gets a tempo grid: the lights become a metronome, the
+  bank light blinks on the beat, and the sync jack sends MIDI clock at your
+  tapped tempo (even while stopped). Recording then quantizes itself: the
+  first take starts the moment you arm and places the downbeat, stops snap
+  to whole beats (a loop can never contain silence), and overdubs count in
+  and punch exactly on the next bar line — every loop stays locked with no
+  timing precision required from you.
 - **Loop chop** — a live performance window over every playing track: shrink,
   grow, slide or reset it from the FUNCTION layer (see Controls).
   Non-destructive, and saved with the song.
@@ -240,10 +244,20 @@ SP-1 custom firmware) — no soldering or opening the device required:
   tap along to your decks and the SP-1 clocks your gear to them.
 - Hold FUNCTION for ~1 s right after tapping to **clear** the grid (that hold
   can never power the device off).
+- **Recording on a gridded song is quantized.** The FIRST take starts the
+  moment your arm-hold completes and places the song's downbeat — your
+  loop is the "1". Stops snap to the last whole beat (instantly; the spare
+  sliver stays on flash unplayed, so a loop can never contain silence) —
+  stop within the last ~15% of a beat and it runs those few milliseconds
+  to the line, with the REC light double-blinking. OVERDUBS arm any time
+  and punch in exactly on the next bar line (the armed light fast-blinks
+  the count-in); their stops snap to beat multiples of the same base, so
+  every loop stays locked. A second tap during any count-out trims to a
+  whole beat. Songs without a grid record exactly as before.
 - The grid's tempo is remembered per song across power-off; its downbeat
-  re-anchors to your next tap run. Bars are fixed 4/4; accepted range is
-  roughly 50–200 BPM. The tape speed is untouched — the grid is the
-  metronome, not the varispeed.
+  re-anchors to your next tap run (or to your first take). Bars are fixed
+  4/4; accepted range is roughly 50–200 BPM. The tape speed is untouched —
+  the grid is the metronome, not the varispeed.
 
 ### Loop-length mode (FUNCTION + PLAY)
 - Hold **FUNCTION and PLAY together** for about a second to toggle between
