@@ -31,7 +31,7 @@ solderless.engineering with sp1_looper.bin.
 What this fork adds on top of the upstream looper:
 
 - **16 songs in 4 banks**, each a fully remembered performance state — loops,
-  tempo/pitch, chop window and loop mode all persist per song across
+  tempo/pitch, chop window, loop mode and mutes all persist per song across
   power-off. Tap FUNCTION for the next song; hold FUNCTION and press a track
   button to jump straight to that bank.
 - **Loop chop** — a live performance window over every playing track: shrink,
@@ -205,13 +205,15 @@ SP-1 custom firmware) — no soldering or opening the device required:
 ### Lights and battery
 - LEDs run dim by default; FUNCTION + double-tap PLAY toggles dim/full
   (remembered across power-off).
+- A muted track that HAS content glows faintly — dark = empty, faint = loaded
+  but muted, pulsing = playing. No more guessing what's sleeping under a song.
 - Charging in standby shows a battery gauge: 1–4 LEDs for the level, with the
   top LED blinking until the charger reports full. Mid-charge readings run
   slightly optimistic; "full" is authoritative.
 
 ### Songs and banks
 - There are 16 song slots, in 4 banks of 4. Each song remembers its own
-  tracks, lengths, tempo/pitch, chop window and loop mode — everything
+  tracks, lengths, tempo/pitch, chop window, loop mode and mutes — everything
   restores when you come back to it, even across power-off.
 - Tap FUNCTION to move to the next song. Hold FUNCTION and press Track N to
   jump straight to bank N (keep holding and press other tracks to surf).

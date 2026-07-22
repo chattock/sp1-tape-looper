@@ -4,6 +4,18 @@ All notable changes in this fork of Technics' sp1-tape-looper
 (chattock on GitHub).
 Base: upstream commit c60941c (2026-07-14).
 
+## [1.1.0] - 2026-07-22
+
+### Added
+- Ghost LED class: a muted track that has content glows faintly (one frame in
+  five of the dim window), so dark still means empty and a glance shows what
+  is sleeping under a song. Community request.
+- Per-song mute memory: a song's muted tracks come back muted — across song
+  switches, power-off and transfers. A fresh take, a delete or a site upload
+  un-mutes that track. Stored in spare index bits: same SE16, no reformat.
+  Note: builds older than 1.1.0 misread the loop-mode stamp on songs with
+  saved mutes — flash forward only.
+
 ## [1.0.0] - 2026-07-21
 
 ### Added
