@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:,">
-<title>SP-1 loop transfer — 16-song fork edition</title>
+<title>SP-1 loop transfer</title>
 <style>
   :root{
     --bg:#ffffff; --ink:#1d1d1f; --muted:#6e6e73; --line:#e5e5e7;
@@ -55,7 +55,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>SP-1 loop transfer <small style="font-size:.5em;opacity:.6">16-song fork edition</small></h1>
+  <h1>SP-1 loop transfer <small style="font-size:.5em;opacity:.6">2.0</small></h1>
   <p class="sub">Move loops between your computer and the stem player, as WAV or MP3.</p>
 
   <div class="bar">
@@ -90,7 +90,7 @@
 const SAMP_PER_BLK = 256;
 let RATE = 24000;                          // device rate, confirmed from the device after connect
 // The on-flash format magic encodes the device's sample rate; the device reports 24 kHz.
-function rateFromMagic(magic){ return (magic === 0x53453234 || magic === 0x53453241) ? 24000 : 48000; } // 'SE24'/'SE2A' = 24 kHz; 'SE4A'/'SE8A'/'SE16' (fork) fall through to 48 kHz — correct
+function rateFromMagic(magic){ return (magic === 0x53453234 || magic === 0x53453241) ? 24000 : 48000; } // 'SE24'/'SE2A' = 24 kHz; 'SE4A'/'SE8A'/'SE16'/'S816' fall through to 48 kHz — correct
 const $ = s => document.querySelector(s);
 const logEl = $("#log");
 function log(msg, cls){ const t = new Date().toLocaleTimeString();
