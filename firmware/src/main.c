@@ -754,9 +754,11 @@ static void codec_unpack(int16_t *ring, uint32_t ring_mask, uint32_t start,
 #define BEAT_SAMPLES_I2S 35840u                            /* I2S frames / beat (140 blocks ÷256) */
 #define BEAT_SAMPLES_L   (BEAT_SAMPLES_I2S / DECIM)        /* 35840 = 140 blocks (÷256) */
 #define BAR_SAMPLES      (BEAT_SAMPLES_L * 4u)             /* 4 beats — for display / phrasing */
-#define MAX_BEATS        400u                              /* longest loop ~5.0 min — halved so 16
-                                                            * songs x 4 tracks fit the 4 GB card with
-                                                            * the same ~49% margin the 8-song build had */
+#define MAX_BEATS        643u                              /* longest loop 8:00 at 1.0x (the 2.0 long-
+                                                            * take bump): 16 songs x 4 tracks = 76.4% of
+                                                            * the 4 GB card (7,553,024 blocks), ~912 MB
+                                                            * spare. Recording follows tape speed, so a
+                                                            * slowed tape holds proportionally more. */
 #define MAX_LOOP_SAMPLES (BEAT_SAMPLES_L * MAX_BEATS)
 /* eMMC blocks for the longest loop. At 800 beats the 4 songs × 4 tracks use ~452 MB
  * (12 kHz) / ~301 MB (8 kHz) of the 4 GB card. RAM is unchanged (always streamed). */
@@ -807,10 +809,14 @@ static void codec_unpack(int16_t *ring, uint32_t ring_mask, uint32_t start,
  * other format's bytes. */
 #if DECIM == 1u
 #  if   SP1_CODEC == SP1_CODEC_PCM
-#define META_MAGIC       0x53453136u                       /* 'SE16' — 48 kHz PCM, 16-song 2-block index,
-                                                            * 400-beat regions (layout differs from SE4A/
-                                                            * SE8A: reformat on first boot — export loops
-                                                            * as WAVs first) */
+#define META_MAGIC       0x53383136u                       /* 'S816' — 48 kHz PCM, 16-song 2-block index,
+                                                            * 643-beat (8:00) regions. TRACK_BLOCKS
+                                                            * differs from earlier layouts, so this is a
+                                                            * format break: any other index reads as
+                                                            * unformatted and loop storage reformats on
+                                                            * first boot — export loops as WAVs first,
+                                                            * re-upload after. Grids (block 2) survive,
+                                                            * same as site uploads today. */
 #  elif SP1_CODEC == SP1_CODEC_ULAW
 #define META_MAGIC       0x53455534u                       /* 'SEU4' — 48 kHz, u-law 8-bit */
 #  else
