@@ -54,7 +54,8 @@ What this fork adds on top of the upstream looper:
 - **Dimmable lights** — LEDs run dim by default; FUNCTION + double-tap PLAY
   toggles full brightness.
 - **Battery gauge** — 1–4 LEDs while charging in standby, top LED blinking
-  until the charger reports full.
+  until the charger reports full. It appears whether you plug in an off
+  device or power off while still plugged in.
 - **Full-scale headphones** — the −19 dB output pad in the codec init is
   gone; max headphone volume matches the stock firmware.
 - **Transfer page, fork edition** — 16-song aware, and WAVs round-trip at the
@@ -162,6 +163,8 @@ SP-1 custom firmware) — no soldering or opening the device required:
 - Hold the FUNCTION button (the lower button) for about 0.6 s to turn it on.
 - Hold FUNCTION for about 2.5 s to turn it off (the four centre LEDs fill as a
   countdown; release early to cancel).
+- Powering off while plugged into USB lands in the charging gauge instead of
+  going dark; unplug from there to power off fully.
 
 ### The four track buttons
 
@@ -216,7 +219,8 @@ SP-1 custom firmware) — no soldering or opening the device required:
   row. For direct sunlight, hold **FUNCTION + PLAY through 5 seconds** —
   brightness flips right at the 5-second mark, no release needed — or use
   the transfer page's hidden settings panel (open the page with #settings).
-  Both persist across power-off.
+  Both persist across power-off. The chosen brightness covers every light,
+  including the charging gauge and the power-on/off sweeps.
 - A muted track that HAS content glows faintly — dark = empty, faint = loaded
   but muted, pulsing = playing. No more guessing what's sleeping under a song.
 - Charging in standby shows a battery gauge: 1–4 LEDs for the level, with the

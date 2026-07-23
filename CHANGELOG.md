@@ -4,6 +4,16 @@ All notable changes in this fork of Technics' sp1-tape-looper
 (chattock on GitHub).
 Base: upstream commit c60941c (2026-07-14).
 
+## [1.2.4] - 2026-07-23
+
+### Added
+- Powering off while plugged into USB now lands in the charging gauge —
+  the same standby you get plugging in an off device — instead of going
+  dark until a replug. (SYSTEM_OFF with VBUS already high has no wake
+  edge, so the firmware soft-resets into charge-standby instead.)
+  Unplugging from that gauge powers fully off; power-off on battery is
+  unchanged.
+
 ## [1.2.3] - 2026-07-23
 
 ### Fixed
