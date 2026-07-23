@@ -1,4 +1,4 @@
-# SP-1 Tape Looper — 16-song fork
+# SP-1 Tape Looper
 
 A tape-machine-style looper for the Teenage Engineering SP-1: four loop
 tracks per song, sixteen remembered songs in four banks.
@@ -11,14 +11,20 @@ headphones. The rocker changes playback speed and pitch together, like tape.
 Everything — loops, tempo/pitch, chop and loop mode — persists per song on the
 SP-1's internal flash, surviving power-off and re-flashing.
 
-## About this fork
+## What's new in 2.0
 
-Forked from Technics' looper (chattock on GitHub) — author of both the
-upstream firmware and the dim-LED build this fork merges. Everything added
-is listed under Features below, and per release in CHANGELOG.md.
-Compatibility: the SE16 index is a format break from stock — export your
-songs first via the transfer page. This fork's transfer page (16-song
-aware): https://marcabisamra.github.io/sp1-tape-looper/
+Version 2.0 is a ground-up expansion of the looper, developed by marc
+(marcabisamra) and merged here: 16 songs, loop chop, tapped grids with
+quantized recording and beatmatch, 8-minute takes, dimmable lights, a real
+battery gauge, and a long list of fixes — everything is under Features
+below and per release in CHANGELOG.md. chattock's original firmware (and
+the dim-LED build 2.0 absorbed) remains the foundation; the classic 4-song
+1.x line lives on the `v1` branch.
+
+**Updating from 1.x is a format break** (the 2.0 index re-arranges loop
+storage): export your songs as WAVs first, flash, then re-upload. The
+transfer page reads the device's layout, so the one page handles 1.x and
+2.0 automatically: https://chattock.github.io/sp1-tape-looper/
 
 Build it yourself: Zephyr v4.3.1 + SDK 0.17.4, apply
 zephyr-patches/uac2-windows-fs-feedback.patch to the Zephyr tree, then
@@ -28,7 +34,7 @@ solderless.engineering with sp1_looper.bin.
 
 ## Features
 
-What this fork adds on top of the upstream looper:
+What 2.0 adds on top of the 1.x looper:
 
 - **16 songs in 4 banks**, each a fully remembered performance state — loops,
   tempo/pitch, chop window, loop mode, mutes and grid tempo all persist per
@@ -58,9 +64,12 @@ What this fork adds on top of the upstream looper:
   device or power off while still plugged in.
 - **Full-scale headphones** — the −19 dB output pad in the codec init is
   gone; max headphone volume matches the stock firmware.
-- **Transfer page, fork edition** — 16-song aware, and WAVs round-trip at the
+- **Long takes** — up to 8 minutes per track at 1.0x (about 16 with the
+  tape at half speed), on all 16 songs.
+- **Transfer page 2.0** — 16-song aware, with one-click Download
+  all, and WAVs round-trip at the
   pitch you actually hear on the device (fixes the upstream export-pitch
-  bug): <https://marcabisamra.github.io/sp1-tape-looper/>
+  bug): <https://chattock.github.io/sp1-tape-looper/>
 
 Inherited from the upstream release — Technics' work, summarized (full notes
 in the [upstream repo](https://github.com/chattock/sp1-tape-looper)):
@@ -82,9 +91,9 @@ in the [upstream repo](https://github.com/chattock/sp1-tape-looper)):
 
 Move loops between your computer and the SP-1 as WAV or MP3:
 
-### → https://marcabisamra.github.io/sp1-tape-looper/
+### → https://chattock.github.io/sp1-tape-looper/
 
-(That's this fork's page — required for 16-song builds; the upstream page at
+(Required for 16-song builds; the old 1.x page at
 chattock.github.io reads at most 8 songs and stamps WAVs at a flat rate.)
 
 Open it in Chrome or Edge with the SP-1 plugged in and powered on **normally**
@@ -114,7 +123,7 @@ device.
 ```
 sp1-tape-looper/
 ├── README.md               you are here
-├── CHANGELOG.md            what this fork adds/fixes, per release
+├── CHANGELOG.md            what each release adds/fixes
 ├── sp1_looper.bin          the firmware — flash this one
 ├── boards/                 the SP-1 board definition (makes the repo buildable)
 ├── zephyr-patches/         patch for the Zephyr tree (Windows USB fix)
@@ -151,7 +160,7 @@ SP-1 custom firmware) — no soldering or opening the device required:
 > Note: loops you record survive re-flashing this firmware. The first time you
 > install it (coming from the stock firmware or an older release) it reformats
 > the loop storage once, so anything previously on the device is cleared.
-> Between 16-song builds of this fork, flashing preserves your songs.
+> Between 2.0-format builds, flashing preserves your songs.
 
 ---
 
@@ -177,15 +186,15 @@ SP-1 custom firmware) — no soldering or opening the device required:
 
 - **Every track loops at its own length.** Takes are never stretched, padded or
   snapped to another track's length.
-- **The stop is press-accurate** in this fork: the take ends on your
+- **The stop is press-accurate** in 2.0: the take ends on your
   press-down rather than the release, and the button latency is backdated out
   of the recording — tap the stop exactly on the "1".
 - The **first take of a song** also sets the beat grid for the LEDs and the
   MIDI clock; every take after that is free.
 - Only one track records at a time. Recording onto a non-empty track replaces
   it.
-- A take that reaches the per-track maximum (about 5 minutes) finalizes
-  itself.
+- A take that reaches the per-track maximum (8 minutes at 1.0x — longer if
+  the tape is slowed, since recording follows tape speed) finalizes itself.
 
 ### Playback
 - PLAY button, tap: play / stop (with a tape-style speed glide).
@@ -261,10 +270,6 @@ SP-1 custom firmware) — no soldering or opening the device required:
   the count-in); their stops snap to beat multiples of the same base, so
   every loop stays locked. A second tap during any count-out trims to a
   whole beat. Songs without a grid record exactly as before.
-- **Mutes wait for the bar** on gridded songs (launch quantize): tap to
-  mute/unmute and the track fast-blinks until the next bar line, then
-  switches exactly on the "1". Tap again while blinking to cancel. Songs
-  without a grid mute instantly, as always.
 - **Tap-to-beatmatch:** once a song has loops, a fresh 4+ tap run means
   "match THIS": the tape retunes so your loops play at the tapped tempo
   (vinyl-style — pitch moves too, clamped to the 0.5–1.5x range) and the
@@ -286,7 +291,7 @@ SP-1 custom firmware) — no soldering or opening the device required:
 - The mode only affects the *next* take you record — tracks you've already laid
   down keep their lengths, so you can freely mix free-running and locked loops
   in one song. It's remembered across power-off.
-- In this fork the toggle is two-layer: on an **empty** song it sets your
+- In 2.0 the toggle is two-layer: on an **empty** song it sets your
   global default (all empty songs follow it); on a **recorded** song it
   changes only that song. A song's first take stamps the mode it was recorded
   in, and deleting all its tracks returns it to the global default.
@@ -295,7 +300,7 @@ SP-1 custom firmware) — no soldering or opening the device required:
 - Plug headphones into the headphone jack (the one nearest the headphone
   symbol, not the second/sync jack). The speaker mutes automatically while
   headphones are connected and returns when you unplug them.
-- Headphone output runs at full scale in this fork (the upstream −19 dB pad
+- Headphone output runs at full scale in 2.0 (the old −19 dB pad
   was removed) — mind your ears at maximum volume.
 
 ### MIDI clock out (the second / sync jack)
@@ -389,7 +394,7 @@ immediately actionable.
 
 The firmware is a [Zephyr](https://www.zephyrproject.org/) application built
 against a custom board definition for the SP-1 (it ships in this repo under
-`boards/` — the build command in the fork section above uses it via
+`boards/` — the build command above uses it via
 `BOARD_ROOT`). With a Zephyr workspace and the
 nRF SDK set up, point a `west build` at the `firmware/` folder, then convert
 the resulting ELF to a bootloader-friendly `.bin` (the application is linked to

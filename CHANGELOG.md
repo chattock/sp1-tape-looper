@@ -1,8 +1,59 @@
 # Changelog
 
-All notable changes in this fork of Technics' sp1-tape-looper
-(chattock on GitHub).
-Base: upstream commit c60941c (2026-07-14).
+All notable changes to the SP-1 Tape Looper.
+Versions 1.0.0-1.2.4 below were the 2.0 development line (developed as a
+fork by marc, never announced) — kept for the honest record. The classic
+4-song firmware lives on the `v1` branch. Base: 1.x at commit c60941c.
+
+## [2.0.0] - 2026-07-23
+
+The big one — 2.0 is everything the development line built, merged into the
+official repo as one release.
+
+### Added
+- 16 songs in 4 banks of 4 (was 4). FUNCTION+Track N jumps to bank N; the
+  same track again (still held) steps through the bank. Song row: solid =
+  position, blinking = bank.
+- Per-song memory: loops, tape speed/pitch, chop window, loop-length mode
+  and mutes all persist across power-off.
+- 8-minute takes: 643-beat regions (8:00 at 1.0x; one beat = 35,840
+  samples; 44 MB per track, 76.4% of the 7,553,024-block card, ~912 MB
+  spare). Recording follows tape speed — a half-speed tape holds ~16 min.
+- Loop chop: FUNCTION+FWD/RWD halves/doubles the playing window,
+  FUNCTION+Vol shifts it, rocker double-click resets. Per song, persistent.
+- Tapped grids: 4+ FUNCTION-taps set tempo (50-200 BPM) and downbeat;
+  lights become a metronome; grid persists per song. Quantized capture
+  (instant first punch, bar-line overdub punch-in with count-in, stops
+  snapped to whole beats), tap-to-beatmatch (0.5-1.5x vinyl-style) with
+  FUNCTION+PLAY double-tap 1.0x snap, MIDI clock out on the sync jack.
+- Dim-by-default lights (merged from chattock's dim build, tuned two-row)
+  with FUNCTION+PLAY 5 s hold OR a hidden #settings page switch for full
+  brightness; ghost glow distinguishes muted-with-content from empty.
+- Charge-standby battery gauge (smoothed, hysteresis); powering off while
+  plugged lands in the gauge instead of going dark.
+- Transfer page 2.0: 16-song aware, Download all, speed-compensated WAV
+  round-trip, serves 1.x and 2.0 devices from the same URL.
+- In-repo board definition — the repo builds with stock Zephyr v4.3.1 +
+  SDK 0.17.4, one west command.
+
+### Fixed
+- Headphone/line output pad (-19 dB) removed — full-scale output.
+- Loop seams: stops act on the press; release latency no longer smears
+  loop lengths.
+- Export pitch: sub-80-BPM songs no longer export fast/high.
+- Torn-index: the song index writes magic-last, surviving power cuts.
+- A press that stops a take can no longer silently re-arm a re-record.
+- Double-tap delete on gridded songs: a development-line trim of the
+  gridded re-record hold (120 ms) sat inside the real 50-150 ms tap band
+  and could turn a delete tap into an armed re-record — the hold is the
+  full 180 ms everywhere again (empty tracks keep the instant arm).
+
+### BREAKING — export your songs before flashing
+- New on-flash layout (magic 'S816'). First boot reformats loop storage:
+  on your CURRENT firmware, export everything (Download all), flash, then
+  re-upload on the same page. Grids survive; tape speeds reset to 1.0x
+  (songs still sound the same — uploads are rate-compensated). Max take
+  for 1.x owners changes ~10 min -> 8:00 (slow the tape for more).
 
 ## [1.2.4] - 2026-07-23
 
