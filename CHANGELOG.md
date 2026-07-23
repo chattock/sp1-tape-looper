@@ -4,6 +4,16 @@ All notable changes in this fork of Technics' sp1-tape-looper
 (chattock on GitHub).
 Base: upstream commit c60941c (2026-07-14).
 
+## [1.2.1] - 2026-07-23
+
+### Fixed
+- Battery gauge flicker while charging near a level boundary: the display
+  took one raw ADC sample per pass with no smoothing or hysteresis, so ADC
+  noise plus charger ripple could flip the level many times a second and
+  strobe the boundary LED between off and blinking. The reading is now
+  averaged over ~10 passes and the level only moves once the average clears
+  a threshold by a +/-18-count margin.
+
 ## [1.2.0] - 2026-07-23
 
 ### Added
