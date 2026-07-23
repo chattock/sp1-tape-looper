@@ -62,7 +62,8 @@
     <button id="connect">Connect</button>
     <span class="dot" id="dot"></span>
     <span class="status" id="status">Not connected</span>
-    <button class="ghost" id="done" style="margin-left:auto;display:none">Done</button>
+    <button class="ghost" id="dlall" style="margin-left:auto;display:none">Download all</button>
+    <button class="ghost" id="done" style="display:none">Done</button>
   </div>
 
   <div class="hint" id="hint">
@@ -319,11 +320,34 @@ $("#connect").onclick = async () => {
 $("#done").onclick = async () => { if (!io) return; stopKeepalive(); await exit(); await io.close(); io=null;
   log("Done — device resumed.", "ok"); setConnected(false); $("#songs").innerHTML=""; };
 
+/* ---- Download all: every track with content, sequentially (one shared port).
+ * The browser asks for multi-download permission after the first file. ---- */
+$("#dlall").onclick = async () => {
+  if (!io || !meta) return;
+  const btn = $("#dlall"); btn.disabled = true;
+  try{
+    let n = 0;
+    for (let s = 0; s < layout.numSlots; s++){
+      const slot = meta.slots[s];
+      const base = slot.loopLen ? slot.loopLen/SAMP_PER_BLK : 0;
+      for (let t = 0; t < layout.ntrk; t++){
+        if (!slot.present[t]) continue;
+        const blocks = slot.trkLen[t] || base;
+        if (!blocks) continue;
+        await download(s, t, blocks, slot.trkContent[t]||0);
+        n++;
+      }
+    }
+    log(`Download all: ${n} track${n===1?"":"s"} exported.`, "ok");
+  } finally { btn.disabled = false; }
+};
+
 function setConnected(on){
   $("#dot").classList.toggle("on", on);
   $("#status").textContent = on ? "Connected to SP-1" : "Not connected";
   $("#connect").style.display = on ? "none" : "";
   $("#done").style.display = on ? "" : "none";
+  $("#dlall").style.display = on ? "" : "none";
   $("#hint").classList.toggle("gone", on);
 }
 
