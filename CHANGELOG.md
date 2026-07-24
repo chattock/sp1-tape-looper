@@ -5,6 +5,26 @@ Versions 1.0.0-1.2.4 below were the 2.0 development line (developed as a
 fork by marc, never announced) — kept for the honest record. The classic
 4-song firmware lives on the `v1` branch. Base: 1.x at commit c60941c.
 
+## [2.1.0] - 2026-07-24
+
+### Added
+- Hold FUNCTION+Vol to glide the chop window: the shift auto-repeats after
+  ~450 ms, accelerating from ~250 ms to ~125 ms per step, each step
+  declicked — a tape-scrub across the loop on the existing buttons.
+
+### Fixed
+- Chop edits no longer click: a short declick envelope (dip ~5 ms, recover
+  ~27 ms) masks the window-jump discontinuity — steps, halve/double and
+  double-click reset alike.
+- The power-off pop is gone: the mix fades over ~85 ms, then both output
+  stages are soft-muted (CS42L42 headphone mute, TAS2505 Class-D mute)
+  before power-down.
+
+### Notes
+- Recording follows tape speed (since 2.0): a slowed tape stores
+  proportionally less bandwidth — classic tape behavior. Snap to exactly
+  1.0x (FUNCTION+PLAY double-tap) before critical takes for full fidelity.
+
 ## [2.0.0] - 2026-07-23
 
 The big one — 2.0 is everything the development line built, merged into the

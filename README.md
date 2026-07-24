@@ -195,6 +195,9 @@ SP-1 custom firmware) — no soldering or opening the device required:
   it.
 - A take that reaches the per-track maximum (8 minutes at 1.0x — longer if
   the tape is slowed, since recording follows tape speed) finalizes itself.
+- Because recording follows tape speed, a slowed tape stores proportionally
+  less bandwidth — classic tape behavior. For full-fidelity takes, snap to
+  exactly 1.0x first (FUNCTION+PLAY double-tap).
 
 ### Playback
 - PLAY button, tap: play / stop (with a tape-style speed glide).
@@ -216,7 +219,9 @@ SP-1 custom firmware) — no soldering or opening the device required:
 ### Loop chop (hold FUNCTION)
 - FUNCTION + FWD halves the playback window (down to 1/64th of the loop);
   FUNCTION + RWD doubles it back toward the full loop.
-- FUNCTION + Vol +/− slides the window right/left.
+- FUNCTION + Vol +/− slides the window right/left. HOLD the chord and the
+  slide auto-repeats, faster and faster, each step declicked — a tape scrub
+  across the loop.
 - FUNCTION + rocker double-click resets to the full loop.
 - Non-destructive: recorded audio, loop lengths, the beat grid and the MIDI
   clock are untouched. The chop is saved with the song. In fixed mode it
