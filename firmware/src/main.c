@@ -894,6 +894,19 @@ struct grid_ext {
 	uint16_t sum;                 /* 16-bit sum of bpm_q8[] (torn-write guard) */
 };
 BUILD_ASSERT(sizeof(struct grid_ext) <= 512, "grid ext must fit one block");
+/* M11a: chop extension, SECOND tagged section in block 2 at byte offset 40
+ * (grid_ext uses 0..37). Own magic + own sum over the se[] bytes: the GRD1
+ * sum covers only bpm_q8[], so this appends compatibly — older builds keep
+ * validating grids exactly as before and ignore these bytes. */
+#define CHOP_EXT_MAGIC  0x31504843u   /* 'CHP1' */
+#define CHOP_EXT_OFF    40u
+struct chop_ext {
+	uint32_t magic;
+	uint8_t  se[NUM_SLOTS][2];
+	uint16_t sum;
+};
+BUILD_ASSERT(CHOP_EXT_OFF + sizeof(struct chop_ext) <= 512,
+	     "chop ext must fit block 2 after the grid ext");
 static volatile uint16_t g_grid_bpm_q8[NUM_SLOTS];
 static volatile uint64_t g_grid_anchor;       /* sample-clock frame of a downbeat */
 static volatile uint32_t g_grid_beat_frames;  /* I2S frames per grid beat (current song) */
@@ -1045,9 +1058,74 @@ static volatile int      g_restart_req;            /* main -> engine: hold PLAY 
  * the streamer's fill math only: recorded audio, loop lengths, beat grid and
  * MIDI clock are untouched; div=1/off=0 is bit-identical to the original
  * math. Persisted per song since M7a (index chop[] bytes). */
-static volatile uint32_t g_chop_div = 1;           /* 1,2,4,... 64 (1 = full loop) */
-static volatile uint32_t g_chop_off = 0;           /* window index: 0..div-1 */
+static volatile uint32_t g_chop_div = 1;           /* legacy mirror: 1,2,4,..64 (diag + old-index bytes) */
+static volatile uint32_t g_chop_off = 0;           /* legacy mirror: window index 0..div-1 */
+/* M11a FREE WINDOW: start/end as Q8 fractions of the chop period (bar in
+ * fixed mode, own length in variable). AUTHORITATIVE chop state; the legacy
+ * div/off pair above is kept coherent as a mirror so the on-index bytes stay
+ * readable by older builds (exact power-of-2 windows only; anything else is
+ * written as unchopped there). Persisted per song in the block-2 'CHP1'
+ * extension (encoding: [0]=start 0..255, [1]=end&0xFF with 0 meaning 256 —
+ * so all-zero storage reads as the full window). */
+#define CHOP_MIN_W       4u                        /* 1/64 of the period — the old floor */
+static volatile uint16_t g_chop_s = 0;             /* window start, 0..255 */
+static volatile uint16_t g_chop_e = 256;           /* window end, 1..256, > start */
+static volatile uint8_t  g_chop_se[NUM_SLOTS][2];  /* per-song persisted window */
+static volatile uint8_t  g_chop_save_req;          /* control -> streamer: write block 2 */
+static volatile uint16_t g_flt_pos = 128;          /* M11 fader-4 filter, 0..256, 128 = neutral
+                                                    * (session-only by decision; DSP lands in M11b) */
+static volatile uint8_t  g_vol_pickup[4];          /* post-FN-layer volume soft-takeover */
+
+/* Window in blocks from the Q8 fractions. Equivalent to the old div/off math
+ * for exact power-of-2 windows (floor arithmetic checked); for non-divisible
+ * periods the slots now tile the whole period (old math left a dead tail). */
+static inline void chop_window(uint32_t wper, uint32_t *wbase, uint32_t *win)
+{
+	uint32_t cs = g_chop_s, ce = g_chop_e;
+	uint32_t b = (uint32_t)(((uint64_t)cs * wper) >> 8);
+	uint32_t e = (uint32_t)(((uint64_t)ce * wper) >> 8);
+	if (e > wper) e = wper;
+	if (e <= b) e = b + 1u;
+	if (b >= e) b = e - 1u;
+	*wbase = b; *win = e - b;
+}
 static volatile int      g_chop_req;               /* main -> engine: window changed, snap rings */
+
+/* M11a: load a song's window from the persisted per-slot table. */
+static void chop_apply_slot(uint32_t sl)
+{
+	uint32_t cs = g_chop_se[sl][0];
+	uint32_t ce = g_chop_se[sl][1] ? g_chop_se[sl][1] : 256u;
+	if (ce <= cs) { cs = 0u; ce = 256u; }
+	g_chop_s = (uint16_t)cs; g_chop_e = (uint16_t)ce;
+}
+
+/* M11a: keep the legacy index bytes + div/off globals coherent. Exact
+ * power-of-2 windows round-trip for older builds; anything else is stored
+ * there as unchopped (downgrade simply loses the free window). */
+static void chop_mirror_index(void)
+{
+	uint32_t cs = g_chop_s, ce = g_chop_e, d, ok = 0u;
+	for (d = 2u; d <= 64u; d <<= 1) {
+		uint32_t w = 256u / d;
+		if ((cs % w) == 0u && ce == cs + w) { ok = 1u; break; }
+	}
+	if (g_slot < NUM_SLOTS) {
+		if (ok) {
+			g_meta.chop[g_slot][0] = (uint8_t)d;
+			g_meta.chop[g_slot][1] = (uint8_t)(cs / (256u / d));
+		} else {
+			g_meta.chop[g_slot][0] = 0u;
+			g_meta.chop[g_slot][1] = 0u;
+		}
+		g_meta_save_req = 1;
+		g_chop_se[g_slot][0] = (uint8_t)cs;
+		g_chop_se[g_slot][1] = (uint8_t)(ce & 0xFFu);
+		g_chop_save_req = 1;
+	}
+	g_chop_div = ok ? d : 1u;
+	g_chop_off = ok ? (cs / (256u / d)) : 0u;
+}
 static volatile uint8_t  g_dip_req;                /* M10: controls -> mixer, declick dip at a chop edit */
 static volatile uint8_t  g_off_fade;               /* M10: power-off fade — master to 0 and HOLD */
 static volatile uint32_t g_beat_phase;            /* phase within a beat (loop samples), for LEDs */
@@ -1295,6 +1373,11 @@ static void looper_audio_block(int16_t *s)
 				g_meta.chop[g_slot][1] = 0;
 			}
 			g_chop_div = 1; g_chop_off = 0;
+			g_chop_s = 0; g_chop_e = 256;           /* M11a: full window */
+			if (g_slot < NUM_SLOTS) {
+				g_chop_se[g_slot][0] = 0; g_chop_se[g_slot][1] = 0;
+				g_chop_save_req = 1;
+			}
 			g_fixed_len = g_mode_pref;              /* rejoin global */
 		}
 		g_meta_save_req = 1;
@@ -2005,6 +2088,59 @@ static void looper_audio_block(int16_t *s)
 		const int32_t gd = ge - ge_prev;
 		const int32_t g0 = ge_prev;
 		ge_prev = ge;
+		/* M11b: fader-4 DJ FILTER on the master sum, pre-gain/limiter.
+		 * Center-neutral: |pos-128| <= 10 = bypass; below = low-pass sweep
+		 * (16 kHz down to ~120 Hz), above = high-pass sweep (40 Hz up to
+		 * ~6 kHz). Two cascaded one-poles (12 dB/oct, unconditionally
+		 * stable, ~4 MACs/frame); the coefficient slews per block so
+		 * sweeps never zipper, and the states are primed on engage so
+		 * re-entry can't thump. Session-only by decision. */
+		static const uint16_t flt_lp_k[17] = {
+			29656, 26909, 23461, 19717, 16049, 12736, 9903, 7580, 5731,
+			4299, 3199, 2372, 1753, 1291, 947, 696, 511 };
+		static const uint16_t flt_hp_k[17] = {
+			171, 235, 320, 435, 595, 809, 1105, 1500, 2036,
+			2751, 3706, 4961, 6592, 8668, 11245, 14328, 17828 };
+		static int32_t  flt_lp1, flt_lp2;
+		static int32_t  flt_k;
+		static uint8_t  flt_on;
+		static uint8_t  flt_mode_last;
+		uint32_t fpos = g_flt_pos;
+		int fmode = 0;                       /* 0 = bypass, 1 = LP, 2 = HP */
+		int32_t ktar = 0;
+		if (fpos + 10u < 128u) {
+			uint32_t depth = 118u - fpos;                 /* 1..118 */
+			uint32_t di = (depth * 16u) / 118u; if (di > 16u) di = 16u;
+			fmode = 1; ktar = flt_lp_k[di];
+		} else if (fpos > 138u) {
+			uint32_t depth = fpos - 138u; if (depth > 118u) depth = 118u;
+			uint32_t di = (depth * 16u) / 118u; if (di > 16u) di = 16u;
+			fmode = 2; ktar = flt_hp_k[di];
+		}
+		if (fmode) {
+			if (!flt_on || (uint8_t)fmode != flt_mode_last) {
+				/* r2: prime on ENGAGE and on LP<->HP FLIPS. A fast
+				 * center-cross lands as mode 1 -> 2 between two blocks
+				 * with no bypass pass in between; swapping lp for x-lp
+				 * on live state was a full-spectrum step — the loud
+				 * pop (user report). Reprime and mask with a dip. */
+				flt_lp1 = flt_lp2 = mix32[0];
+				flt_k = ktar;
+				if (flt_on) g_dip_req = 1;
+				flt_on = 1;
+			}
+			flt_mode_last = (uint8_t)fmode;
+			flt_k += (ktar - flt_k) >> 3;    /* per-block coefficient slew */
+			const int32_t kk = flt_k;
+			for (uint32_t f = 0; f < BLK_FRAMES; f++) {
+				int32_t x = mix32[f];
+				flt_lp1 += (int32_t)(((int64_t)kk * (x - flt_lp1)) >> 15);
+				flt_lp2 += (int32_t)(((int64_t)kk * (flt_lp1 - flt_lp2)) >> 15);
+				mix32[f] = (fmode == 1) ? flt_lp2 : x - flt_lp2;
+			}
+		} else {
+			flt_on = 0;
+		}
 		for (uint32_t f = 0; f < BLK_FRAMES; f++) {
 			int32_t m = gd ? (g0 + ((gd * (int32_t)(f + 1)) >> 8)) : ge;
 			int16_t out = soft_limit((mix32[f] * m) >> 8);
@@ -2211,6 +2347,7 @@ static void xfer_commit(void)
 				if (cd < 1u || cd > 64u) cd = 1u;
 				uint32_t co = g_meta.chop[g_slot][1]; if (co >= cd) co = 0u;
 				g_chop_div = cd; g_chop_off = co;
+				chop_apply_slot(g_slot);      /* M11a: free window */
 				g_fixed_len = (g_meta.song_mode[g_slot] & 0x0Fu)
 					    ? ((g_meta.song_mode[g_slot] & 0x0Fu) == 2u ? 1u : 0u)
 					    : g_mode_pref;
@@ -2623,6 +2760,18 @@ static void streamer_thread(void *a, void *b, void *c)
 			(void)meta_write_blocks(metabuf);
 		}
 	}
+	/* M11a: default every slot's free window from the legacy index bytes
+	 * first (so a missing/old block 2 upgrades seamlessly)... */
+	for (uint32_t ci = 0; ci < NUM_SLOTS; ci++) {
+		uint32_t d = g_meta.chop[ci][0], o = g_meta.chop[ci][1];
+		if (d < 2u || d > 64u || (d & (d - 1u)) || o >= d) {
+			g_chop_se[ci][0] = 0u; g_chop_se[ci][1] = 0u;
+		} else {
+			uint32_t wq = 256u / d;
+			g_chop_se[ci][0] = (uint8_t)(o * wq);
+			g_chop_se[ci][1] = (uint8_t)(((o + 1u) * wq) & 0xFFu);
+		}
+	}
 	/* M8a: grid extension (block 2). Bad tag/sum -> all zeros = no grids. */
 	if (g_emmc_ready && emmc_read_blocks(GRID_EXT_BLOCK, metabuf, 1)) {
 		struct grid_ext *ge = (struct grid_ext *)metabuf;
@@ -2632,6 +2781,13 @@ static void streamer_thread(void *a, void *b, void *c)
 		if (ge->magic == GRID_EXT_MAGIC && gsum == ge->sum)
 			for (uint32_t gi = 0; gi < NUM_SLOTS; gi++)
 				g_grid_bpm_q8[gi] = ge->bpm_q8[gi];
+		/* ...then override from the CHP1 section when it's valid. */
+		struct chop_ext *cx = (struct chop_ext *)(metabuf + CHOP_EXT_OFF);
+		uint16_t csum = 0;
+		for (uint32_t ci = 0; ci < NUM_SLOTS; ci++)
+			csum = (uint16_t)(csum + cx->se[ci][0] + cx->se[ci][1]);
+		if (cx->magic == CHOP_EXT_MAGIC && csum == cx->sum)
+			memcpy((void *)g_chop_se, cx->se, sizeof(g_chop_se));
 	}
 	g_slot = g_meta.cur_slot;
 	g_mode_pref = g_meta.fixed_len ? 1u : 0u;   /* M7c: global mode preference */
@@ -2680,8 +2836,9 @@ static void streamer_thread(void *a, void *b, void *c)
 				work = true;
 			}
 		}
-		if (g_grid_save_req) {                       /* persist grids (block 2) */
+		if (g_grid_save_req || g_chop_save_req) {    /* persist block 2 (both sections) */
 			g_grid_save_req = 0;
+			g_chop_save_req = 0;
 			if (g_emmc_ready) {
 				memset(metabuf, 0, 512);
 				struct grid_ext *ge = (struct grid_ext *)metabuf;
@@ -2692,6 +2849,17 @@ static void streamer_thread(void *a, void *b, void *c)
 					gsum = (uint16_t)(gsum + ge->bpm_q8[gi]);
 				}
 				ge->sum = gsum;
+				/* M11a: CHP1 section rides in the same block — always
+				 * rebuilt together so neither save can wipe the other. */
+				struct chop_ext *cx = (struct chop_ext *)(metabuf + CHOP_EXT_OFF);
+				cx->magic = CHOP_EXT_MAGIC;
+				uint16_t csum = 0;
+				for (uint32_t ci = 0; ci < NUM_SLOTS; ci++) {
+					cx->se[ci][0] = g_chop_se[ci][0];
+					cx->se[ci][1] = g_chop_se[ci][1];
+					csum = (uint16_t)(csum + cx->se[ci][0] + cx->se[ci][1]);
+				}
+				cx->sum = csum;
 				(void)emmc_write_blocks(GRID_EXT_BLOCK, metabuf, 1);
 				work = true;
 			}
@@ -2902,20 +3070,15 @@ static void streamer_thread(void *a, void *b, void *c)
 					uint32_t _pw   = (g_consume_pos / SAMP_PER_BLK) * SAMP_PER_BLK;
 					uint32_t _gb   = t->len_blocks ? t->len_blocks
 					               : (g_loop_blocks ? g_loop_blocks : 1u);
-					uint32_t _cdiv = g_chop_div, _coff = g_chop_off;
 					uint32_t _cyc, _win, _wb, _wper;
 					if (g_fixed_len && g_loop_blocks && _gb >= g_loop_blocks &&
 					    (_gb % g_loop_blocks) == 0u) {
 						_wper = g_loop_blocks;
-						_win = _wper / _cdiv; if (_win == 0u) _win = 1u;
-						_wb = (_coff * _wper) / _cdiv;
-						if (_wb + _win > _wper) _wb = _wper - _win;
+						chop_window(_wper, &_wb, &_win);
 						_cyc = (_gb / _wper) * _win;
 					} else {
 						_wper = _gb;
-						_win = _gb / _cdiv; if (_win == 0u) _win = 1u;
-						_wb = (_coff * _gb) / _cdiv;
-						if (_wb + _win > _gb) _wb = _gb - _win;
+						chop_window(_wper, &_wb, &_win);
 						_cyc = _win;
 					}
 					uint32_t _want = (RING_SAMPLES / 2u) + 16u * SAMP_PER_BLK;
@@ -3051,20 +3214,17 @@ static void streamer_thread(void *a, void *b, void *c)
 				 * layer plays the same base/div slice OF EACH OF ITS
 				 * BARS, uniform and phase-locked, multi-bar variation
 				 * preserved. div=1 reduces to the original math. */
-				uint32_t cdiv = g_chop_div, coff = g_chop_off;
+				/* M11a: window from the Q8 start/end fractions (free
+				 * window; same mode-aware period semantics as before). */
 				uint32_t cyc, win, wbase, wper;
 				if (g_fixed_len && g_loop_blocks && gb >= g_loop_blocks &&
 				    (gb % g_loop_blocks) == 0u) {
 					wper = g_loop_blocks;
-					win = wper / cdiv; if (win == 0u) win = 1u;
-					wbase = (coff * wper) / cdiv;
-					if (wbase + win > wper) wbase = wper - win;
+					chop_window(wper, &wbase, &win);
 					cyc = (gb / wper) * win;
 				} else {
 					wper = gb;
-					win = gb / cdiv; if (win == 0u) win = 1u;
-					wbase = (coff * gb) / cdiv;
-					if (wbase + win > gb) wbase = gb - win;
+					chop_window(wper, &wbase, &win);
 					cyc = win;
 				}
 				/* BOUNDARY BUDGET: a chunk clipped by the loop wrap or the
@@ -4338,6 +4498,145 @@ static void stop_and_flush(void)
 }
 
 /* ---------- power off ---------- */
+/* =================== M11a: the FUNCTION + fader layer ===================
+ * While FUNCTION is held the faders stop being volumes (the volume reader is
+ * skipped on those passes — long-standing behavior) and become:
+ *   fader 1 = window START   fader 2 = window END   fader 3 = SHIFT
+ *   fader 4 = filter position (latched; the DSP lands in M11b)
+ * Feel rules (per the design doc): each fader is INERT until it moves ~3
+ * volume-counts from its FN-down snapshot (intent gate = brush guard), then
+ * SOFT-TAKEOVER by proximity — it only grabs its parameter once it comes
+ * within ~3% of the current value, so nothing ever jumps. Window edits apply
+ * continuously; the declick dip fires only when the window has moved ~3%+
+ * since the last dip, and the ring re-anchor is rate-limited to ~1 per
+ * 100 ms — continuous scrubbing without read-ahead churn (stv-gated). */
+static uint8_t  g_fl_active;
+static uint8_t  g_fl_engaged;   /* any fader has intent this hold (blocks power-off) */
+static uint8_t  g_fl_intent[4];
+static uint8_t  g_fl_grab[4];
+static uint8_t  g_fl_dirty;
+static int      g_fl_snap[4];
+static uint8_t  g_fl_rr;
+static int      g_fl_prev[4];   /* r2: last raw sample, for crossing detection */
+static uint8_t  g_fl_apply_cnt;
+static uint16_t g_fl_last_s, g_fl_last_e;
+
+static void fn_fader_service(void)
+{
+	if (!g_fl_active) {
+		for (int i = 0; i < 4; i++) {
+			g_fl_snap[i] = ladder_read(&adc_ladder[LAD_FADER0 + i]);
+			g_fl_prev[i] = g_fl_snap[i];
+			g_fl_intent[i] = 0; g_fl_grab[i] = 0;
+		}
+		g_fl_active = 1; g_fl_engaged = 0; g_fl_dirty = 0; g_fl_rr = 0; g_fl_apply_cnt = 0;
+		g_fl_last_s = g_chop_s; g_fl_last_e = g_chop_e;
+		return;
+	}
+	for (int k = 0; k < 2; k++) {        /* 2 faders per ~25 ms pass */
+		int i = g_fl_rr; g_fl_rr = (uint8_t)((g_fl_rr + 1u) & 3u);
+		int v = ladder_read(&adc_ladder[LAD_FADER0 + i]);
+		if (v < 0) continue;
+		if (!g_fl_intent[i]) {
+			int dv = v - g_fl_snap[i];
+			if (dv < 0) dv = -dv;
+			if (dv < 45) continue;       /* ~3 counts on the Q8 scale */
+			g_fl_intent[i] = 1;
+			g_fl_engaged = 1;
+		}
+		uint32_t q = (uint32_t)v * 256u / 3700u;
+		if (q > 256u) q = 256u;
+		/* r2 EDGE SNAP: unit fader travel varies; the top of the throw
+		 * must reliably mean 256 (a full "end" can otherwise be
+		 * unreachable — user report: fader 2 flaky) and the bottom 0. */
+		if (q >= 248u) q = 256u;
+		else if (q <= 6u) q = 0u;
+		uint32_t cs = g_chop_s, ce = g_chop_e, w = ce - cs;
+		uint32_t cur;
+		switch (i) {
+		case 0:  cur = cs; break;
+		case 1:  cur = ce; break;
+		case 2:  cur = (w < 256u) ? (cs * 256u) / (256u - w) : q; break;
+		default: cur = g_flt_pos; break;
+		}
+		if (!g_fl_grab[i]) {
+			/* r2: proximity OR crossing. Faders sample every ~50 ms, so
+			 * a fast sweep can jump the proximity window between two
+			 * samples (user report: "works sometimes") — catching the
+			 * two samples straddling the parameter makes any full sweep
+			 * grab deterministically. */
+			uint32_t pq = (uint32_t)(g_fl_prev[i] < 0 ? v : g_fl_prev[i])
+				      * 256u / 3700u;
+			if (pq > 256u) pq = 256u;
+			uint32_t d = (q > cur) ? q - cur : cur - q;
+			int crossed = ((pq <= cur && q >= cur) ||
+				       (pq >= cur && q <= cur));
+			g_fl_prev[i] = v;
+			if (d > 16u && !crossed)
+				continue;
+			g_fl_grab[i] = 1;
+		}
+		g_fl_prev[i] = v;
+		switch (i) {
+		case 0: {
+			uint32_t ns = q;
+			if (ns + CHOP_MIN_W > ce) ns = ce - CHOP_MIN_W;
+			g_chop_s = (uint16_t)ns;
+			break;
+		}
+		case 1: {
+			uint32_t ne = q;
+			if (ne > 256u) ne = 256u;
+			if (ne < cs + CHOP_MIN_W) ne = cs + CHOP_MIN_W;
+			if (ne > 256u) ne = 256u;
+			g_chop_e = (uint16_t)ne;
+			break;
+		}
+		case 2: {
+			uint32_t span = 256u - w;
+			uint32_t ns = (q * span) >> 8;
+			g_chop_s = (uint16_t)ns;
+			g_chop_e = (uint16_t)(ns + w);
+			break;
+		}
+		default:
+			g_flt_pos = (uint16_t)q;
+			break;
+		}
+		if (i < 3) g_fl_dirty = 1;
+	}
+	if (g_fl_dirty) {
+		uint32_t ds = (g_chop_s > g_fl_last_s) ? (uint32_t)(g_chop_s - g_fl_last_s)
+		                                       : (uint32_t)(g_fl_last_s - g_chop_s);
+		uint32_t de = (g_chop_e > g_fl_last_e) ? (uint32_t)(g_chop_e - g_fl_last_e)
+		                                       : (uint32_t)(g_fl_last_e - g_chop_e);
+		if (ds + de >= 8u) {
+			g_dip_req = 1;
+			g_fl_last_s = g_chop_s; g_fl_last_e = g_chop_e;
+		}
+		if (++g_fl_apply_cnt >= 4u) {    /* re-anchor <= every ~100 ms */
+			g_fl_apply_cnt = 0;
+			g_chop_req = 1;
+		}
+	}
+}
+
+static void fn_fader_release(void)
+{
+	if (!g_fl_active)
+		return;
+	g_fl_active = 0;
+	g_fl_engaged = 0;
+	if (g_fl_intent[0] || g_fl_intent[1] || g_fl_intent[2]) {
+		chop_mirror_index();             /* persist: index bytes + CHP1 */
+		g_chop_req = 1;                  /* final ring snap to the window */
+		g_dip_req = 1;
+	}
+	for (int i = 0; i < 4; i++)          /* volumes must not jump on release */
+		if (g_fl_intent[i]) g_vol_pickup[i] = 1;
+	g_fl_dirty = 0;
+}
+
 static void power_off(void)
 {
 	g_off_fade = 1;                      /* M10: fade the outputs (~85 ms) so the
@@ -4454,6 +4753,7 @@ static void jump_to_slot(uint32_t ns)
 		uint32_t cd = g_meta.chop[ns][0]; if (cd < 1u || cd > 64u) cd = 1u;
 		uint32_t co = g_meta.chop[ns][1]; if (co >= cd) co = 0u;
 		g_chop_div = cd; g_chop_off = co;
+		chop_apply_slot(ns);                  /* M11a: free window */
 		g_fixed_len = (g_meta.song_mode[ns] & 0x0Fu)
 			    ? ((g_meta.song_mode[ns] & 0x0Fu) == 2u ? 1u : 0u) : g_mode_pref;
 		/* M8a: the song's grid tempo follows it; phase re-anchors
@@ -4742,6 +5042,7 @@ int main(void)
 			uint32_t cd = g_meta.chop[g_slot][0]; if (cd < 1u || cd > 64u) cd = 1u;
 			uint32_t co = g_meta.chop[g_slot][1]; if (co >= cd) co = 0u;
 			g_chop_div = cd; g_chop_off = co;
+			chop_apply_slot(g_slot);          /* M11a: free window */
 			g_fixed_len = (g_meta.song_mode[g_slot] & 0x0Fu)
 				    ? ((g_meta.song_mode[g_slot] & 0x0Fu) == 2u ? 1u : 0u)
 				    : g_mode_pref;
@@ -4850,6 +5151,12 @@ int main(void)
 			ctl_flush = 1;
 			if (press_start < 0)
 				press_start = k_uptime_get();
+			fn_fader_service();          /* M11a: faders are the chop layer */
+			if (g_fl_engaged)
+				combo_seen = 1;      /* M11a-r2: a live fader edit is a
+				                      * combo — the hold must never become
+				                      * a power-off (user report: riding a
+				                      * fader through 2.5 s shut it down) */
 
 			/* MODE TOGGLE — FUNCTION + PLAY held together ~0.7 s flips the
 			 * fixed/variable loop-length mode. The normal ladder decode below
@@ -4975,36 +5282,44 @@ int main(void)
 					if (cp_cnt == 3) {          /* committed press edge */
 						int64_t cnow = k_uptime_get();
 						combo_seen = 1;
-						uint32_t d = g_chop_div, o = g_chop_off;
+						/* M11a: gestures act on the FREE window (Q8
+						 * start/end). From an exact power-of-2 window
+						 * every result matches the old div/off math;
+						 * from a fader-made window they act on its
+						 * actual width. */
+						uint32_t cs = g_chop_s, ce = g_chop_e;
+						uint32_t w = ce - cs;
 						if (vb == VOL_TEMPO_UP || vb == VOL_TEMPO_DOWN) {
 							if (cp_dcl_band == (int)vb &&
 							    cnow - cp_dcl_t <= 400) {
-								d = 1u; o = 0u;   /* double-click: RESET */
+								cs = 0u; ce = 256u;   /* double-click: RESET */
 							} else if (vb == VOL_TEMPO_UP) {
-								if (d < 64u) { d <<= 1; o <<= 1; }
+								uint32_t nw = w >> 1;   /* halve */
+								if (nw < CHOP_MIN_W) nw = CHOP_MIN_W;
+								ce = cs + nw;
 							} else {
-								if (d > 1u) { d >>= 1; o >>= 1; }
+								uint32_t nw = w << 1;   /* double */
+								if (nw > 256u) nw = 256u;
+								if (cs + nw > 256u) cs = 256u - nw;
+								ce = cs + nw;
 							}
 							cp_dcl_band = (int)vb; cp_dcl_t = cnow;
 						} else if (vb == VOL_UP) {
-							o = (o + 1u) % d;
+							cs += w; ce += w;
+							if (ce > 256u) { cs = 0u; ce = w; }
 						} else {                  /* VOL_DOWN */
-							o = (o + d - 1u) % d;
+							if (cs >= w) { cs -= w; ce -= w; }
+							else { ce = 256u; cs = 256u - w; }
 						}
-						g_chop_off = (d > 1u) ? (o % d) : 0u;
-						g_chop_div = d;
-						if (g_slot < NUM_SLOTS) { /* M7a: persist per song */
-							g_meta.chop[g_slot][0] = (uint8_t)d;
-							g_meta.chop[g_slot][1] = (uint8_t)g_chop_off;
-							g_meta_save_req = 1;
-						}
+						g_chop_s = (uint16_t)cs; g_chop_e = (uint16_t)ce;
+						chop_mirror_index();      /* index bytes + CHP1 + diag mirror */
 						g_chop_req = 1;           /* engine: snap to it */
 						g_dip_req = 1;            /* M10: declick the jump */
 						cp_rep_at = cp_cnt + 18;  /* M10: first repeat ~450 ms in */
 						cp_rep_iv = 10;           /*      then ~250 ms, accelerating */
 					} else if (cp_cnt > 3 && cp_rep_at && cp_cnt >= cp_rep_at &&
 						   (vb == VOL_UP || vb == VOL_DOWN) &&
-						   g_chop_div > 1u) {
+						   (uint32_t)(g_chop_e - g_chop_s) < 256u) {
 						/* M10 HOLD-TO-GLIDE: keep shifting while the chord
 						 * is held — declicked whole-window steps at an
 						 * accelerating rate read as a tape scrub across
@@ -5012,15 +5327,17 @@ int main(void)
 						 * repeating halve/double would sweep the whole
 						 * div range in a blink. Double-click detection
 						 * keys on press EDGES, so repeats can't fake it. */
-						uint32_t d2 = g_chop_div;
-						uint32_t o2 = g_chop_off;
-						o2 = (vb == VOL_UP) ? (o2 + 1u) % d2
-						                    : (o2 + d2 - 1u) % d2;
-						g_chop_off = o2;
-						if (g_slot < NUM_SLOTS) {
-							g_meta.chop[g_slot][1] = (uint8_t)o2;
-							g_meta_save_req = 1;  /* writer coalesces */
+						uint32_t cs2 = g_chop_s, ce2 = g_chop_e;
+						uint32_t w2 = ce2 - cs2;
+						if (vb == VOL_UP) {
+							cs2 += w2; ce2 += w2;
+							if (ce2 > 256u) { cs2 = 0u; ce2 = w2; }
+						} else {
+							if (cs2 >= w2) { cs2 -= w2; ce2 -= w2; }
+							else { ce2 = 256u; cs2 = 256u - w2; }
 						}
+						g_chop_s = (uint16_t)cs2; g_chop_e = (uint16_t)ce2;
+						chop_mirror_index();      /* writer coalesces */
 						g_chop_req = 1;
 						g_dip_req = 1;
 						cp_rep_at = cp_cnt + cp_rep_iv;
@@ -5079,6 +5396,7 @@ int main(void)
 		}
 
 		if (press_start >= 0) {                  /* just released */
+			fn_fader_release();          /* M11a: persist + arm volume pickup */
 			/* v1.2.2-r4: releasing FUNCTION first (or both together —
 			 * the natural way to end the chord) must ALSO fire the
 			 * release-toggle; before, only a PLAY-first release did,
@@ -5529,7 +5847,16 @@ int main(void)
 				int fv = ladder_read(&adc_ladder[LAD_FADER0 + fi]);
 				if (fv >= 0) {        /* ADC error -> hold the last volume */
 					uint32_t q = (uint32_t)fv * 256u / 3700u;
-					trk[fi].vol_q8 = (uint16_t)(q > 256u ? 256u : q);
+					if (q > 256u) q = 256u;
+					if (g_vol_pickup[fi]) {
+						/* M11a: fader served the FN layer — hold the
+						 * old volume until it comes back near it */
+						uint32_t cv = trk[fi].vol_q8;
+						uint32_t dq = (q > cv) ? q - cv : cv - q;
+						if (dq <= 8u) g_vol_pickup[fi] = 0;
+					}
+					if (!g_vol_pickup[fi])
+						trk[fi].vol_q8 = (uint16_t)q;
 				}
 				fi = (fi + 1) & 3;
 			}
