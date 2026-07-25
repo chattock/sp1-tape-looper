@@ -1057,6 +1057,16 @@ static volatile int      g_chop_req;               /* main -> engine: window cha
  * untouched and returns when the mode ends. */
 static volatile uint8_t  g_heads_mode;
 #define head_active(i) (g_heads_mode && (i) > 0 && trk[0].state == TS_PLAY)
+/* M14 HEADS v2: each head's position on the loop is a live Q8 phase (0-255
+ * of the audible cycle). Quarters at entry = the v1 sound; FUNCTION+fader
+ * scrubs them (all four — track 1's own phase slides too, locked decision).
+ * g_head_blip asks the mixer for a ~16 ms per-track dip masking a head's
+ * ring re-anchor — the master is never ducked for a one-head edit. */
+static volatile uint8_t  g_head_pos[NTRK];
+static volatile uint8_t  g_head_blip[NTRK];
+static uint8_t           g_fh_latch[NTRK];   /* fader owes a volume re-cross */
+static int               g_fh_lastq[NTRK];   /* last raw read while latched */
+#define heads_engaged() (g_heads_mode && trk[0].state == TS_PLAY)
 static volatile uint8_t  g_dip_req;                /* M10: controls -> mixer, declick dip at a chop edit */
 static volatile uint8_t  g_off_fade;               /* M10: power-off fade — master to 0 and HOLD */
 static volatile uint32_t g_beat_phase;            /* phase within a beat (loop samples), for LEDs */
@@ -1870,7 +1880,11 @@ static void looper_audio_block(int16_t *s)
 		 * linearly across the block toward the target (mute = target 0),
 		 * spreading any change over 256 samples; a muted track is skipped
 		 * entirely once its ramp settles at zero. */
-		const int32_t vtar = trk[i].muted ? 0 : (int32_t)vol_s[i];
+		/* M14: a pending blip mutes this track for ~3 blocks (~16 ms),
+		 * riding the existing ramp for clickless edges. */
+		const int32_t vtar = (trk[i].muted || g_head_blip[i])
+				   ? 0 : (int32_t)vol_s[i];
+		if (g_head_blip[i]) g_head_blip[i]--;
 		const int32_t vprev = (int32_t)trk[i].vol_now;
 		int32_t vd = vtar - vprev;                   /* 0 in the common case */
 		/* ADC DEADBAND: the fader ADC jitters +/-1 count between reads, so
@@ -3103,8 +3117,8 @@ static void streamer_thread(void *a, void *b, void *c)
 					/* phase-anchored position along the audible chop
 					 * cycle, tiled onto the region (variable mode:
 					 * wper=gb, cyc=win -> identical to M5). */
-					uint32_t hoff = head_active(i)
-						      ? ((uint32_t)i * cyc) / 4u : 0u;
+					uint32_t hoff = heads_engaged()
+						      ? (((uint32_t)g_head_pos[i] * cyc) >> 8) : 0u;
 					uint32_t c = ((pwb % cyc) + cyc -
 						      (hsrc->start_blk % cyc) + hoff) % cyc;
 					uint32_t loop_blk = (c / win) * wper + wbase + (c % win);
@@ -4229,8 +4243,8 @@ static void led_service(void)
 						     : (g_loop_blocks ? g_loop_blocks : 1u);
 					uint32_t dv2 = g_chop_div ? g_chop_div : 1u;
 					uint32_t cyc2 = gb2 / dv2; if (cyc2 == 0u) cyc2 = 1u;
-					uint32_t ho2 = head_active(i)
-						     ? ((uint32_t)i * cyc2) / 4u : 0u;
+					uint32_t ho2 = heads_engaged()
+					             ? (((uint32_t)g_head_pos[i] * cyc2) >> 8) : 0u;
 					uint32_t pwb2 = (uint32_t)(g_consume_pos / SAMP_PER_BLK);
 					uint32_t c2 = ((pwb2 % cyc2) + cyc2 -
 						       (hs2->start_blk % cyc2) + ho2) % cyc2;
@@ -4959,6 +4973,8 @@ int main(void)
 						for (int hk = 1; hk < NTRK; hk++)
 							trk[hk].p_w = (uint32_t)(g_consume_pos /
 								SAMP_PER_BLK) * SAMP_PER_BLK;
+						for (int hk = 0; hk < NTRK; hk++)
+							g_head_pos[hk] = (uint8_t)(hk * 64);
 						g_dip_req = 1;
 						combo_fired = 1;
 					}
@@ -5110,6 +5126,52 @@ int main(void)
 					continue;                 /* chord owns the button */
 				}
 				cp_cand = VOL_NONE; cp_cnt = 0;
+			}
+			/* M14 HEADS v2: while FUNCTION is held with heads engaged,
+			 * the faders are HEAD POSITIONS — absolute (grab = the head
+			 * jumps to the fader; it's a scrub, jumping is the point),
+			 * gated only by intent (move >=3 counts from the FN-down
+			 * snapshot, the bank-jump brush guard). Each apply is
+			 * rate-limited, re-anchors ONLY that head's ring, and asks
+			 * for that track's blip. Engaging spends the press (M11a
+			 * lesson: a scrubbing hold can never power off) and arms
+			 * the volume re-cross latch for FUNCTION release. */
+			if (heads_engaged()) {
+				static int64_t hf_press = -1;
+				static uint8_t hf_eng[NTRK];
+				static int hf_snap[NTRK];
+				static int64_t hf_at[NTRK];
+				if (hf_press != press_start) {
+					hf_press = press_start;
+					for (int hf = 0; hf < NTRK; hf++) {
+						hf_eng[hf] = 0; hf_snap[hf] = -1; hf_at[hf] = 0;
+					}
+				}
+				int64_t hnow = k_uptime_get();
+				for (int hf = 0; hf < NTRK; hf++) {
+					int fv = ladder_read(&adc_ladder[LAD_FADER0 + hf]);
+					if (fv < 0) continue;
+					int q = (int)((uint32_t)fv * 256u / 3700u);
+					if (q > 255) q = 255;
+					if (hf_snap[hf] < 0) { hf_snap[hf] = q; continue; }
+					if (!hf_eng[hf]) {
+						int d = q - hf_snap[hf];
+						if (d < 0) d = -d;
+						if (d < 3) continue;      /* intent gate */
+						hf_eng[hf] = 1;
+						combo_seen = 1;           /* press is spent */
+						g_fh_latch[hf] = 1;
+						g_fh_lastq[hf] = -1;
+					}
+					int dd = q - (int)g_head_pos[hf];
+					if (dd < 0) dd = -dd;
+					if (dd < 2) continue;             /* ADC deadband */
+					if (hnow - hf_at[hf] < 45) continue;  /* rate limit */
+					hf_at[hf] = hnow;
+					g_head_blip[hf] = 3;
+					g_head_pos[hf] = (uint8_t)q;
+					trk[hf].p_w = (g_consume_pos / SAMP_PER_BLK) * SAMP_PER_BLK;
+				}
 			}
 			if (combo_seen) {
 				/* The combo has been engaged this FUNCTION press: once PLAY
@@ -5611,7 +5673,21 @@ int main(void)
 				int fv = ladder_read(&adc_ladder[LAD_FADER0 + fi]);
 				if (fv >= 0) {        /* ADC error -> hold the last volume */
 					uint32_t q = (uint32_t)fv * 256u / 3700u;
-					trk[fi].vol_q8 = (uint16_t)(q > 256u ? 256u : q);
+					if (q > 256u) q = 256u;
+					/* M14: a fader that was scrubbing a head keeps its
+					 * OLD volume until it rejoins it (±6%) or crosses
+					 * it — no volume jump on FUNCTION release. */
+					if (g_fh_latch[fi]) {
+						int d = (int)q - (int)trk[fi].vol_q8;
+						int p = g_fh_lastq[fi];
+						g_fh_lastq[fi] = (int)q;
+						if ((d >= -15 && d <= 15) ||
+						    (p >= 0 &&
+						     ((p - (int)trk[fi].vol_q8 > 0) != (d > 0))))
+							g_fh_latch[fi] = 0;
+					}
+					if (!g_fh_latch[fi])
+						trk[fi].vol_q8 = (uint16_t)q;
 				}
 				fi = (fi + 1) & 3;
 			}
