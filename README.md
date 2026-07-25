@@ -52,6 +52,10 @@ What 2.0 adds on top of the 1.x looper:
 - **Loop chop** — a live performance window over every playing track: shrink,
   grow, slide or reset it from the FUNCTION layer (see Controls).
   Non-destructive, and saved with the song.
+- **Heads mode** — hold FUNCTION and triple-tap PLAY: tracks 2–4 become
+  three extra tape heads on track 1's loop, a quarter-cycle apart — one
+  loop played in four phases, with a fader and a mute per head (see
+  Controls).
 - **Press-accurate loop capture** — the stop lands on your press-down (the
   variable release latency is gone, and the remaining constant is backdated
   out of the take), so seams land where you play them.
@@ -228,6 +232,21 @@ SP-1 custom firmware) — no soldering or opening the device required:
   slices the shared bar across all layers together; in variable mode each
   track slices its own length.
 
+### Heads mode (FUNCTION + triple-tap PLAY)
+- With track 1 playing, hold FUNCTION and **triple-tap PLAY**: tracks 2–4
+  stop playing their own loops and become three extra **tape heads on
+  track 1's loop**, offset by quarters of its cycle — the same audio in
+  four phases, like a canon.
+- Each head has its own fader and mute (tap tracks 2–4). The four lights
+  chase in sequence, matching what you hear. Chop applies to all four heads
+  at once — shrink the window and the whole canon tightens.
+- It's a playback/performance mode: recording and delete are blocked while
+  it's on (taps only mute). **Triple-tap again to exit** — tracks 2–4
+  return exactly as they were; their content is never touched.
+- Switching songs or powering off also exits: every song opens playing
+  normally. The second tap of the triple is the usual 1.0x snap, so heads
+  always enter at native speed.
+
 ### Lights and battery
 - LEDs run dim, with the song/status row a touch brighter than the track
   row. For direct sunlight, hold **FUNCTION + PLAY through 5 seconds** —
@@ -237,6 +256,9 @@ SP-1 custom firmware) — no soldering or opening the device required:
   including the charging gauge and the power-on/off sweeps.
 - A muted track that HAS content glows faintly — dark = empty, faint = loaded
   but muted, pulsing = playing. No more guessing what's sleeping under a song.
+- On songs without a grid, each playing light pulses when **its own loop
+  wraps** — different-length loops paint their polyrhythm on the panel.
+  Gridded songs pulse together on the shared grid (that's the metronome).
 - Charging in standby shows a battery gauge: 1–4 LEDs for the level, with the
   top LED blinking until the charger reports full. Mid-charge readings run
   slightly optimistic; "full" is authoritative.

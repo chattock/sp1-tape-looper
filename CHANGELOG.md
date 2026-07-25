@@ -5,6 +5,28 @@ Versions 1.0.0-1.2.4 below were the 2.0 development line (developed as a
 fork by marc, never announced) — kept for the honest record. The classic
 4-song firmware lives on the `v1` branch. Base: 1.x at commit c60941c.
 
+## [2.2.0] - 2026-07-25
+
+### Added
+- Heads mode: with track 1 playing, hold FUNCTION and TRIPLE-tap PLAY —
+  tracks 2-4 stop playing their own loops and become three extra tape heads
+  on track 1's loop, offset by quarters of its cycle. One loop in four
+  phases, like a canon: each head has its own fader and mute, the four
+  lights chase in sequence, and chop moves all four heads at once. Playback
+  only — recording and delete are blocked while it's on (taps still mute);
+  triple-tap again to exit and tracks 2-4 return untouched. Switching songs
+  or powering off also exits (like speed, mutes and chop, every song opens
+  as itself). The second tap of the triple is still the 1.0x snap, so heads
+  always enter at native speed.
+
+### Changed
+- Songs without a grid: each playing light now pulses when ITS OWN loop
+  wraps (chop-aware) instead of all four pulsing one shared beat —
+  different-length loops paint their polyrhythm on the panel; long loops
+  flash ~2 beats at each wrap. Gridded songs keep the shared grid pulse
+  and metronome chase — except in heads mode, where the canon chase takes
+  over on gridded songs too.
+
 ## [2.1.0] - 2026-07-24
 
 ### Added
