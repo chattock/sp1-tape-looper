@@ -1063,6 +1063,10 @@ static volatile uint8_t  g_heads_mode;
  * g_head_blip asks the mixer for a ~16 ms per-track dip masking a head's
  * ring re-anchor — the master is never ducked for a one-head edit. */
 static volatile uint8_t  g_head_pos[NTRK];
+/* M15: per-head DIRECTION (heads mode double-tap — delete is blocked there,
+ * so the gesture was free). Gated on heads_engaged(): normal playback can
+ * never see it; reset forward at every heads entry. Session-only. */
+static volatile uint8_t  g_head_rev[NTRK];
 static volatile uint8_t  g_head_blip[NTRK];
 static uint8_t           g_fh_latch[NTRK];   /* fader owes a volume re-cross */
 static int               g_fh_lastq[NTRK];   /* last raw read while latched */
@@ -3121,6 +3125,12 @@ static void streamer_thread(void *a, void *b, void *c)
 						      ? (((uint32_t)g_head_pos[i] * cyc) >> 8) : 0u;
 					uint32_t c = ((pwb % cyc) + cyc -
 						      (hsrc->start_blk % cyc) + hoff) % cyc;
+					/* M15 REVERSE: mirror the phase — consecutive ring
+					 * blocks then walk the source BACKWARD, and each
+					 * block's samples are flipped after decode below:
+					 * together a continuous time-reversed stream. */
+					bool hrev = heads_engaged() && g_head_rev[i];
+					if (hrev) c = (cyc - 1u) - c;
 					uint32_t loop_blk = (c / win) * wper + wbase + (c % win);
 					uint32_t n = budget;
 					if (n > (RING_SAMPLES / SAMP_PER_BLK) - 1u) n = (RING_SAMPLES / SAMP_PER_BLK) - 1u;
@@ -3133,9 +3143,17 @@ static void streamer_thread(void *a, void *b, void *c)
 						if (n > _rb) n = _rb;
 					}
 					if (!n) break;
-					{	/* contiguous run ends at this tile's window edge */
-						uint32_t wend = (c / win) * wper + wbase + win;
-						if (loop_blk + n > wend) n = wend - loop_blk;
+					{	/* contiguous run ends at this tile's window edge
+						 * (M15-r2: a reversed head's run walks BACKWARD,
+						 * so its edge is the tile START) */
+						if (!hrev) {
+							uint32_t wend = (c / win) * wper + wbase + win;
+							if (loop_blk + n > wend) n = wend - loop_blk;
+						} else {
+							uint32_t wstart = (c / win) * wper + wbase;
+							if (n > loop_blk - wstart + 1u)
+								n = loop_blk - wstart + 1u;
+						}
 					}
 					/* SILENCE PAD: the loop length can exceed the recorded
 					 * content (fixed mode). [content, gb) was never written
@@ -3146,9 +3164,16 @@ static void streamer_thread(void *a, void *b, void *c)
 					 * 0x00 decodes to a loud tone). */
 					uint32_t content = hsrc->content_blocks ? hsrc->content_blocks : gb;
 					bool _sil = (loop_blk >= content);
-					if (!_sil && loop_blk + n > content) n = content - loop_blk;
+					if (!hrev) {
+						if (!_sil && loop_blk + n > content)
+							n = content - loop_blk;
+					} else if (_sil && n > loop_blk - content + 1u) {
+						/* backward silence run stays silence */
+						n = loop_blk - content + 1u;
+					}
 					uint32_t blkno = trk_blk(slot, head_active(i) ? 0u
-					                              : (uint32_t)i) + loop_blk;
+					                              : (uint32_t)i)
+						       + (hrev ? (loop_blk - n + 1u) : loop_blk);
 					bool _rok;
 					if (_sil) { memset(batchbuf, 0, (size_t)n * EMMC_BLOCK_SIZE); _rok = true; }
 					else      { _rok = emmc_read_blocks(blkno, batchbuf, n); }
@@ -3176,6 +3201,22 @@ static void streamer_thread(void *a, void *b, void *c)
 					/* DECODE: packed flash bytes (n blocks just read) -> play
 					 * ring (int16, wraps at RING_MASK, pw is block-aligned).
 					 * PCM is memcpy-equivalent. */
+					if (hrev) {
+						/* M15-r2: the run was read FORWARD in one CMD18;
+						 * reversing the whole batch in place flips both
+						 * block order and sample order — a time-reversed
+						 * stream in normal layout. (The first cut read
+						 * reversed heads one block per command; 3-4 of
+						 * them near top speed starved on command
+						 * overhead — marc's dropout report.) */
+						int16_t *bp = (int16_t *)batchbuf;
+						uint32_t tot = n * SAMP_PER_BLK;
+						for (uint32_t f = 0; f < tot / 2u; f++) {
+							int16_t tv = bp[f];
+							bp[f] = bp[tot - 1u - f];
+							bp[tot - 1u - f] = tv;
+						}
+					}
 					codec_unpack(t->pring, RING_MASK, pw & RING_MASK,
 					             batchbuf, n);
 					t->p_w = pw + n * SAMP_PER_BLK;
@@ -4248,6 +4289,8 @@ static void led_service(void)
 					uint32_t pwb2 = (uint32_t)(g_consume_pos / SAMP_PER_BLK);
 					uint32_t c2 = ((pwb2 % cyc2) + cyc2 -
 						       (hs2->start_blk % cyc2) + ho2) % cyc2;
+					if (heads_engaged() && g_head_rev[i])
+						c2 = (cyc2 - 1u) - c2;   /* M15: chase walks back */
 					uint32_t onw = cyc2 / 8u;
 					if (onw < 1u) onw = 1u;
 					if (onw > 280u) onw = 280u;   /* ~2 beats */
@@ -4973,8 +5016,10 @@ int main(void)
 						for (int hk = 1; hk < NTRK; hk++)
 							trk[hk].p_w = (uint32_t)(g_consume_pos /
 								SAMP_PER_BLK) * SAMP_PER_BLK;
-						for (int hk = 0; hk < NTRK; hk++)
+						for (int hk = 0; hk < NTRK; hk++) {
 							g_head_pos[hk] = (uint8_t)(hk * 64);
+							g_head_rev[hk] = 0;
+						}
 						g_dip_req = 1;
 						combo_fired = 1;
 					}
@@ -5120,6 +5165,36 @@ int main(void)
 						g_dip_req = 1;
 						cp_rep_at = cp_cnt + cp_rep_iv;
 						if (cp_rep_iv > 5) cp_rep_iv--;   /* floor ~125 ms */
+					} else if (cp_cnt > 3 && cp_rep_at && cp_cnt >= cp_rep_at &&
+						   (vb == VOL_TEMPO_UP || vb == VOL_TEMPO_DOWN)) {
+						/* M15 LENGTH GLIDE: holding FN+FWD/RWD now
+						 * repeats the halve/double too — a STEADY
+						 * ~375 ms cadence, not the accelerating shift
+						 * glide: only 7 sizes exist, so bottom-to-top
+						 * takes ~2.3 s under full control (the M10
+						 * blink-sweep objection was about speed, and
+						 * this is the slow version marc asked for).
+						 * At either end the hold idles harmlessly.
+						 * Double-click reset still keys on press
+						 * EDGES, so repeats can never fake it. */
+						uint32_t d2 = g_chop_div, o2 = g_chop_off;
+						if (vb == VOL_TEMPO_UP) {
+							if (d2 < 64u) { d2 <<= 1; o2 <<= 1; }
+						} else {
+							if (d2 > 1u)  { d2 >>= 1; o2 >>= 1; }
+						}
+						if (d2 != g_chop_div) {
+							g_chop_off = (d2 > 1u) ? (o2 % d2) : 0u;
+							g_chop_div = d2;
+							if (g_slot < NUM_SLOTS) {
+								g_meta.chop[g_slot][0] = (uint8_t)d2;
+								g_meta.chop[g_slot][1] = (uint8_t)g_chop_off;
+								g_meta_save_req = 1;
+							}
+							g_chop_req = 1;
+							g_dip_req = 1;
+						}
+						cp_rep_at = cp_cnt + 15;   /* steady ~375 ms */
 					}
 					led_service();
 					k_msleep(25);
@@ -5516,6 +5591,22 @@ int main(void)
 						tap_deadline[ti] = 0;   /* 2nd tap -> DELETE */
 						g_del_req[ti] = 1;
 						trk[ti].muted = 0;
+					} else if (tap_deadline[ti] > 0 && tnow <= tap_deadline[ti]) {
+						/* M15: heads mode double-tap = REVERSE that
+						 * head. The first tap toggled the mute — undo
+						 * it (and its persisted bit), flip direction,
+						 * re-anchor this ring behind a blip. */
+						tap_deadline[ti] = 0;
+						trk[ti].muted = !trk[ti].muted;
+						if (g_slot < NUM_SLOTS) {
+							uint8_t mb = (uint8_t)(0x10u << ti);
+							if (trk[ti].muted) g_meta.song_mode[g_slot] |= mb;
+							else               g_meta.song_mode[g_slot] &= (uint8_t)~mb;
+							g_meta_save_req = 1;
+						}
+						g_head_rev[ti] = !g_head_rev[ti];
+						g_head_blip[ti] = 3;
+						trk[ti].p_w = (g_consume_pos / SAMP_PER_BLK) * SAMP_PER_BLK;
 					} else {
 						/* tap -> mute, INSTANT on gridded and
 						 * ungridded songs alike (v2.0.0: the M8c
