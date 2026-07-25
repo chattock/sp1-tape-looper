@@ -1048,6 +1048,15 @@ static volatile int      g_restart_req;            /* main -> engine: hold PLAY 
 static volatile uint32_t g_chop_div = 1;           /* 1,2,4,... 64 (1 = full loop) */
 static volatile uint32_t g_chop_off = 0;           /* window index: 0..div-1 */
 static volatile int      g_chop_req;               /* main -> engine: window changed, snap rings */
+/* M13 HEADS MODE (prototype, session-only): FN+PLAY TRIPLE-tap toggles it.
+ * Tracks 2-4 stop playing their own loops and become three extra TAPE HEADS
+ * on track 1's loop, offset by quarters of its audible cycle (Count-to-Five
+ * style): same audio, four phases. Faders and mutes act per head, so one
+ * loop becomes a canon/texture instrument. Recording and delete are blocked
+ * while active (toggle off to record); the heads' own hidden content is
+ * untouched and returns when the mode ends. */
+static volatile uint8_t  g_heads_mode;
+#define head_active(i) (g_heads_mode && (i) > 0 && trk[0].state == TS_PLAY)
 static volatile uint8_t  g_dip_req;                /* M10: controls -> mixer, declick dip at a chop edit */
 static volatile uint8_t  g_off_fade;               /* M10: power-off fade — master to 0 and HOLD */
 static volatile uint32_t g_beat_phase;            /* phase within a beat (loop samples), for LEDs */
@@ -1852,7 +1861,7 @@ static void looper_audio_block(int16_t *s)
 
 	/* ==== PASS B: accumulate each playing track over the whole block ==== */
 	for (int i = 0; i < NTRK; i++) {
-		if (trk[i].state != TS_PLAY) continue;
+		if (trk[i].state != TS_PLAY && !head_active(i)) continue;
 		/* GAIN SMOOTHING + CLICKLESS MUTE: the fader value used to be
 		 * applied as a hard step once per 5 ms block (and mute as an
 		 * instant gate) — fast fader rides audibly zipper-clicked and
@@ -2083,7 +2092,7 @@ static bool emmc_busy_abort_chk(void)
 		uint8_t sj = trk[j].state;
 		if (sj == TS_ARMED || sj == TS_REC || sj == TS_DONE)
 			return true;
-		if (sj == TS_PLAY &&
+		if ((sj == TS_PLAY || head_active(j)) &&
 		    (int32_t)(trk[j].p_w - g_consume_pos) <
 		    (int32_t)(RING_SAMPLES / 2u))
 			return true;
@@ -2823,7 +2832,8 @@ static void streamer_thread(void *a, void *b, void *c)
 					    (RRING_SAMPLES - RRING_SAMPLES / 8u)) {
 						bool _pcrit = false;
 						for (int j = 0; j < NTRK; j++)
-							if (trk[j].state == TS_PLAY &&
+							if ((trk[j].state == TS_PLAY ||
+							     head_active(j)) &&
 							    (int32_t)(trk[j].p_w - g_consume_pos) <
 							    (int32_t)PLAY_CRIT_SAMPLES)
 								_pcrit = true;
@@ -2995,7 +3005,7 @@ static void streamer_thread(void *a, void *b, void *c)
 				int i = (int)((rr + (uint32_t)k) & 3u);
 				if (g_slot != slot) break;
 				struct looptrk *t = &trk[i];
-				if (t->state != TS_PLAY) continue;
+				if (t->state != TS_PLAY && !head_active(i)) continue;
 				int32_t avail = (int32_t)(t->p_w - cpos);
 				/* DEAD-HISTORY SNAP: a frontier BEHIND the playhead is pure
 				 * waste — the mixer reads exactly pring[cpos], so every
@@ -3043,7 +3053,11 @@ static void streamer_thread(void *a, void *b, void *c)
 					                    * bursts, not 3-block CMD18 spam. */
 				/* SEGMENT: this track loops at ITS OWN length (a whole multiple
 				 * of the base), not the shared g_loop_blocks. */
-				uint32_t gb = t->len_blocks ? t->len_blocks
+				/* M13: a HEAD sources track 1's loop instead of its own —
+				 * geometry (length/start/content/region) comes from track
+				 * 1; ring bookkeeping stays this track's. */
+				struct looptrk *hsrc = head_active(i) ? &trk[0] : t;
+				uint32_t gb = hsrc->len_blocks ? hsrc->len_blocks
 					    : (g_loop_blocks ? g_loop_blocks : 1u);
 				/* CHOP window (M7b, mode-aware). VARIABLE: slice this
 				 * track's OWN length (M5 behavior). FIXED (base known,
@@ -3089,8 +3103,10 @@ static void streamer_thread(void *a, void *b, void *c)
 					/* phase-anchored position along the audible chop
 					 * cycle, tiled onto the region (variable mode:
 					 * wper=gb, cyc=win -> identical to M5). */
+					uint32_t hoff = head_active(i)
+						      ? ((uint32_t)i * cyc) / 4u : 0u;
 					uint32_t c = ((pwb % cyc) + cyc -
-						      (t->start_blk % cyc)) % cyc;
+						      (hsrc->start_blk % cyc) + hoff) % cyc;
 					uint32_t loop_blk = (c / win) * wper + wbase + (c % win);
 					uint32_t n = budget;
 					if (n > (RING_SAMPLES / SAMP_PER_BLK) - 1u) n = (RING_SAMPLES / SAMP_PER_BLK) - 1u;
@@ -3114,10 +3130,11 @@ static void streamer_thread(void *a, void *b, void *c)
 					 * for PCM. A compressed codec (u-law/ADPCM) would need
 					 * its own encoded-silence bytes here, not zeros (u-law
 					 * 0x00 decodes to a loud tone). */
-					uint32_t content = t->content_blocks ? t->content_blocks : gb;
+					uint32_t content = hsrc->content_blocks ? hsrc->content_blocks : gb;
 					bool _sil = (loop_blk >= content);
 					if (!_sil && loop_blk + n > content) n = content - loop_blk;
-					uint32_t blkno = trk_blk(slot, (uint32_t)i) + loop_blk;
+					uint32_t blkno = trk_blk(slot, head_active(i) ? 0u
+					                              : (uint32_t)i) + loop_blk;
 					bool _rok;
 					if (_sil) { memset(batchbuf, 0, (size_t)n * EMMC_BLOCK_SIZE); _rok = true; }
 					else      { _rok = emmc_read_blocks(blkno, batchbuf, n); }
@@ -4185,10 +4202,10 @@ static void led_service(void)
 				}
 				(ab ? track_led_on(i) : track_led_off(i));
 			}
-			else if (st == TS_PLAY && !trk[i].muted && !g_playing)
+			else if ((st == TS_PLAY || head_active(i)) && !trk[i].muted && !g_playing)
 				track_led_on(i);   /* stopped: content reads solid, not
 				                    * frozen-dark like an empty track */
-			else if (st == TS_PLAY && !trk[i].muted) {
+			else if ((st == TS_PLAY || head_active(i)) && !trk[i].muted) {
 				/* M12 (community ask): PER-TRACK WRAP PULSES when there
 				 * is no grid. All four playing lights used to pulse in
 				 * unison off one beat clock — four LEDs, one bit. Now
@@ -4200,14 +4217,23 @@ static void led_service(void)
 				 * Long loops get a capped ~2-beat flash at each wrap
 				 * instead of a 1/8-duty minute-long glow. */
 				int tp = on_beat;
-				if (!g_grid_active) {
-					uint32_t gb2 = trk[i].len_blocks ? trk[i].len_blocks
+				if (!g_grid_active ||
+				    (g_heads_mode && trk[0].state == TS_PLAY)) {
+					/* M13: heads pulse against the SOURCE loop, each
+					 * offset a quarter — the four lights chase in
+					 * canon, matching what you hear. Heads ENGAGED
+					 * overrides the gridded shared pulse too: in
+					 * heads mode the canon is the clock. */
+					struct looptrk *hs2 = head_active(i) ? &trk[0] : &trk[i];
+					uint32_t gb2 = hs2->len_blocks ? hs2->len_blocks
 						     : (g_loop_blocks ? g_loop_blocks : 1u);
 					uint32_t dv2 = g_chop_div ? g_chop_div : 1u;
 					uint32_t cyc2 = gb2 / dv2; if (cyc2 == 0u) cyc2 = 1u;
+					uint32_t ho2 = head_active(i)
+						     ? ((uint32_t)i * cyc2) / 4u : 0u;
 					uint32_t pwb2 = (uint32_t)(g_consume_pos / SAMP_PER_BLK);
 					uint32_t c2 = ((pwb2 % cyc2) + cyc2 -
-						       (trk[i].start_blk % cyc2)) % cyc2;
+						       (hs2->start_blk % cyc2) + ho2) % cyc2;
 					uint32_t onw = cyc2 / 8u;
 					if (onw < 1u) onw = 1u;
 					if (onw > 280u) onw = 280u;   /* ~2 beats */
@@ -4215,7 +4241,8 @@ static void led_service(void)
 				}
 				(tp ? track_led_on(i) : track_led_off(i));
 			}
-			else if (st == TS_PLAY && trk[i].muted) track_led_ghost(i);
+			else if ((st == TS_PLAY || head_active(i)) && trk[i].muted)
+				track_led_ghost(i);
 			else                                    track_led_off(i);
 		}
 	}
@@ -4499,6 +4526,9 @@ static void jump_to_slot(uint32_t ns)
 		}
 		g_grid_resync_at = 0;
 	}
+	g_heads_mode = 0;   /* M13: heads are per-song doctrine like speed/mutes/
+	                     * chop — a new song always opens playing normally;
+	                     * triple-tap re-enters (session-only, never stored) */
 	g_slot_switch_req = 1;
 	g_meta_save_req = 1;
 }
@@ -4798,6 +4828,7 @@ int main(void)
 	int bj_cnt = 0;                  /*   consecutive passes the candidate has held     */
 	int bj_fired = -1;               /*   band already jumped during this FUNCTION press */
 	int64_t fnp_edge = -1;           /* FUNCTION+PLAY dim toggle: last PLAY press edge */
+	int fnp_chain = 0;               /* M13: consecutive PLAY taps (2 = 1.0x snap, 3 = heads) */
 	enum vol_btn cp_cand = VOL_NONE; /* FUNCTION+rocker/Vol chop: sticky candidate */
 	int cp_cnt = 0;                  /*   consecutive passes it has held */
 	int cp_dcl_band = -1;            /*   last committed rocker band (double-click) */
@@ -4896,8 +4927,11 @@ int main(void)
 					 * second PLAY press edge within 450 ms fires it
 					 * and blocks the hold tiers for this press so one
 					 * gesture can't do two things. */
-					if (fnp_edge >= 0 && fnp_now - fnp_edge <= 450 &&
-					    !combo_fired) {
+					if (fnp_edge >= 0 && fnp_now - fnp_edge <= 450)
+						fnp_chain++;
+					else
+						fnp_chain = 1;
+					if (fnp_chain == 2 && !combo_fired) {
 						/* M8c: SNAP TO 1.0x — instant return to
 						 * native speed/pitch after beatmatching or
 						 * rocker wandering ("tap to match,
@@ -4907,6 +4941,25 @@ int main(void)
 						 * page (led_full byte, adopted below). */
 						g_play_speed_q16 = 65536u;
 						g_play_bpm = 80;
+						combo_fired = 1;
+					} else if (fnp_chain == 3) {
+						/* M13: TRIPLE-tap = HEADS MODE toggle (the
+						 * 2nd tap's 1.0x snap already fired — a
+						 * sensible side effect: heads enter at
+						 * native speed). ON requires content
+						 * playing on track 1. Rings 2-4 are
+						 * re-anchored so the heads (or the old
+						 * loops) fade in cleanly via the starve
+						 * machinery + a declick dip. */
+						if (g_heads_mode) {
+							g_heads_mode = 0;
+						} else if (trk[0].state == TS_PLAY) {
+							g_heads_mode = 1;
+						}
+						for (int hk = 1; hk < NTRK; hk++)
+							trk[hk].p_w = (uint32_t)(g_consume_pos /
+								SAMP_PER_BLK) * SAMP_PER_BLK;
+						g_dip_req = 1;
 						combo_fired = 1;
 					}
 					fnp_edge = fnp_now;
@@ -5191,7 +5244,7 @@ int main(void)
 		combo_start = -1;
 		combo_fired = 0;
 		combo_seen  = 0;
-		bj_cand = TRK_NONE; bj_cnt = 0; bj_fired = -1; fnp_edge = -1;
+		bj_cand = TRK_NONE; bj_cnt = 0; bj_fired = -1; fnp_edge = -1; fnp_chain = 0;
 		cp_cand = VOL_NONE; cp_cnt = 0; cp_dcl_band = -1;
 
 		/* ---- looper controls + LEDs ---- */
@@ -5394,7 +5447,10 @@ int main(void)
 						 * delete window on a fresh take). */
 						g_stop_req = 1;
 						tap_deadline[ti] = 0;
-					} else if (tap_deadline[ti] > 0 && tnow <= tap_deadline[ti]) {
+					} else if (tap_deadline[ti] > 0 && tnow <= tap_deadline[ti] &&
+						   !g_heads_mode) {
+						/* (heads mode: taps only mute — never
+						 * delete or arm; the mode is playback) */
 						tap_deadline[ti] = 0;   /* 2nd tap -> DELETE */
 						g_del_req[ti] = 1;
 						trk[ti].muted = 0;
@@ -5470,7 +5526,7 @@ int main(void)
 				int empt = (trk[ti].state == TS_EMPTY &&
 					    !(g_slot < NUM_SLOTS && g_meta.slot[g_slot].present[ti]));
 				if (!armed_press[ti] && ti != stop_tap_trk &&
-				    g_rec_track < 0 &&
+				    g_rec_track < 0 && !g_heads_mode &&
 				    trk[ti].state != TS_DONE &&
 				    k_uptime_get() - press_t[ti] >=
 				        (empt ? 100 : HOLD_RECORD_MS)) {
