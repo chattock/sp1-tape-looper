@@ -4188,7 +4188,33 @@ static void led_service(void)
 			else if (st == TS_PLAY && !trk[i].muted && !g_playing)
 				track_led_on(i);   /* stopped: content reads solid, not
 				                    * frozen-dark like an empty track */
-			else if (st == TS_PLAY && on_beat && !trk[i].muted) track_led_on(i);
+			else if (st == TS_PLAY && !trk[i].muted) {
+				/* M12 (community ask): PER-TRACK WRAP PULSES when there
+				 * is no grid. All four playing lights used to pulse in
+				 * unison off one beat clock — four LEDs, one bit. Now
+				 * each light pulses as ITS OWN loop wraps (chop-aware:
+				 * the audible cycle is len/div in both modes), so
+				 * different-length loops literally paint their
+				 * polyrhythm on the panel. Gridded songs keep the
+				 * shared grid pulse — there the point IS the one clock.
+				 * Long loops get a capped ~2-beat flash at each wrap
+				 * instead of a 1/8-duty minute-long glow. */
+				int tp = on_beat;
+				if (!g_grid_active) {
+					uint32_t gb2 = trk[i].len_blocks ? trk[i].len_blocks
+						     : (g_loop_blocks ? g_loop_blocks : 1u);
+					uint32_t dv2 = g_chop_div ? g_chop_div : 1u;
+					uint32_t cyc2 = gb2 / dv2; if (cyc2 == 0u) cyc2 = 1u;
+					uint32_t pwb2 = (uint32_t)(g_consume_pos / SAMP_PER_BLK);
+					uint32_t c2 = ((pwb2 % cyc2) + cyc2 -
+						       (trk[i].start_blk % cyc2)) % cyc2;
+					uint32_t onw = cyc2 / 8u;
+					if (onw < 1u) onw = 1u;
+					if (onw > 280u) onw = 280u;   /* ~2 beats */
+					tp = (c2 < onw);
+				}
+				(tp ? track_led_on(i) : track_led_off(i));
+			}
 			else if (st == TS_PLAY && trk[i].muted) track_led_ghost(i);
 			else                                    track_led_off(i);
 		}
