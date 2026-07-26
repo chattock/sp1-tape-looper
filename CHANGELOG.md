@@ -5,6 +5,36 @@ Versions 1.0.0-1.2.4 below were the 2.0 development line (developed as a
 fork by marc, never announced) — kept for the honest record. The classic
 4-song firmware lives on the `v1` branch. Base: 1.x at commit c60941c.
 
+## [2.4.0] - 2026-07-27
+
+The resample release — heads mode learns to print.
+
+### Added
+- The BOUNCE: in heads mode, hold an EMPTY track (~0.4 s) and the whole
+  heads performance — positions, directions, per-head levels and mutes,
+  the window, reversed or not — prints into it as ONE loop. It is not a
+  recording: it's an offline render of exactly one audible cycle, so the
+  seam is perfect by construction and the print lands IN PHASE with its
+  source. The destination fast-blinks while it prints (a few seconds),
+  then heads mode exits by itself with the new loop playing — you hear
+  exactly what you just built. Print it, re-head it, print again: the
+  resample spiral. (Live filter sweeps and tape speed are NOT baked in —
+  they stay live tools on top of the print, like on any track.)
+- Heads on ANY track: the triple-tap engages on the lowest playing
+  unmuted track, and holding any LOADED track inside heads mode makes IT
+  the tape (your head positions and directions carry over).
+- You can see what's printable: a head with nothing underneath chases at
+  a faint ghost intensity — faint = empty = a bounce target; full bright
+  = loaded = a source you can grab.
+
+### Changed
+- Heads-mode mutes are performance state now: entering heads un-mutes all
+  four heads (a muted track no longer sits silent in the canon), taps
+  mute freely without ever touching the song's saved mutes, and the
+  original mutes return exactly on exit.
+- The muted-track ghost glow is a touch fainter in dim mode, so muted
+  reads clearly darker than playing; full-brightness mode is unchanged.
+
 ## [2.3.1] - 2026-07-26
 
 ### Fixed

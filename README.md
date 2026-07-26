@@ -252,10 +252,26 @@ The one-page map ([full size](docs/sp1-control-map.png)):
   track slices its own length.
 
 ### Heads mode (FUNCTION + triple-tap PLAY)
-- With track 1 playing, hold FUNCTION and **triple-tap PLAY**: tracks 2–4
-  stop playing their own loops and become three extra **tape heads on
-  track 1's loop**, offset by quarters of its cycle — the same audio in
-  four phases, like a canon.
+- With a loop playing, hold FUNCTION and **triple-tap PLAY**: the other
+  three tracks stop playing their own loops and become three extra **tape
+  heads on the source loop**, offset by quarters of its cycle — the same
+  audio in four phases, like a canon. The source is the lowest playing
+  unmuted track; **hold any loaded track (~0.4 s) to make IT the tape**
+  instead — your head positions and directions carry over.
+- Every head starts audible (the song's mutes are set aside while heads
+  mode runs, and restored exactly when you leave); taps mute heads freely
+  without touching the song's saved mutes.
+- **The bounce**: hold an **empty** track (~0.4 s) and the whole heads
+  performance prints into it as one seamless loop — positions,
+  directions, levels, window, reverses, all baked. The track fast-blinks
+  for a few seconds while it prints, then heads mode exits by itself with
+  the new loop playing, in phase with its source. It's an exact render of
+  one audible cycle, not a recording — your live filter and tape speed
+  stay live on top. Then re-enter heads, hold the print to make it the
+  tape, and go again.
+- The lights tell you what's what: a head with a loop underneath chases
+  at full brightness (holdable as a source); a hollow head chases faintly
+  (a print target).
 - Each head has its own fader and mute (tap tracks 2–4). The four lights
   chase in sequence, matching what you hear. Chop applies to all four heads
   at once — shrink the window and the whole canon tightens.
