@@ -50,12 +50,14 @@ What 2.0 adds on top of the 1.x looper:
   and punch exactly on the next bar line — every loop stays locked with no
   timing precision required from you.
 - **Loop chop** — a live performance window over every playing track: shrink,
-  grow, slide or reset it from the FUNCTION layer (see Controls).
-  Non-destructive, and saved with the song.
+  grow, slide or reset it from the FUNCTION layer — or shape it directly on
+  the faders (start / end / shift, any width), cross the edges to play the
+  window in REVERSE, and color everything with the fader-4 DJ filter (see
+  Controls). Non-destructive; the stepped chop is saved with the song.
 - **Heads mode** — hold FUNCTION and triple-tap PLAY: tracks 2–4 become
-  three extra tape heads on track 1's loop, a quarter-cycle apart — one
-  loop played in four phases, with a fader and a mute per head (see
-  Controls).
+  three extra tape heads on track 1's loop — one loop played in four
+  phases, with a fader and a mute per head. Scrub the heads live on the
+  faders, flip any head into reverse with a double-tap (see Controls).
 - **Press-accurate loop capture** — the stop lands on your press-down (the
   variable release latency is gone, and the remaining constant is backdated
   out of the take), so seams land where you play them.
@@ -170,12 +172,17 @@ SP-1 custom firmware) — no soldering or opening the device required:
 
 ## 3. Controls
 
+The one-page map ([full size](docs/sp1-control-map.png)):
+
+![SP-1 control map](docs/sp1-control-map.png)
+
 ### Turning it on and off
 - The device boots into a quiet charging/standby state. Plugging in USB or
   finishing a flash does not start playback.
 - Hold the FUNCTION button (the lower button) for about 1.5 s to turn it on
-  (a quick press does nothing — the device can't switch on by accident in a
-  bag or pocket).
+  — the side lights fill as a countdown and it switches on as the fourth
+  lands. A quick press does nothing (one dim blink), so the device can't
+  switch on by accident in a bag or pocket.
 - Hold FUNCTION for about 2.5 s to turn it off (the four centre LEDs fill as a
   countdown; release early to cancel).
 - Powering off while plugged into USB lands in the charging gauge instead of
@@ -263,8 +270,9 @@ SP-1 custom firmware) — no soldering or opening the device required:
   it's on (taps only mute). **Triple-tap again to exit** — tracks 2–4
   return exactly as they were; their content is never touched.
 - Switching songs or powering off also exits: every song opens playing
-  normally. The second tap of the triple is the usual 1.0x snap, so heads
-  always enter at native speed.
+  normally. A completed triple never touches the tape speed — heads engage
+  at whatever speed you are playing (a plain double-tap still snaps to
+  1.0x, landing ~0.6 s after the second tap).
 
 ### Lights and battery
 - LEDs run dim, with the song/status row a touch brighter than the track
