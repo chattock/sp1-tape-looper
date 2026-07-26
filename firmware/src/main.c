@@ -1079,6 +1079,21 @@ static volatile uint8_t  g_win_free;
 static volatile uint8_t  g_win_s8;
 static volatile uint8_t  g_win_e8 = 255;
 static volatile uint8_t  g_win_rev;
+/* M17 DJ FILTER (session-only, M11 decisions finally cashed in): while
+ * FUNCTION is held outside heads mode, FADER 4 is a center-neutral DJ
+ * filter on the master sum — center = clean bypass (wide 12% notch),
+ * below = LP sweep down to ~80 Hz, above = HP sweep up to ~4.5 kHz.
+ * One 2-pole state-variable filter in PASS C (after the mix, before the
+ * limiter — colors everything, the DJ-correct spot), Q14 coefficients
+ * from the tables below, per-block smoothed so sweeps never zipper.
+ * Latches where the fader leaves it; resets to neutral at power-on. */
+static volatile uint8_t  g_flt_pos = 128;
+static const int16_t flt_lp_tab[14] = {   /* 80 Hz .. 6.5 kHz, exp */
+	172, 241, 337, 473, 664, 931, 1306, 1831,
+	2566, 3595, 5033, 7032, 9788, 13524 };
+static const int16_t flt_hp_tab[14] = {   /* 30 Hz .. 4.5 kHz, exp */
+	64, 95, 139, 204, 301, 442, 650, 955,
+	1404, 2064, 3032, 4451, 6520, 9512 };
 static uint8_t           g_fh_latch[NTRK];   /* fader owes a volume re-cross */
 static int               g_fh_lastq[NTRK];   /* last raw read while latched */
 #define heads_engaged() (g_heads_mode && trk[0].state == TS_PLAY)
@@ -2038,6 +2053,32 @@ static void looper_audio_block(int16_t *s)
 			env_q8 += 48;
 			if (env_q8 > 256) env_q8 = 256;
 		}
+		/* M17 DJ FILTER: mode + target coefficient from the fader once
+		 * per block; the coefficient RAMPS toward its target (~40 ms
+		 * across a big jump) so sweeps are zipperless. On a mode change
+		 * (LP <-> bypass <-> HP) the state is reprimed against the live
+		 * signal — the M11b pop lesson: never swap filter topology on
+		 * stale integrator state. */
+		static int32_t flt_low, flt_band, flt_f;
+		static uint8_t flt_mode;   /* 0 = bypass, 1 = LP, 2 = HP */
+		{
+			uint8_t fp = g_flt_pos;
+			uint8_t nm; int32_t tf;
+			if (fp < 112u)      { nm = 1; tf = flt_lp_tab[fp >> 3]; }
+			else if (fp > 143u) { nm = 2; tf = flt_hp_tab[(fp - 144u) >> 3]; }
+			else                { nm = 0; tf = 0; }
+			if (nm != flt_mode) {
+				flt_mode = nm;
+				flt_f = tf;
+				flt_low = mix32[0];   /* LP starts transparent-ish; */
+				flt_band = 0;         /* HP starts near-silent and
+				                       * converges in a few ms */
+			} else if (tf != flt_f) {
+				int32_t fd = (tf - flt_f) >> 3;
+				if (fd == 0) fd = (tf > flt_f) ? 1 : -1;
+				flt_f += fd;
+			}
+		}
 		const int32_t mv = (int32_t)g_master_vol_q8;
 		const int32_t ge = (mv * env_q8) >> 8;
 		static int32_t ge_prev;
@@ -2045,8 +2086,18 @@ static void looper_audio_block(int16_t *s)
 		const int32_t g0 = ge_prev;
 		ge_prev = ge;
 		for (uint32_t f = 0; f < BLK_FRAMES; f++) {
+			int32_t x = mix32[f];
+			if (flt_mode) {
+				/* Chamberlin SVF, Q14, damping 1.0 (a touch of DJ
+				 * resonance); coefficients capped ~6.5 kHz for
+				 * stability at this damping. */
+				flt_low += (flt_f * flt_band) >> 14;
+				int32_t hi = x - flt_low - flt_band;
+				flt_band += (flt_f * hi) >> 14;
+				x = (flt_mode == 1u) ? flt_low : hi;
+			}
 			int32_t m = gd ? (g0 + ((gd * (int32_t)(f + 1)) >> 8)) : ge;
-			int16_t out = soft_limit((mix32[f] * m) >> 8);
+			int16_t out = soft_limit((x * m) >> 8);
 			s[2 * f] = out; s[2 * f + 1] = out;
 		}
 	}
@@ -5332,20 +5383,20 @@ int main(void)
 				 * are rate-limited and ride g_chop_req + the declick dip
 				 * (every apply is a chop edit). Fader 4 is untouched. */
 				static int64_t wf_press = -1;
-				static uint8_t wf_eng[3];
-				static int wf_snap[3];
+				static uint8_t wf_eng[4];
+				static int wf_snap[4];
 				static int wf_s = 0, wf_e = 255;  /* RAW ends; s>e = reversed */
 				static int wf_q3 = -1;
 				static int wf_pend;
 				static int64_t wf_at;
 				if (wf_press != press_start) {
 					wf_press = press_start;
-					for (int wf = 0; wf < 3; wf++) {
+					for (int wf = 0; wf < 4; wf++) {
 						wf_eng[wf] = 0; wf_snap[wf] = -1;
 					}
 				}
 				int64_t wnow = k_uptime_get();
-				for (int wf = 0; wf < 3; wf++) {
+				for (int wf = 0; wf < 4; wf++) {
 					int fv = ladder_read(&adc_ladder[LAD_FADER0 + wf]);
 					if (fv < 0) continue;
 					int q = (int)((uint32_t)fv * 256u / 3700u);
@@ -5360,7 +5411,12 @@ int main(void)
 						g_fh_latch[wf] = 1;
 						g_fh_lastq[wf] = -1;
 					}
-					if (wf == 0) {
+					if (wf == 3) {
+						/* M17: fader 4 = the DJ filter, applied
+						 * directly (no chop_req, no dip — the
+						 * coefficient ramp IS the declick) */
+						g_flt_pos = (uint8_t)q;
+					} else if (wf == 0) {
 						int d = q - wf_s; if (d < 0) d = -d;
 						if (d >= 2) { wf_s = q; wf_pend = 1; }
 					} else if (wf == 1) {
