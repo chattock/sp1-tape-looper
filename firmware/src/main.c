@@ -1068,6 +1068,17 @@ static volatile uint8_t  g_head_pos[NTRK];
  * never see it; reset forward at every heads entry. Session-only. */
 static volatile uint8_t  g_head_rev[NTRK];
 static volatile uint8_t  g_head_blip[NTRK];
+/* M16 FREE WINDOW (session-only): while FUNCTION is held OUTSIDE heads mode,
+ * fader1 = window START, fader2 = END (free Q8 fractions of the chop period
+ * — any width, any place, not just the stepped div/off), fader3 = SHIFT
+ * (width and order kept), fader4 = nothing (the fx slot stays pended). If
+ * START crosses past END the window plays in REVERSE (nervouskidz), riding
+ * the M15 reverse engine. Any chop BUTTON press reclaims the stepped world
+ * (clears the flag); song switch and power-off clear it too. */
+static volatile uint8_t  g_win_free;
+static volatile uint8_t  g_win_s8;
+static volatile uint8_t  g_win_e8 = 255;
+static volatile uint8_t  g_win_rev;
 static uint8_t           g_fh_latch[NTRK];   /* fader owes a volume re-cross */
 static int               g_fh_lastq[NTRK];   /* last raw read while latched */
 #define heads_engaged() (g_heads_mode && trk[0].state == TS_PLAY)
@@ -1318,6 +1329,7 @@ static void looper_audio_block(int16_t *s)
 				g_meta.chop[g_slot][1] = 0;
 			}
 			g_chop_div = 1; g_chop_off = 0;
+			g_win_free = 0; g_win_rev = 0;          /* M16 */
 			g_fixed_len = g_mode_pref;              /* rejoin global */
 		}
 		g_meta_save_req = 1;
@@ -2946,8 +2958,21 @@ static void streamer_thread(void *a, void *b, void *c)
 						if (_wb + _win > _gb) _wb = _gb - _win;
 						_cyc = _win;
 					}
+					if (g_win_free) {   /* M16: prime from the free window */
+						uint32_t _ws = g_win_s8, _we = g_win_e8;
+						if (_we < _ws) { uint32_t _t = _ws; _ws = _we; _we = _t; }
+						_win = ((_we - _ws + 1u) * _wper) >> 8;
+						if (_win == 0u) _win = 1u;
+						_wb = (_ws * _wper) >> 8;
+						if (_wb + _win > _wper) _wb = _wper - _win;
+						_cyc = (_gb / _wper) * _win;
+					}
 					uint32_t _want = (RING_SAMPLES / 2u) + 16u * SAMP_PER_BLK;
 					if (_want > RING_SAMPLES) _want = RING_SAMPLES - SAMP_PER_BLK;
+					if (g_win_free && g_win_rev)
+						_want = 0;   /* M16: reversed window — skip the
+						              * forward prime; the starve fade-in
+						              * covers the first fill (heads rule) */
 					for (uint32_t _got = 0; _got < _want; ) {
 						uint32_t _pwb = _pw / SAMP_PER_BLK;
 						uint32_t _c   = ((_pwb % _cyc) + _cyc -
@@ -3099,6 +3124,20 @@ static void streamer_thread(void *a, void *b, void *c)
 					if (wbase + win > gb) wbase = gb - win;
 					cyc = win;
 				}
+				if (g_win_free) {
+					/* M16 FREE WINDOW overrides the stepped div/off.
+					 * The pair is stored ordered, but read the two
+					 * volatiles defensively: a torn read between the
+					 * control thread's stores may see them crossed
+					 * for one round. */
+					uint32_t ws = g_win_s8, we = g_win_e8;
+					if (we < ws) { uint32_t t2 = ws; ws = we; we = t2; }
+					win = ((we - ws + 1u) * wper) >> 8;
+					if (win == 0u) win = 1u;
+					wbase = (ws * wper) >> 8;
+					if (wbase + win > wper) wbase = wper - win;
+					cyc = (gb / wper) * win;
+				}
 				/* BOUNDARY BUDGET: a chunk clipped by the loop wrap or the
 				 * content/silence boundary used to consume this track's
 				 * WHOLE turn in the round — so the only track with a
@@ -3129,7 +3168,8 @@ static void streamer_thread(void *a, void *b, void *c)
 					 * blocks then walk the source BACKWARD, and each
 					 * block's samples are flipped after decode below:
 					 * together a continuous time-reversed stream. */
-					bool hrev = heads_engaged() && g_head_rev[i];
+					bool hrev = (bool)(heads_engaged() && g_head_rev[i]) ^
+						    (bool)(g_win_free && g_win_rev);
 					if (hrev) c = (cyc - 1u) - c;
 					uint32_t loop_blk = (c / win) * wper + wbase + (c % win);
 					uint32_t n = budget;
@@ -4283,14 +4323,21 @@ static void led_service(void)
 					uint32_t gb2 = hs2->len_blocks ? hs2->len_blocks
 						     : (g_loop_blocks ? g_loop_blocks : 1u);
 					uint32_t dv2 = g_chop_div ? g_chop_div : 1u;
-					uint32_t cyc2 = gb2 / dv2; if (cyc2 == 0u) cyc2 = 1u;
+					uint32_t cyc2 = g_win_free
+						      ? ((gb2 * ((uint32_t)(g_win_e8 - g_win_s8) + 1u)) >> 8)
+						      : gb2 / dv2;
+					if (cyc2 == 0u) cyc2 = 1u;
 					uint32_t ho2 = heads_engaged()
 					             ? (((uint32_t)g_head_pos[i] * cyc2) >> 8) : 0u;
 					uint32_t pwb2 = (uint32_t)(g_consume_pos / SAMP_PER_BLK);
 					uint32_t c2 = ((pwb2 % cyc2) + cyc2 -
 						       (hs2->start_blk % cyc2) + ho2) % cyc2;
-					if (heads_engaged() && g_head_rev[i])
-						c2 = (cyc2 - 1u) - c2;   /* M15: chase walks back */
+					{
+						int rv2 = (g_win_free && g_win_rev) ? 1 : 0;
+						if (heads_engaged() && g_head_rev[i]) rv2 ^= 1;
+						if (rv2)
+							c2 = (cyc2 - 1u) - c2;   /* chase walks back */
+					}
 					uint32_t onw = cyc2 / 8u;
 					if (onw < 1u) onw = 1u;
 					if (onw > 280u) onw = 280u;   /* ~2 beats */
@@ -4583,6 +4630,8 @@ static void jump_to_slot(uint32_t ns)
 		}
 		g_grid_resync_at = 0;
 	}
+	g_win_free = 0;     /* M16: the free window is session performance state */
+	g_win_rev = 0;
 	g_heads_mode = 0;   /* M13: heads are per-song doctrine like speed/mutes/
 	                     * chop — a new song always opens playing normally;
 	                     * triple-tap re-enters (session-only, never stored) */
@@ -5140,6 +5189,8 @@ int main(void)
 					if (cp_cnt == 3) {          /* committed press edge */
 						int64_t cnow = k_uptime_get();
 						combo_seen = 1;
+						g_win_free = 0;   /* M16: buttons reclaim the */
+						g_win_rev = 0;    /* stepped div/off window   */
 						uint32_t d = g_chop_div, o = g_chop_off;
 						if (vb == VOL_TEMPO_UP || vb == VOL_TEMPO_DOWN) {
 							if (cp_dcl_band == (int)vb &&
@@ -5271,6 +5322,80 @@ int main(void)
 					g_head_blip[hf] = 3;
 					g_head_pos[hf] = (uint8_t)q;
 					trk[hf].p_w = (g_consume_pos / SAMP_PER_BLK) * SAMP_PER_BLK;
+				}
+			} else {
+				/* M16 WINDOW FADERS: FUNCTION held, heads NOT engaged —
+				 * faders 1-3 shape the free window (see the globals
+				 * comment). Same rules as the heads scrub: absolute
+				 * jump-on-grab, >=3-count intent gate, engagement spends
+				 * the press and arms the volume re-cross latch. Applies
+				 * are rate-limited and ride g_chop_req + the declick dip
+				 * (every apply is a chop edit). Fader 4 is untouched. */
+				static int64_t wf_press = -1;
+				static uint8_t wf_eng[3];
+				static int wf_snap[3];
+				static int wf_s = 0, wf_e = 255;  /* RAW ends; s>e = reversed */
+				static int wf_q3 = -1;
+				static int wf_pend;
+				static int64_t wf_at;
+				if (wf_press != press_start) {
+					wf_press = press_start;
+					for (int wf = 0; wf < 3; wf++) {
+						wf_eng[wf] = 0; wf_snap[wf] = -1;
+					}
+				}
+				int64_t wnow = k_uptime_get();
+				for (int wf = 0; wf < 3; wf++) {
+					int fv = ladder_read(&adc_ladder[LAD_FADER0 + wf]);
+					if (fv < 0) continue;
+					int q = (int)((uint32_t)fv * 256u / 3700u);
+					if (q > 255) q = 255;
+					if (wf_snap[wf] < 0) { wf_snap[wf] = q; continue; }
+					if (!wf_eng[wf]) {
+						int d = q - wf_snap[wf];
+						if (d < 0) d = -d;
+						if (d < 3) continue;      /* intent gate */
+						wf_eng[wf] = 1;
+						combo_seen = 1;           /* press is spent */
+						g_fh_latch[wf] = 1;
+						g_fh_lastq[wf] = -1;
+					}
+					if (wf == 0) {
+						int d = q - wf_s; if (d < 0) d = -d;
+						if (d >= 2) { wf_s = q; wf_pend = 1; }
+					} else if (wf == 1) {
+						int d = q - wf_e; if (d < 0) d = -d;
+						if (d >= 2) { wf_e = q; wf_pend = 1; }
+					} else {
+						int d = (wf_q3 < 0) ? 99 : q - wf_q3;
+						if (d < 0) d = -d;
+						if (d >= 2) {
+							wf_q3 = q;
+							/* SHIFT: absolute position, width AND
+							 * order (= direction) preserved */
+							int w = (wf_s <= wf_e) ? wf_e - wf_s
+							                       : wf_s - wf_e;
+							int base = (q * (255 - w)) >> 8;
+							if (wf_s <= wf_e) { wf_s = base; wf_e = base + w; }
+							else              { wf_e = base; wf_s = base + w; }
+							wf_pend = 1;
+						}
+					}
+				}
+				if (wf_pend && wnow - wf_at >= 60) {
+					wf_at = wnow; wf_pend = 0;
+					int ws = wf_s, we = wf_e, rv = 0;
+					if (ws > we) { int t2 = ws; ws = we; we = t2; rv = 1; }
+					if (we - ws < 2) {          /* floor ~1/128 sliver */
+						we = ws + 2;
+						if (we > 255) { we = 255; ws = 253; }
+					}
+					g_win_s8 = (uint8_t)ws;
+					g_win_e8 = (uint8_t)we;
+					g_win_rev = (uint8_t)rv;
+					g_win_free = 1;
+					g_chop_req = 1;   /* engine: snap rings to it */
+					g_dip_req = 1;    /* declicked, like every chop edit */
 				}
 			}
 			if (combo_seen) {
