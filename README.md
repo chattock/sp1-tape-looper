@@ -197,8 +197,12 @@ The one-page map ([full size](docs/sp1-control-map.png)):
 | Quick tap (playing track) | Mutes / unmutes that track (content kept). |
 | Double-tap | Deletes that track. |
 
-- **Every track loops at its own length.** Takes are never stretched, padded or
-  snapped to another track's length.
+- **Every track loops at its own length** — tracks freely coexist at
+  different lengths, and audio is never time-stretched or resampled. In
+  variable mode a take is exactly as long as you played it. In fixed mode
+  a take locks to a whole multiple of the base loop (stopping early
+  leaves the remainder silent). On gridded songs stops snap to whole
+  beats instead, so gridded loops never contain silence.
 - **The stop is press-accurate** in 2.0: the take ends on your
   press-down rather than the release, and the button latency is backdated out
   of the recording — tap the stop exactly on the "1".
