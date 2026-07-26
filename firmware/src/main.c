@@ -4886,6 +4886,8 @@ int main(void)
 	int bj_fired = -1;               /*   band already jumped during this FUNCTION press */
 	int64_t fnp_edge = -1;           /* FUNCTION+PLAY dim toggle: last PLAY press edge */
 	int fnp_chain = 0;               /* M13: consecutive PLAY taps (2 = 1.0x snap, 3 = heads) */
+	int fnp_pend_snap = 0;           /* M15-r3: snap DEFERRED past the triple window */
+	int fnp_presses = 0;             /* M15-r4: PLAY press edges this FUNCTION hold */
 	enum vol_btn cp_cand = VOL_NONE; /* FUNCTION+rocker/Vol chop: sticky candidate */
 	int cp_cnt = 0;                  /*   consecutive passes it has held */
 	int cp_dcl_band = -1;            /*   last committed rocker band (double-click) */
@@ -4974,40 +4976,52 @@ int main(void)
 			 * the ladder voltage. While the combo is engaged the power-off
 			 * countdown/shutdown is suppressed (this gesture must never risk a
 			 * power-off), and the FUNCTION-release song-change is suppressed. */
+			/* M15-r3: deferred 1.0x snap fires once the triple window is
+			 * over (no 3rd tap arrived). Runs every FN-held pass. */
+			if (fnp_pend_snap && fnp_edge >= 0 &&
+			    k_uptime_get() - fnp_edge > 600) {
+				fnp_pend_snap = 0;
+				g_play_speed_q16 = 65536u;
+				g_play_bpm = 80;
+			}
 			int fraw = ladder_read(&adc_ladder[LAD_TRACKS]);
 			if (fraw > 1600) {
 				fnp_low = 0;
 				combo_seen = 1;
 				if (combo_start < 0) {           /* fresh PLAY press edge */
 					int64_t fnp_now = k_uptime_get();
+					fnp_presses++;
 					/* FUNCTION + PLAY DOUBLE-TAP = snap to 1.0x. A
-					 * second PLAY press edge within 450 ms fires it
-					 * and blocks the hold tiers for this press so one
-					 * gesture can't do two things. */
-					if (fnp_edge >= 0 && fnp_now - fnp_edge <= 450)
+					 * second PLAY press edge fires it and blocks the
+					 * hold tiers for this press so one gesture can't
+					 * do two things. Window 450 -> 600 ms (M15-r4):
+					 * an unhurried triple's 3rd tap kept missing it,
+					 * and a lapsed chain turned the last tap into a
+					 * phantom mode-toggle chord. */
+					if (fnp_edge >= 0 && fnp_now - fnp_edge <= 600)
 						fnp_chain++;
 					else
 						fnp_chain = 1;
 					if (fnp_chain == 2 && !combo_fired) {
-						/* M8c: SNAP TO 1.0x — instant return to
-						 * native speed/pitch after beatmatching or
-						 * rocker wandering ("tap to match,
-						 * double-tap to come home"). Replaces the
-						 * dim toggle: the device is always-dim now;
-						 * full brightness lives on the transfer
-						 * page (led_full byte, adopted below). */
-						g_play_speed_q16 = 65536u;
-						g_play_bpm = 80;
+						/* M8c SNAP TO 1.0x — but DEFERRED (M15-r3)
+						 * until the 450 ms triple window closes: the
+						 * snap used to fire on this edge, so reaching
+						 * for a triple's 3rd tap yanked beatmatched
+						 * speed (marc's report). A double alone still
+						 * snaps, just ~0.4 s later — "come home" is
+						 * not rhythm-critical; a completed triple now
+						 * never touches the tape at all. */
+						fnp_pend_snap = 1;
 						combo_fired = 1;
 					} else if (fnp_chain == 3) {
-						/* M13: TRIPLE-tap = HEADS MODE toggle (the
-						 * 2nd tap's 1.0x snap already fired — a
-						 * sensible side effect: heads enter at
-						 * native speed). ON requires content
-						 * playing on track 1. Rings 2-4 are
-						 * re-anchored so the heads (or the old
-						 * loops) fade in cleanly via the starve
-						 * machinery + a declick dip. */
+						/* M13: TRIPLE-tap = HEADS MODE toggle. The
+						 * 3rd tap CANCELS the pending snap — heads
+						 * enter at the speed you were playing at.
+						 * ON requires content playing on track 1.
+						 * Rings 2-4 are re-anchored so the heads (or
+						 * the old loops) fade in cleanly via the
+						 * starve machinery + a declick dip. */
+						fnp_pend_snap = 0;
 						if (g_heads_mode) {
 							g_heads_mode = 0;
 						} else if (trk[0].state == TS_PLAY) {
@@ -5046,9 +5060,20 @@ int main(void)
 				 * dip below the PLAY band for a stray pass mid-hold,
 				 * which used to reset the 5 s clock (user: "brightness
 				 * takes ~7 s"). Only 3 consecutive low passes count as
-				 * a real release. */
-				if (++fnp_low < 3) { k_msleep(25); continue; }
-				if (!combo_fired) {
+				 * a real release — for HOLDS. M15-r4: a short press
+				 * (<300 ms) is a TAP, and its release commits after 2
+				 * passes: fast triples' gaps were shorter than the
+				 * 75 ms debounce, so taps merged, the chain counted 2,
+				 * and the snap fired instead of heads (live report).
+				 * Two passes still filters the single-sample dip the
+				 * debounce was built for. */
+				int fnp_need =
+					(k_uptime_get() - combo_start < 300) ? 2 : 3;
+				if (++fnp_low < fnp_need) { k_msleep(25); continue; }
+				if (!combo_fired && fnp_presses < 2) {
+					/* (2+ presses this hold = a tap chain, never a
+					 * mode chord — the toggle is a single-press
+					 * gesture, M15-r4) */
 					int64_t fnp_held = k_uptime_get() - combo_start;
 					if (fnp_held >= 350 && fnp_held < 5000)
 						fnp_mode_toggle();  /* mode fires on RELEASE */
@@ -5300,7 +5325,7 @@ int main(void)
 			 * release-toggle; before, only a PLAY-first release did,
 			 * so the gesture silently aborted most of the time (user:
 			 * "mode takes ~4 s" = retries until a lucky stagger). */
-			if (combo_start >= 0 && !combo_fired) {
+			if (combo_start >= 0 && !combo_fired && fnp_presses < 2) {
 				int64_t fnp_held2 = k_uptime_get() - combo_start;
 				if (fnp_held2 >= 350 && fnp_held2 < 5000)
 					fnp_mode_toggle();
@@ -5381,7 +5406,13 @@ int main(void)
 		combo_start = -1;
 		combo_fired = 0;
 		combo_seen  = 0;
+		if (fnp_pend_snap) {   /* M15-r3: released mid-window — still a double */
+			fnp_pend_snap = 0;
+			g_play_speed_q16 = 65536u;
+			g_play_bpm = 80;
+		}
 		bj_cand = TRK_NONE; bj_cnt = 0; bj_fired = -1; fnp_edge = -1; fnp_chain = 0;
+		fnp_presses = 0;
 		cp_cand = VOL_NONE; cp_cnt = 0; cp_dcl_band = -1;
 
 		/* ---- looper controls + LEDs ---- */
