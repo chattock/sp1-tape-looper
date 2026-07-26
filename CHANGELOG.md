@@ -5,6 +5,19 @@ Versions 1.0.0-1.2.4 below were the 2.0 development line (developed as a
 fork by marc, never announced) — kept for the honest record. The classic
 4-song firmware lives on the `v1` branch. Base: 1.x at commit c60941c.
 
+## [2.3.1] - 2026-07-26
+
+### Fixed
+- Pocket-proof power-on: waking from full power-off used to skip the hold
+  check entirely — one accidental press in a bag switched the device fully
+  on ("playing breakbeats in your pants", community report) and drained
+  the battery. Every power-on now requires the same deliberate hold,
+  lengthened to a stock-like ~1.5 s, with the side row filling as a
+  countdown (the power-off animation, mirrored). Releasing early drops
+  straight back to off; an accidental blip costs milliseconds and shows
+  one dim LED for an instant. Power-off is unchanged (~2.5 s, countdown).
+  Watchdog/crash recovery still boots directly, preserving forensics.
+
 ## [2.3.0] - 2026-07-26
 
 The fader release — while FUNCTION is held, the four faders become a

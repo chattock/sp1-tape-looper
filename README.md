@@ -173,7 +173,9 @@ SP-1 custom firmware) — no soldering or opening the device required:
 ### Turning it on and off
 - The device boots into a quiet charging/standby state. Plugging in USB or
   finishing a flash does not start playback.
-- Hold the FUNCTION button (the lower button) for about 0.6 s to turn it on.
+- Hold the FUNCTION button (the lower button) for about 1.5 s to turn it on
+  (a quick press does nothing — the device can't switch on by accident in a
+  bag or pocket).
 - Hold FUNCTION for about 2.5 s to turn it off (the four centre LEDs fill as a
   countdown; release early to cancel).
 - Powering off while plugged into USB lands in the charging gauge instead of
