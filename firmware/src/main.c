@@ -1056,7 +1056,13 @@ static volatile int      g_chop_req;               /* main -> engine: window cha
  * while active (toggle off to record); the heads' own hidden content is
  * untouched and returns when the mode ends. */
 static volatile uint8_t  g_heads_mode;
-#define head_active(i) (g_heads_mode && (i) > 0 && trk[0].state == TS_PLAY)
+/* M19a: the heads SOURCE is any track (bharris22/JustyB) — g_head_src.
+ * Entry picks the lowest playing track (so heads work when track 1 is
+ * empty); holding a LOADED track in heads mode makes IT the tape. */
+static volatile uint8_t  g_head_src;
+static uint8_t           g_head_mute_save;   /* song mutes across heads mode */
+#define head_active(i) (g_heads_mode && (i) != g_head_src && \
+			trk[g_head_src].state == TS_PLAY)
 /* M14 HEADS v2: each head's position on the loop is a live Q8 phase (0-255
  * of the audible cycle). Quarters at entry = the v1 sound; FUNCTION+fader
  * scrubs them (all four — track 1's own phase slides too, locked decision).
@@ -1096,7 +1102,7 @@ static const int16_t flt_hp_tab[14] = {   /* 30 Hz .. 4.5 kHz, exp */
 	1404, 2064, 3032, 4451, 6520, 9512 };
 static uint8_t           g_fh_latch[NTRK];   /* fader owes a volume re-cross */
 static int               g_fh_lastq[NTRK];   /* last raw read while latched */
-#define heads_engaged() (g_heads_mode && trk[0].state == TS_PLAY)
+#define heads_engaged() (g_heads_mode && trk[g_head_src].state == TS_PLAY)
 static volatile uint8_t  g_dip_req;                /* M10: controls -> mixer, declick dip at a chop edit */
 static volatile uint8_t  g_off_fade;               /* M10: power-off fade — master to 0 and HOLD */
 static volatile uint32_t g_beat_phase;            /* phase within a beat (loop samples), for LEDs */
@@ -3150,7 +3156,7 @@ static void streamer_thread(void *a, void *b, void *c)
 				/* M13: a HEAD sources track 1's loop instead of its own —
 				 * geometry (length/start/content/region) comes from track
 				 * 1; ring bookkeeping stays this track's. */
-				struct looptrk *hsrc = head_active(i) ? &trk[0] : t;
+				struct looptrk *hsrc = head_active(i) ? &trk[g_head_src] : t;
 				uint32_t gb = hsrc->len_blocks ? hsrc->len_blocks
 					    : (g_loop_blocks ? g_loop_blocks : 1u);
 				/* CHOP window (M7b, mode-aware). VARIABLE: slice this
@@ -3262,7 +3268,8 @@ static void streamer_thread(void *a, void *b, void *c)
 						/* backward silence run stays silence */
 						n = loop_blk - content + 1u;
 					}
-					uint32_t blkno = trk_blk(slot, head_active(i) ? 0u
+					uint32_t blkno = trk_blk(slot, head_active(i)
+					                              ? (uint32_t)g_head_src
 					                              : (uint32_t)i)
 						       + (hrev ? (loop_blk - n + 1u) : loop_blk);
 					bool _rok;
@@ -4128,7 +4135,12 @@ ISR_DIRECT_DECLARE(led_pwm_isr)
 		LED_PWM_TIMER->EVENTS_COMPARE[1] = 0;
 		(void)LED_PWM_TIMER->EVENTS_COMPARE[1];
 		static uint32_t gframe;
-		uint32_t gon = ((++gframe % LED_GHOST_FRAME_DIV) == 0u);
+		/* M19a-r3: in DIM mode the ghost drops to 1-in-8 frames — at
+		 * 1/5 the muted glow read too close to a playing light there
+		 * (marc); full-brightness mode keeps 1/5, where the contrast
+		 * was already right. 125 Hz refresh, still above flicker. */
+		uint32_t gdiv = g_led_dim ? 8u : LED_GHOST_FRAME_DIV;
+		uint32_t gon = ((++gframe % gdiv) == 0u);
 		uint32_t s0 = g_led_p0_on | (gon ? (g_led_p0_ghost & ~g_led_p0_on) : 0u);
 		uint32_t s1 = g_led_p1_on | (gon ? (g_led_p1_ghost & ~g_led_p1_on) : 0u);
 		NRF_P0->OUTSET = s0;
@@ -4370,7 +4382,8 @@ static void led_service(void)
 					 * canon, matching what you hear. Heads ENGAGED
 					 * overrides the gridded shared pulse too: in
 					 * heads mode the canon is the clock. */
-					struct looptrk *hs2 = head_active(i) ? &trk[0] : &trk[i];
+					struct looptrk *hs2 = head_active(i) ? &trk[g_head_src]
+					                                     : &trk[i];
 					uint32_t gb2 = hs2->len_blocks ? hs2->len_blocks
 						     : (g_loop_blocks ? g_loop_blocks : 1u);
 					uint32_t dv2 = g_chop_div ? g_chop_div : 1u;
@@ -5140,12 +5153,55 @@ int main(void)
 						fnp_pend_snap = 0;
 						if (g_heads_mode) {
 							g_heads_mode = 0;
-						} else if (trk[0].state == TS_PLAY) {
-							g_heads_mode = 1;
+							for (int hm = 0; hm < NTRK; hm++)
+								trk[hm].muted = (uint8_t)
+								    ((g_head_mute_save >> hm) & 1u);
+						} else {
+							/* M19a-r2: source = the lowest playing
+							 * UNMUTED track — a muted track still
+							 * reads state TS_PLAY (mute is a flag,
+							 * the ghost-glow design), and marc's
+							 * live report was heads engaging on a
+							 * muted track 1 over the audible track
+							 * 2. All-muted songs fall back to any
+							 * playing track. */
+							int hs = -1;
+							for (int hp = 0; hp < NTRK; hp++)
+								if (trk[hp].state == TS_PLAY &&
+								    !trk[hp].muted) {
+									hs = hp; break;
+								}
+							if (hs < 0)
+								for (int hp = 0; hp < NTRK; hp++)
+									if (trk[hp].state == TS_PLAY) {
+										hs = hp; break;
+									}
+							if (hs >= 0) {
+								g_head_src = (uint8_t)hs;
+								/* M19a-r4: snapshot the song's
+								 * mutes and start every head
+								 * AUDIBLE — heads mutes are
+								 * performance state, restored
+								 * on exit, never persisted
+								 * (marc: a muted track must not
+								 * ghost into the canon, and a
+								 * silenced head must not come
+								 * back as a muted track). */
+								g_head_mute_save = 0;
+								for (int hm = 0; hm < NTRK; hm++) {
+									if (trk[hm].muted)
+										g_head_mute_save |=
+										    (uint8_t)(1u << hm);
+									trk[hm].muted = 0;
+								}
+								g_heads_mode = 1;
+							}
 						}
-						for (int hk = 1; hk < NTRK; hk++)
+						for (int hk = 0; hk < NTRK; hk++) {
+							if (hk == (int)g_head_src) continue;
 							trk[hk].p_w = (uint32_t)(g_consume_pos /
 								SAMP_PER_BLK) * SAMP_PER_BLK;
+						}
 						for (int hk = 0; hk < NTRK; hk++) {
 							g_head_pos[hk] = (uint8_t)(hk * 64);
 							g_head_rev[hk] = 0;
@@ -5826,12 +5882,8 @@ int main(void)
 						 * re-anchor this ring behind a blip. */
 						tap_deadline[ti] = 0;
 						trk[ti].muted = !trk[ti].muted;
-						if (g_slot < NUM_SLOTS) {
-							uint8_t mb = (uint8_t)(0x10u << ti);
-							if (trk[ti].muted) g_meta.song_mode[g_slot] |= mb;
-							else               g_meta.song_mode[g_slot] &= (uint8_t)~mb;
-							g_meta_save_req = 1;
-						}
+						/* (no persistence — heads-only path, and
+						 * M19a-r4 makes all head mutes session) */
 						g_head_rev[ti] = !g_head_rev[ti];
 						g_head_blip[ti] = 3;
 						trk[ti].p_w = (g_consume_pos / SAMP_PER_BLK) * SAMP_PER_BLK;
@@ -5841,7 +5893,10 @@ int main(void)
 						 * bar-wait was removed after live testing —
 						 * see the bar-service note). */
 						trk[ti].muted = !trk[ti].muted;
-						if (g_slot < NUM_SLOTS) {  /* M7-r4: remember per song */
+						if (!g_heads_mode && g_slot < NUM_SLOTS) {
+							/* M7-r4: remember per song — but NOT
+							 * in heads mode (M19a-r4): head mutes
+							 * are session performance state */
 							uint8_t mb = (uint8_t)(0x10u << ti);
 							if (trk[ti].muted) g_meta.song_mode[g_slot] |= mb;
 							else               g_meta.song_mode[g_slot] &= (uint8_t)~mb;
@@ -5906,6 +5961,29 @@ int main(void)
 				int ti = (int)committed;
 				int empt = (trk[ti].state == TS_EMPTY &&
 					    !(g_slot < NUM_SLOTS && g_meta.slot[g_slot].present[ti]));
+				if (g_heads_mode && !armed_press[ti] &&
+				    ti != stop_tap_trk && heads_engaged() &&
+				    trk[ti].state == TS_PLAY && ti != (int)g_head_src &&
+				    k_uptime_get() - press_t[ti] >= 400) {
+					/* M19a: in heads mode, HOLD a LOADED track =
+					 * make IT the tape ("hold the loop you want
+					 * to head"). All other rings re-anchor behind
+					 * per-track blips; positions and directions
+					 * are KEPT — they are the performance. The
+					 * press is spent via armed_press (its release
+					 * is swallowed by the latched-arm branch), so
+					 * it can never read as a mute. Empty-track
+					 * holds are reserved for the M19b bounce. */
+					g_head_src = (uint8_t)ti;
+					for (int hk = 0; hk < NTRK; hk++) {
+						if (hk == ti) continue;
+						g_head_blip[hk] = 3;
+						trk[hk].p_w = (g_consume_pos /
+							SAMP_PER_BLK) * SAMP_PER_BLK;
+					}
+					armed_press[ti] = 1;   /* spend the press */
+					tap_deadline[ti] = 0;
+				}
 				if (!armed_press[ti] && ti != stop_tap_trk &&
 				    g_rec_track < 0 && !g_heads_mode &&
 				    trk[ti].state != TS_DONE &&
