@@ -4803,12 +4803,18 @@ int main(void)
 	/* ---- CHARGE-STANDBY: the device no longer springs to life on its own ----
 	 * Plugging USB in (or finishing a flash, or inserting a battery) lands here:
 	 * silent, looper untouched, LED 1 blinking while charging / solid when full.
-	 * HOLD the power button ~0.6 s to actually switch ON. On battery with no
-	 * button held there is nothing to do -> clean SYSTEM_OFF (button wakes).
-	 * A power-button wake or watchdog recovery skips straight to full boot —
-	 * and even if the bootloader scrubs RESETREAS, the user waking the device
-	 * is already holding the button, so the hold path turns it on anyway. */
-	if (!(wake_reas & (POWER_RESETREAS_OFF_Msk | POWER_RESETREAS_DOG_Msk)) &&
+	 * HOLD the power button ~1.5 s (stock-length) to actually switch ON.
+	 * M18: a button wake from SYSTEM_OFF used to SKIP this gate entirely
+	 * ("the user waking the device is already holding the button") — which
+	 * quietly made pocket presses a one-click power-on: breakbeats in your
+	 * pants and a drained battery (luuuciano's report). EVERY power-on now
+	 * walks through the same hold; releasing early on battery drops
+	 * straight back to SYSTEM_OFF (an accidental blip costs milliseconds).
+	 * On battery with no button held there is nothing to do -> clean
+	 * SYSTEM_OFF (button wakes). Only watchdog recovery and a preserved
+	 * fault breadcrumb still skip the gate: the user was mid-session, and
+	 * the battery standby path would SYSTEM_OFF away the forensics. */
+	if (!(wake_reas & POWER_RESETREAS_DOG_Msk) &&
 	    g_last_fault_reason == 0xFFFFFFFFu) {
 		/* (a valid fault breadcrumb also skips standby: the user was
 		 * mid-session, and the battery standby path would SYSTEM_OFF and
@@ -4826,10 +4832,20 @@ int main(void)
 			if (g_meta_loaded)
 				g_led_dim = g_meta.led_full ? 0u : 1u;
 			if (pwr_pressed()) {
-				if (hold_t < 0) hold_t = k_uptime_get();
-				else if (k_uptime_get() - hold_t >= 600)
+				int64_t hnow = k_uptime_get();
+				if (hold_t < 0) hold_t = hnow;
+				else if (hnow - hold_t >= 1500)
 					break;                    /* -> full power-on */
-				led_on(0);                        /* press feedback */
+				/* M18-r2: the power-off countdown, mirrored — the
+				 * side row FILLS across the 1.5 s hold so the gesture
+				 * teaches its own length. A pocket blip still shows
+				 * just one dim LED for an instant, nothing more. */
+				{
+					int lit = (int)(((hnow - hold_t) * NUM_LEDS) / 1500) + 1;
+					if (lit > NUM_LEDS) lit = NUM_LEDS;
+					all_off();
+					for (int li = 0; li < lit; li++) led_on(li);
+				}
 			} else {
 				hold_t = -1;
 				if (!usb_present())
