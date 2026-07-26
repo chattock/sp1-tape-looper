@@ -1061,6 +1061,28 @@ static volatile uint8_t  g_heads_mode;
  * empty); holding a LOADED track in heads mode makes IT the tape. */
 static volatile uint8_t  g_head_src;
 static uint8_t           g_head_mute_save;   /* song mutes across heads mode */
+/* M19b BOUNCE: print the heads performance into an empty track as an OFFLINE
+ * RENDER — the heads mix repeats exactly once per audible cycle, so one
+ * rendered cycle is a seamless loop by construction, phase-locked to its
+ * source and speed-independent. Snapshotted at request (gains/mutes/
+ * positions/directions/window); rendered by the streamer 4 blocks per round
+ * while the heads keep playing; index written ONLY after every audio block
+ * (torn-write doctrine: an abort or power cut leaves an empty track).
+ * On completion: promote dst, restore the song's mutes, AUTO-EXIT heads —
+ * you immediately hear what you printed, in phase (locked decision). */
+static volatile int8_t   g_bnc_req = -1;   /* dst track; -1 = idle */
+static volatile uint8_t  g_bnc_active;
+static volatile uint8_t  g_bnc_done;
+static volatile uint8_t  g_bnc_abort;
+static volatile uint8_t  g_led_shrug;      /* track row "no" double-blink */
+static uint8_t  bnc_src, bnc_dst;
+static uint8_t  bnc_pos[NTRK], bnc_rev[NTRK], bnc_mut[NTRK];
+static uint16_t bnc_vol[NTRK];
+static uint8_t  bnc_wfree, bnc_wrev;
+static uint32_t bnc_cyc, bnc_win, bnc_wbase, bnc_wper, bnc_start, bnc_content;
+static uint32_t bnc_done_blocks;
+static int32_t  bnc_acc[4u * 256u];        /* 4 KB chunk accumulator */
+static uint8_t  bnc_rdbuf[512];            /* one source block */
 #define head_active(i) (g_heads_mode && (i) != g_head_src && \
 			trk[g_head_src].state == TS_PLAY)
 /* M14 HEADS v2: each head's position on the loop is a live Q8 phase (0-255
@@ -3344,6 +3366,72 @@ static void streamer_thread(void *a, void *b, void *c)
 			}
 			}
 		}
+		/* ==== M19b BOUNCE RENDER: one 4-block chunk per round, between
+		 * the passes — the same citizenship as the PASS-1 flush. Bounded
+		 * IO (<=16 single reads + one 4-block write), so the play rings
+		 * keep their cushions while the heads keep sounding. ==== */
+		if (g_bnc_req >= 0 && !g_bnc_active && !g_bnc_abort)
+			g_bnc_active = 1;
+		if (g_bnc_active) {
+			if (g_bnc_abort) {
+				g_bnc_active = 0; g_bnc_req = -1; g_bnc_abort = 0;
+			} else {
+				uint32_t bdst = trk_blk(g_slot, (uint32_t)bnc_dst);
+				uint32_t bsrc = trk_blk(g_slot, (uint32_t)bnc_src);
+				uint32_t nblk = bnc_cyc - bnc_done_blocks;
+				if (nblk > 4u) nblk = 4u;
+				memset(bnc_acc, 0,
+				       sizeof(bnc_acc[0]) * nblk * SAMP_PER_BLK);
+				bool rok = true;
+				for (uint32_t hk = 0; hk < NTRK && rok; hk++) {
+					if (bnc_mut[hk] || bnc_vol[hk] == 0u) continue;
+					for (uint32_t b = 0; b < nblk && rok; b++) {
+						uint32_t c = bnc_done_blocks + b;
+						uint32_t ci = (c + (((uint32_t)bnc_pos[hk] *
+							bnc_cyc) >> 8)) % bnc_cyc;
+						uint32_t hr = (uint32_t)bnc_rev[hk] ^
+							(uint32_t)(bnc_wfree && bnc_wrev);
+						if (hr) ci = (bnc_cyc - 1u) - ci;
+						uint32_t lb = (ci / bnc_win) * bnc_wper +
+							bnc_wbase + (ci % bnc_win);
+						if (lb >= bnc_content)
+							continue;   /* silence adds zero */
+						if (!emmc_read_blocks(bsrc + lb,
+								      bnc_rdbuf, 1)) {
+							rok = false; break;
+						}
+						const int16_t *sp2 =
+							(const int16_t *)bnc_rdbuf;
+						int32_t *ap = &bnc_acc[b * SAMP_PER_BLK];
+						int32_t gq = (int32_t)bnc_vol[hk];
+						if (!hr) {
+							for (uint32_t f = 0; f < SAMP_PER_BLK; f++)
+								ap[f] += ((int32_t)sp2[f] * gq) >> 8;
+						} else {
+							for (uint32_t f = 0; f < SAMP_PER_BLK; f++)
+								ap[f] += ((int32_t)
+								    sp2[SAMP_PER_BLK - 1u - f] * gq) >> 8;
+						}
+					}
+				}
+				if (rok) {
+					int16_t *op = (int16_t *)batchbuf;
+					for (uint32_t f = 0; f < nblk * SAMP_PER_BLK; f++)
+						op[f] = soft_limit(bnc_acc[f]);
+					if (emmc_write_blocks(bdst + bnc_done_blocks,
+							      batchbuf, nblk)) {
+						bnc_done_blocks += nblk;
+						if (bnc_done_blocks >= bnc_cyc) {
+							g_bnc_active = 0;
+							g_bnc_req = -1;
+							g_bnc_done = 1;
+						}
+					}
+				}
+				/* any failure: same chunk retries next round */
+				work = true;
+			}
+		}
 		if (!work) {
 			/* IDLE WINDOW: drain the card's write cache in the background.
 			 * emmc_cache_flush_try() was built for exactly this (abortable:
@@ -4339,6 +4427,19 @@ static void led_service(void)
 				                          : track_led_off(i);
 		} else for (int i = 0; i < NUM_TRACK_LEDS; i++) {
 			uint8_t st = trk[i].state;
+			if (g_led_shrug) {   /* M19b: the "no" — all four double-blink */
+				(((g_led_shrug >> 2) & 1u) ? track_led_on(i)
+				                           : track_led_off(i));
+				if (i == NUM_TRACK_LEDS - 1) g_led_shrug--;
+				continue;
+			}
+			if ((g_bnc_active || g_bnc_req >= 0) && g_heads_mode &&
+			    i == (int)bnc_dst) {
+				/* M19b: printing — the destination fast-blinks */
+				(((k_uptime_get() >> 7) & 1) ? track_led_on(i)
+				                             : track_led_off(i));
+				continue;
+			}
 			if (st == TS_REC && trk[i].rec_target && !trk[i].rec_silence &&
 			    g_grid_active && g_grid_beat_frames) {
 				/* grid run-on ("finishing the beat"): double-blink so
@@ -4375,8 +4476,7 @@ static void led_service(void)
 				 * Long loops get a capped ~2-beat flash at each wrap
 				 * instead of a 1/8-duty minute-long glow. */
 				int tp = on_beat;
-				if (!g_grid_active ||
-				    (g_heads_mode && trk[0].state == TS_PLAY)) {
+				if (!g_grid_active || heads_engaged()) {
 					/* M13: heads pulse against the SOURCE loop, each
 					 * offset a quarter — the four lights chase in
 					 * canon, matching what you hear. Heads ENGAGED
@@ -4407,7 +4507,17 @@ static void led_service(void)
 					if (onw > 280u) onw = 280u;   /* ~2 beats */
 					tp = (c2 < onw);
 				}
-				(tp ? track_led_on(i) : track_led_off(i));
+				/* M19b-r2: a HOLLOW head (nothing underneath) chases
+				 * at GHOST intensity — faint = printable, so you can
+				 * see the bounce targets mid-performance without
+				 * remembering the song from before entry. Consistent
+				 * with dark = empty outside heads mode. */
+				if (head_active(i) && trk[i].state == TS_EMPTY &&
+				    !(g_slot < NUM_SLOTS &&
+				      g_meta.slot[g_slot].present[i]))
+					(tp ? track_led_ghost(i) : track_led_off(i));
+				else
+					(tp ? track_led_on(i) : track_led_off(i));
 			}
 			else if ((st == TS_PLAY || head_active(i)) && trk[i].muted)
 				track_led_ghost(i);
@@ -4694,6 +4804,8 @@ static void jump_to_slot(uint32_t ns)
 		}
 		g_grid_resync_at = 0;
 	}
+	if (g_bnc_active || g_bnc_req >= 0)
+		g_bnc_abort = 1;   /* M19b: a song switch abandons the print */
 	g_win_free = 0;     /* M16: the free window is session performance state */
 	g_win_rev = 0;
 	g_heads_mode = 0;   /* M13: heads are per-song doctrine like speed/mutes/
@@ -5153,6 +5265,8 @@ int main(void)
 						fnp_pend_snap = 0;
 						if (g_heads_mode) {
 							g_heads_mode = 0;
+							if (g_bnc_active || g_bnc_req >= 0)
+								g_bnc_abort = 1;   /* M19b */
 							for (int hm = 0; hm < NTRK; hm++)
 								trk[hm].muted = (uint8_t)
 								    ((g_head_mute_save >> hm) & 1u);
@@ -5984,6 +6098,77 @@ int main(void)
 					armed_press[ti] = 1;   /* spend the press */
 					tap_deadline[ti] = 0;
 				}
+				if (g_heads_mode && !armed_press[ti] &&
+				    ti != stop_tap_trk && heads_engaged() &&
+				    trk[ti].state == TS_EMPTY &&
+				    !(g_slot < NUM_SLOTS && g_meta.slot[g_slot].present[ti]) &&
+				    g_bnc_req < 0 && !g_bnc_active && !g_bnc_done &&
+				    k_uptime_get() - press_t[ti] >= 400) {
+					/* M19b: in heads mode, HOLD an EMPTY track =
+					 * PRINT the tape into it ("record this into
+					 * here" — because it is). Everything audible is
+					 * snapshotted NOW; the streamer renders while
+					 * the heads keep playing; the dst fast-blinks.
+					 * All heads silent = the shrug (locked: a
+					 * silent bounce is never what anyone meant). */
+					int aud = 0;
+					for (int hk2 = 0; hk2 < NTRK; hk2++)
+						if (!trk[hk2].muted && trk[hk2].vol_q8 > 0)
+							aud = 1;
+					if (!aud) {
+						g_led_shrug = 20;
+					} else {
+						struct looptrk *bs = &trk[g_head_src];
+						uint32_t gb = bs->len_blocks ? bs->len_blocks
+							    : (g_loop_blocks ? g_loop_blocks : 1u);
+						uint32_t cdiv = g_chop_div ? g_chop_div : 1u;
+						uint32_t coff = g_chop_off;
+						uint32_t cyc, win, wbase, wper;
+						if (g_fixed_len && g_loop_blocks &&
+						    gb >= g_loop_blocks &&
+						    (gb % g_loop_blocks) == 0u) {
+							wper = g_loop_blocks;
+							win = wper / cdiv; if (!win) win = 1u;
+							wbase = (coff * wper) / cdiv;
+							if (wbase + win > wper) wbase = wper - win;
+							cyc = (gb / wper) * win;
+						} else {
+							wper = gb;
+							win = gb / cdiv; if (!win) win = 1u;
+							wbase = (coff * gb) / cdiv;
+							if (wbase + win > gb) wbase = gb - win;
+							cyc = win;
+						}
+						if (g_win_free) {
+							uint32_t ws = g_win_s8, we = g_win_e8;
+							if (we < ws) { uint32_t t2 = ws; ws = we; we = t2; }
+							win = ((we - ws + 1u) * wper) >> 8;
+							if (!win) win = 1u;
+							wbase = (ws * wper) >> 8;
+							if (wbase + win > wper) wbase = wper - win;
+							cyc = (gb / wper) * win;
+						}
+						bnc_src = g_head_src;
+						bnc_dst = (uint8_t)ti;
+						for (int hk2 = 0; hk2 < NTRK; hk2++) {
+							bnc_pos[hk2] = g_head_pos[hk2];
+							bnc_rev[hk2] = g_head_rev[hk2];
+							bnc_mut[hk2] = trk[hk2].muted;
+							bnc_vol[hk2] = trk[hk2].vol_q8;
+						}
+						bnc_wfree = g_win_free; bnc_wrev = g_win_rev;
+						bnc_cyc = cyc; bnc_win = win;
+						bnc_wbase = wbase; bnc_wper = wper;
+						bnc_start = bs->start_blk;
+						bnc_content = bs->content_blocks
+							    ? bs->content_blocks : gb;
+						bnc_done_blocks = 0;
+						__DSB();   /* snapshot lands before the request */
+						g_bnc_req = (int8_t)ti;
+					}
+					armed_press[ti] = 1;   /* spend the press */
+					tap_deadline[ti] = 0;
+				}
 				if (!armed_press[ti] && ti != stop_tap_trk &&
 				    g_rec_track < 0 && !g_heads_mode &&
 				    trk[ti].state != TS_DONE &&
@@ -6040,6 +6225,38 @@ int main(void)
 				play_t = -1;
 			}
 
+			if (g_bnc_done) {
+				/* M19b COMPLETION: every audio block is on flash —
+				 * NOW the index (torn-write doctrine), then the
+				 * locked auto-exit: mutes restored, the print plays
+				 * unmuted, in phase with the loop it came from. */
+				g_bnc_done = 0;
+				int bd = (int)bnc_dst;
+				trk[bd].len_blocks = bnc_cyc;
+				trk[bd].content_blocks = bnc_cyc;
+				trk[bd].start_blk = bnc_start;
+				trk[bd].muted = 0;
+				trk[bd].p_w = (g_consume_pos / SAMP_PER_BLK) * SAMP_PER_BLK;
+				trk[bd].state = TS_PLAY;
+				if (g_slot < NUM_SLOTS) {
+					g_meta.slot[g_slot].present[bd] = 1;
+					g_meta.slot[g_slot].trk_len[bd] = bnc_cyc;
+					g_meta.slot[g_slot].trk_start[bd] = bnc_start;
+					g_meta.trk_content[g_slot][bd] = bnc_cyc;
+					g_meta.song_mode[g_slot] &=
+						(uint8_t)~(uint8_t)(0x10u << bd);
+					g_meta_save_req = 1;
+				}
+				g_heads_mode = 0;
+				for (int hm = 0; hm < NTRK; hm++) {
+					if (hm == bd) continue;
+					trk[hm].muted = (uint8_t)
+						((g_head_mute_save >> hm) & 1u);
+					trk[hm].p_w = (g_consume_pos /
+						SAMP_PER_BLK) * SAMP_PER_BLK;
+				}
+				g_dip_req = 1;
+			}
 #if HP_TIM_TEST
 			/* HEADPHONE AUTO-MUTE: poll the codec jack-detect ~5x/s and mute the
 			 * speaker while headphones are in. Debounced (3 consecutive equal
