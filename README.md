@@ -222,11 +222,21 @@ SP-1 custom firmware) — no soldering or opening the device required:
 
 ### Loop chop (hold FUNCTION)
 - FUNCTION + FWD halves the playback window (down to 1/64th of the loop);
-  FUNCTION + RWD doubles it back toward the full loop.
+  FUNCTION + RWD doubles it back toward the full loop. HOLD the chord and
+  the halve/double repeats in steady declicked steps — a length glide.
 - FUNCTION + Vol +/− slides the window right/left. HOLD the chord and the
   slide auto-repeats, faster and faster, each step declicked — a tape scrub
   across the loop.
 - FUNCTION + rocker double-click resets to the full loop.
+- **The window on faders** (outside heads mode): with FUNCTION held,
+  fader 1 = window START and fader 2 = END — free positions at any width,
+  not just the stepped halves — and fader 3 = SHIFT (width kept). **Cross
+  start past end and the window plays in REVERSE**; uncross for forward.
+  Session-only: any chop button returns to the stepped window, and a song
+  switch clears it.
+- **FUNCTION + fader 4 = a DJ filter** on everything: center = clean,
+  slide down = low-pass sweep, slide up = high-pass sweep. It latches
+  where you leave it and resets to neutral at power-on.
 - Non-destructive: recorded audio, loop lengths, the beat grid and the MIDI
   clock are untouched. The chop is saved with the song. In fixed mode it
   slices the shared bar across all layers together; in variable mode each
@@ -240,6 +250,13 @@ SP-1 custom firmware) — no soldering or opening the device required:
 - Each head has its own fader and mute (tap tracks 2–4). The four lights
   chase in sequence, matching what you hear. Chop applies to all four heads
   at once — shrink the window and the whole canon tightens.
+- **Hold FUNCTION and the faders SCRUB**: each fader moves its head
+  anywhere on the loop, live — all four, track 1's own phase included.
+  Grabbing jumps the head to where the fader sits (it's a scrub); release
+  FUNCTION and the faders return to volume duty without a jump.
+- **Double-tap a track = that head plays backward.** Double-tap again for
+  forward. Directions reset to forward each time you enter heads mode, and
+  the light chase walks backward with the audio.
 - It's a playback/performance mode: recording and delete are blocked while
   it's on (taps only mute). **Triple-tap again to exit** — tracks 2–4
   return exactly as they were; their content is never touched.
@@ -302,7 +319,9 @@ SP-1 custom firmware) — no soldering or opening the device required:
   (vinyl-style — pitch moves too, clamped to the 0.5–1.5x range) and the
   loops restart from their top on your tapped downbeat at the next bar —
   tempo and phase matched in one gesture. FUNCTION + double-tap PLAY snaps
-  back to exactly 1.0x: tap to match, double-tap to come home.
+  back to exactly 1.0x: tap to match, double-tap to come home. (The snap
+  lands ~0.6 s after the second tap — a THIRD tap in that window is the
+  heads-mode toggle instead, and never moves the speed.)
 - The grid's tempo is remembered per song across power-off; its downbeat
   re-anchors to your next tap run (or to your first take). Bars are fixed
   4/4; accepted range is roughly 50–200 BPM.

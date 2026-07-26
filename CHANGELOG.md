@@ -5,6 +5,43 @@ Versions 1.0.0-1.2.4 below were the 2.0 development line (developed as a
 fork by marc, never announced) — kept for the honest record. The classic
 4-song firmware lives on the `v1` branch. Base: 1.x at commit c60941c.
 
+## [2.3.0] - 2026-07-26
+
+The fader release — while FUNCTION is held, the four faders become a
+performance surface. Everything here is session-state: songs on flash are
+never touched, and letting go of FUNCTION always returns the faders to
+volume duty without a jump.
+
+### Added
+- Heads mode scrub: hold FUNCTION and the faders move the four heads'
+  positions on the loop, live — all four, track 1's own phase included.
+  Grabbing jumps the head to the fader (it's a scrub); each step is
+  declicked per head; the light chase follows.
+- Heads mode reverse: double-tap a track and that head plays BACKWARD
+  (the gesture was free — delete is blocked in heads mode). Double-tap
+  again for forward; everything resets forward at heads entry; the light
+  chase walks backward with the audio.
+- Window faders: hold FUNCTION outside heads mode — fader 1 = window
+  START, fader 2 = END, free fractions of the chop period at any width
+  (down to a ~1/128 sliver), not just the stepped halves; fader 3 =
+  SHIFT (width and direction kept). CROSS start past end and the window
+  plays in REVERSE. Any chop button returns to the stepped window.
+- DJ filter: FUNCTION + fader 4 (outside heads mode) — center = clean,
+  slide down = low-pass sweep (to ~80 Hz), slide up = high-pass sweep
+  (to ~4.5 kHz). Sits on the master mix, so it colors everything,
+  including the live input. Latches where you leave it; neutral at
+  power-on.
+- Chop length glide: holding FUNCTION+FWD/RWD now auto-repeats the
+  halve/double — steady declicked steps, full range in ~2.3 s.
+
+### Fixed
+- FUNCTION+PLAY triple-tap (the heads toggle) registers reliably: fast
+  taps no longer merge, unhurried triples still count, and a missed
+  triple can no longer flip the fixed/variable loop mode. The double-tap
+  1.0x snap now waits out the triple window (~0.6 s), so a completed
+  triple never touches the tape speed — heads engage at the speed you
+  are playing.
+
 ## [2.2.0] - 2026-07-25
 
 ### Added
