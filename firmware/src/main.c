@@ -906,8 +906,49 @@ static volatile uint8_t  g_grid_save_req;     /* control -> streamer: write bloc
  * as the base. Lengths quantize to a block-rounded beat so all grid takes are
  * multiples of the SAME base = mutually locked forever. */
 static volatile uint64_t g_grid_punch_at;      /* sample-clock of the scheduled punch-in (0 = none) */
+/* M20 F1: grid phase is TRUTH only when it came from taps THIS session on
+ * THIS song ("fresh") — tapping means "I'm syncing to something external",
+ * so the first take punches ON the tapped grid instead of re-anchoring it
+ * (bench: instant starts planted downbeats 21-82 ms off the source).
+ * Grid-from-first-take songs keep the classic your-take-IS-the-"1" feel. */
+static volatile uint8_t  g_grid_fresh;
+static volatile uint64_t g_arm_press_sclk;  /* A-r2: sample-clock of the
+                                             * PRESS behind the current arm
+                                             * (first-take punch schedules
+                                             * from the finger, not the arm) */
 static volatile uint8_t  g_gridrec;            /* current take was grid-punched */
 static volatile uint32_t g_gridrec_beat_samps; /* grid beat in STORED samples at punch speed */
+/* M20 F7: the BASE of a gridded song — beat count and block length of its
+ * first grid take. Loop lengths live in whole flash blocks (256 samples,
+ * 5.33 ms), and the old code rounded EACH BEAT to blocks before multiplying:
+ * at 120 BPM a beat is 93.75 blocks, forced to 94, so a PERFECT tap still
+ * recorded a loop that plays at 119.68 BPM — +1.33 ms every beat, compounding
+ * every lap (marc's bench: 10.7 ms per 8-beat lap, 160 ms after a minute; the
+ * metronome LEDs run off the unquantized grid clock, which is exactly why the
+ * lights looked locked while the audio slid). Now the WHOLE take is rounded
+ * once, and every later take is referenced to this base, so lengths stay exact
+ * multiples of each other AND track the true tempo. */
+static volatile uint32_t g_grid_base_beats;
+static volatile uint32_t g_grid_base_blocks;
+
+/* Blocks for n grid beats. Base-referenced when the song has one at the same
+ * tempo (siblings then lock exactly); otherwise the whole run is rounded once
+ * — error <= half a block per TAKE instead of half a block per BEAT. */
+static uint32_t grid_len_blocks(uint32_t nbeats)
+{
+	uint32_t bs = g_gridrec_beat_samps;
+	if (nbeats < 1u) nbeats = 1u;
+	if (!bs) return nbeats;
+	if (g_grid_base_beats && g_grid_base_blocks) {
+		uint32_t bb = (uint32_t)(((uint64_t)g_grid_base_blocks *
+					  SAMP_PER_BLK) / g_grid_base_beats);
+		uint32_t d = (bb > bs) ? (bb - bs) : (bs - bb);
+		if ((uint64_t)d * 100u <= (uint64_t)bs)   /* same tempo (<1%) */
+			return (uint32_t)(((uint64_t)nbeats * g_grid_base_blocks +
+					   g_grid_base_beats / 2u) / g_grid_base_beats);
+	}
+	return (uint32_t)(((uint64_t)nbeats * bs + SAMP_PER_BLK / 2u) / SAMP_PER_BLK);
+}
 /* M8c: performance layer. Mute/unmute WAITS for the bar line on gridded songs
  * (launch quantize); a tap run over EXISTING loops beatmatches (retunes the
  * tape + resyncs the loop start to the tapped downbeat at the next bar). */
@@ -1188,6 +1229,7 @@ static struct {
 	int32_t  env;
 	int32_t  peak;
 	int      above;
+	uint32_t first_onset;
 	uint32_t last_onset;
 	uint32_t ioi[TEMPO_MAX_ONSETS];
 	uint32_t n;
@@ -1210,6 +1252,7 @@ static inline void tempo_feed(int16_t sv, uint32_t pos)
 			uint32_t d = pos - g_tempo.last_onset;
 			if (d > LOOP_RATE / 8u) g_tempo.ioi[g_tempo.n++] = d;
 		}
+		if (!g_tempo.first_onset) g_tempo.first_onset = pos ? pos : 1u;
 		g_tempo.last_onset = pos;
 	} else if (g_tempo.above && g_tempo.env < (thr * 3 >> 2)) {
 		g_tempo.above = 0;
@@ -1234,6 +1277,127 @@ static void tempo_finish(void)
 	g_midi_div = (beat + 12u) / 24u;          /* precompute once: no per-sample divide */
 	g_det_bpm = (int)(((uint64_t)LOOP_RATE * 60u + beat / 2u) / beat);
 }
+/* M20 F8: CONTENT-DERIVED TEMPO REFINEMENT — the loop learns the source's real
+ * tempo from the audio it just recorded. The onset estimator above has always
+ * run through every first take (tempo_reset at the punch, tempo_feed per
+ * sample); on a TAPPED grid its answer was simply discarded. But human tapping
+ * lands ~0.2-1% off, and that error is exactly what walks a loop off the track
+ * it was recorded from (marc's bench: a 0.27% error = 1.3 ms per beat = 160 ms
+ * of slide per minute). The content knows better: measure the span between the
+ * first and last onset, work out how many half-beats it covers using the tap as
+ * the hypothesis (it is close enough to make that unambiguous), and divide.
+ *
+ * Guards, so this can only ever help: at least 4 onsets; span >= 2 beats;
+ * the span is CAPPED at 24 beats so that miscounting the beats by one always
+ * lands >2% away and gets rejected; and the refined beat must sit within 2% of
+ * the tap. Anything ambiguous (pads, drones, rubato) keeps the tapped value. */
+static uint32_t tempo_span(uint32_t cap)
+{
+	uint32_t acc = 0u, span = 0u;
+	for (uint32_t i = 0; i < g_tempo.n; i++) {
+		if (acc + g_tempo.ioi[i] > cap) break;
+		acc += g_tempo.ioi[i];
+		span = acc;
+	}
+	return span;
+}
+/* Median gap between onsets. Sorts the list, so it must be the LAST thing to
+ * read it (the span walk above needs chronological order). */
+static uint32_t tempo_median_ioi(void)
+{
+	if (g_tempo.n < 2u) return 0u;
+	for (uint32_t i = 1; i < g_tempo.n; i++) {
+		uint32_t v = g_tempo.ioi[i]; int j = (int)i - 1;
+		while (j >= 0 && g_tempo.ioi[j] > v) {
+			g_tempo.ioi[j + 1] = g_tempo.ioi[j]; j--;
+		}
+		g_tempo.ioi[j + 1] = v;
+	}
+	return g_tempo.ioi[g_tempo.n / 2u];
+}
+static uint32_t tempo_refine(uint32_t bs)
+{
+	if (!bs || g_tempo.n < 4u) return 0u;
+	if (!g_tempo.first_onset || g_tempo.last_onset <= g_tempo.first_onset)
+		return 0u;
+	/* STAGE 1 — COARSE, over a SHORT span (<=4 beats). Counting half-beats
+	 * here needs the hypothesis only to be better than ~6%, so even a badly
+	 * tapped grid (marc's bench had one 3% out) still counts correctly. */
+	uint32_t s1 = tempo_span(bs * 4u);
+	if (s1 < bs * 2u) return 0u;
+	uint32_t h1 = (uint32_t)(((uint64_t)s1 * 2u + bs / 2u) / bs);
+	if (h1 < 4u) return 0u;
+	uint32_t r1 = (uint32_t)(((uint64_t)s1 * 2u + h1 / 2u) / h1);
+	uint32_t d1 = (r1 > bs) ? (r1 - bs) : (bs - r1);
+	if ((uint64_t)d1 * 20u > (uint64_t)bs) return 0u;  /* >5% from the tap:
+	                                                    * not the same tempo,
+	                                                    * and past the count-
+	                                                    * safety limit — keep
+	                                                    * what was tapped */
+	/* STAGE 2 — FINE, over the long span, counted with STAGE 1 (~0.15%
+	 * accurate) as the hypothesis instead of the hand. A miscount here would
+	 * need >1% of hypothesis error, so it cannot happen; the 24-beat cap plus
+	 * the 2% agreement check make it safe twice over. Precision scales with
+	 * the span: ~0.06% on percussive material. */
+	uint32_t out = r1;
+	uint32_t s2 = tempo_span(r1 * 24u);
+	if (s2 >= r1 * 4u) {
+		uint32_t h2 = (uint32_t)(((uint64_t)s2 * 2u + r1 / 2u) / r1);
+		if (h2 >= 8u) {
+			uint32_t r2 = (uint32_t)(((uint64_t)s2 * 2u + h2 / 2u) / h2);
+			uint32_t d2 = (r2 > r1) ? (r2 - r1) : (r1 - r2);
+			if ((uint64_t)d2 * 50u <= (uint64_t)r1) out = r2;
+		}
+	}
+	/* SUBDIVISION SANITY. Both stages can share one mistake: if the onset
+	 * that ends a measuring window sits on a TRIPLET or swung subdivision,
+	 * the half-beat count lands wrong and the two stages agree with each
+	 * other on the wrong answer (~5% out). So cross-check against a
+	 * statistic that does not depend on the count at all — the typical gap
+	 * between hits must be a simple fraction or multiple of the result
+	 * (1/4, 1/3, 1/2, 1, 2, 3, 4). Straight material passes trivially; a
+	 * triplet-corrupted answer misses every ratio and the tapped tempo is
+	 * kept instead. */
+	{
+		uint32_t med = tempo_median_ioi();
+		if (med) {
+			static const uint8_t rn[7] = { 1u, 1u, 1u, 1u, 2u, 3u, 4u };
+			static const uint8_t rd[7] = { 4u, 3u, 2u, 1u, 1u, 1u, 1u };
+			int ok = 0;
+			for (int k = 0; k < 7; k++) {
+				uint32_t want = (uint32_t)(((uint64_t)out * rn[k] +
+							    rd[k] / 2u) / rd[k]);
+				if (!want) continue;
+				uint32_t dm = (med > want) ? (med - want) : (want - med);
+				if ((uint64_t)dm * 33u <= (uint64_t)want) { ok = 1; break; }
+			}
+			if (!ok) return 0u;   /* nothing musical fits: keep the tap */
+		}
+	}
+	return out;
+}
+
+/* Apply a refined beat to the SONG GRID as well, so the metronome, the MIDI
+ * clock and every later punch follow the corrected tempo instead of the tapped
+ * one (otherwise overdubs would quantize to a grid the base loop no longer
+ * agrees with). Phase is untouched — only the spacing changes. */
+static void grid_retune(uint32_t old_bs, uint32_t new_bs)
+{
+	if (!old_bs || !new_bs || !g_grid_beat_frames) return;
+	uint32_t nf = (uint32_t)(((uint64_t)g_grid_beat_frames * new_bs +
+				  old_bs / 2u) / old_bs);
+	if (!nf) return;
+	g_grid_beat_frames = nf;
+	if (g_slot < NUM_SLOTS) {
+		g_grid_bpm_q8[g_slot] = (uint16_t)((48000ULL * 60u * 256u) / nf);
+		g_grid_save_req = 1;
+	}
+	{ uint64_t _bar = (uint64_t)nf * 4u;
+	  g_grid_next_bar = g_grid_anchor +
+		(((g_sample_clock - g_grid_anchor) / _bar) + 1u) * _bar; }
+	g_grid_next_tick = g_sample_clock;
+}
+
 /* Boot STOPPED (no auto-play): the saved song loads paused; PLAY (tap=resume,
  * hold=from the top) or recording starts the tape. The device used to blast the
  * last loop the instant it powered up — annoying after a flash or plug-in. */
@@ -1365,6 +1529,7 @@ static void looper_audio_block(int16_t *s)
 				any = 1;
 		if (!any) {
 			g_loop_len = 0; g_loop_blocks = 0; g_loop_active = 0;
+			g_grid_base_beats = 0; g_grid_base_blocks = 0;   /* M20 F7 */
 			if (g_slot < NUM_SLOTS) {
 				g_meta.slot[g_slot].loop_len = 0;
 				g_meta.song_mode[g_slot] = 0;   /* M7c: unstamp */
@@ -1447,14 +1612,33 @@ static void looper_audio_block(int16_t *s)
 				 * NEAREST grid beat. The beat is block-rounded ONCE and
 				 * shared by every grid take -> all lengths are multiples
 				 * of the same base and stay locked to each other. */
-				uint32_t glen = 0, gbb = 0;
+				uint32_t glen = 0, gbb = 0, gbeats = 0;
 				if (g_gridrec && g_gridrec_beat_samps) {
+					if (g_loop_len == 0u) {
+						/* M20 F8: trust the recording over the
+						 * tapping — refine the beat from the
+						 * onsets this take just captured, and
+						 * retune the grid to match. */
+						uint32_t rf =
+							tempo_refine(g_gridrec_beat_samps);
+						if (rf) {
+							grid_retune(g_gridrec_beat_samps, rf);
+							g_det_bpm = (int)(((uint64_t)LOOP_RATE *
+								60u + rf / 2u) / rf);
+							g_gridrec_beat_samps = rf;
+						}
+					}
 					gbb = (g_gridrec_beat_samps + SAMP_PER_BLK / 2u)
 					      / SAMP_PER_BLK;
 					if (gbb < 1u) gbb = 1u;
-					uint32_t gm = (content + gbb / 2u) / gbb;
+					/* M20 F7: count beats from the PRECISE beat length,
+					 * then ask for that many beats' worth of blocks —
+					 * never beats-times-a-rounded-beat. */
+					uint64_t csam = (uint64_t)content * SAMP_PER_BLK;
+					uint32_t gm = (uint32_t)((csam +
+						g_gridrec_beat_samps / 2u) / g_gridrec_beat_samps);
 					if (gm < 1u) gm = 1u;
-					uint32_t nearest = gm * gbb;
+					uint32_t nearest = grid_len_blocks(gm);
 					if (g_loop_len == 0u) {
 						/* M8b-r3 FIRST TAKE: TRIM-BACK policy — the
 						 * stop is instant and a loop can never
@@ -1465,17 +1649,30 @@ static void looper_audio_block(int16_t *s)
 						 * Tap-tempo drift made the old run-to-the-
 						 * line wait long enough to read as "still
 						 * recording" (user report). */
-						uint32_t fl = (content / gbb) * gbb;
-						uint32_t win = (gbb * 4u) / 25u;
-						if (content < gbb)
-							glen = gbb;     /* degenerate: complete 1 beat */
-						else if (nearest > fl &&
-						         (nearest - content) <= win)
+						uint32_t flb = (uint32_t)(csam /
+							       g_gridrec_beat_samps);
+						uint32_t fl = flb ? grid_len_blocks(flb) : 0u;
+						/* M20 F2: round to the NEAREST beat (window
+						 * 16% -> 50%), matching the overdub policy.
+						 * Bench: the trim-back cost marc a beat at
+						 * his best (7 for an intended 8) and left a
+						 * 7-vs-8 polymeter. Max run-on = half a beat
+						 * with the double-blink cue. */
+						uint32_t win = gbb / 2u;
+						if (content < gbb) {
+							glen = grid_len_blocks(1u);
+							gbeats = 1u;    /* degenerate: complete 1 beat */
+						} else if (nearest > fl &&
+						         (nearest - content) <= win) {
 							glen = nearest; /* tiny run-on to the line */
-						else
+							gbeats = gm;
+						} else {
 							glen = fl;      /* trim back — instant */
+							gbeats = flb;
+						}
 					} else {
 						glen = nearest;         /* overdub: fixed-style */
+						gbeats = gm;
 					}
 					if (glen > MAX_LOOP_BLOCKS) glen = 0;  /* fall back free */
 				}
@@ -1488,6 +1685,10 @@ static void looper_audio_block(int16_t *s)
 						 * stored-domain beat, not the estimator */
 						g_beat_samples = g_gridrec_beat_samps;
 						g_midi_div = g_gridrec_beat_samps / 24u;
+						if (gbeats) {   /* M20 F7: the base to lock to */
+							g_grid_base_beats = gbeats;
+							g_grid_base_blocks = glen;
+						}
 					} else
 					tempo_finish();         /* set the detected beat grid + BPM */
 					if (g_slot < NUM_SLOTS) {
@@ -1512,11 +1713,11 @@ static void looper_audio_block(int16_t *s)
 						/* M8b-r3: on a GRID take the escape trims to
 						 * the last WHOLE beat instead of amputating
 						 * mid-beat and leaving a silent tail. */
-						uint32_t bb2 = (g_gridrec_beat_samps +
-								SAMP_PER_BLK / 2u) / SAMP_PER_BLK;
-						if (bb2 >= 1u) {
-							uint32_t fl2 = ((trk[i].rec_count /
-									 SAMP_PER_BLK) / bb2) * bb2;
+						uint32_t nb2 = (uint32_t)((uint64_t)trk[i].rec_count /
+									  g_gridrec_beat_samps);
+						uint32_t bb2 = grid_len_blocks(1u);
+						if (nb2 >= 1u) {
+							uint32_t fl2 = grid_len_blocks(nb2);
 							if (fl2 >= bb2) {
 								len = fl2;
 								content = fl2;
@@ -1613,7 +1814,8 @@ static void looper_audio_block(int16_t *s)
 			if (k != i && (trk[k].state != TS_EMPTY ||
 				       (g_slot < NUM_SLOTS && g_meta.slot[g_slot].present[k])))
 				others = 1;
-		if (!others) { g_loop_len = 0; g_loop_blocks = 0; g_loop_active = 0; }
+		if (!others) { g_loop_len = 0; g_loop_blocks = 0; g_loop_active = 0;
+			       g_grid_base_beats = 0; g_grid_base_blocks = 0; }
 
 		if (g_loop_len == 0u) {
 			/* FIRST take: start the transport NOW so the recorder can watch the
@@ -1633,25 +1835,39 @@ static void looper_audio_block(int16_t *s)
 			g_meta.song_mode[g_slot] &= (uint8_t)~(uint8_t)(0x10u << i);
 		trk[i].wait_peak = 0; trk[i].wait_ticks = 0;
 		if (g_grid_active && g_grid_beat_frames) {
-			if (g_loop_len == 0u) {
-				/* M8b-r5: the FIRST take punches IMMEDIATELY. The
-				 * punch re-anchors the downbeat anyway, so waiting
-				 * for the tapped lattice bought nothing — the phase
-				 * was discarded one line later (r2 contradiction;
-				 * felt as "aggressive waiting", user report). Story:
-				 * taps teach TEMPO, your first take places the
-				 * downbeat, overdubs wait for your bar. Remaining
-				 * first-take latency = the ~130 ms arm constant. */
+			if (g_loop_len == 0u && !g_grid_fresh) {
+				/* M8b-r5 (kept for UNTAPPED grids): the first take
+				 * punches immediately and places the downbeat —
+				 * your take IS the "1". The r2 contradiction (wait
+				 * for a phase, then discard it) stays resolved this
+				 * way HERE; on fresh-tapped grids it's resolved the
+				 * other way below (M20 F1: keep the phase). */
 				g_grid_punch_at = g_sample_clock ? g_sample_clock : 1u;
 			} else {
-				/* OVERDUBS: next BAR line — aligning to the
-				 * existing material is the whole point. The armed
-				 * LED fast-blinks the count-in. */
-				uint64_t unit = (uint64_t)g_grid_beat_frames * 4u;
-				uint64_t off = g_sample_clock - g_grid_anchor;
+				/* M20 F1+F3: overdubs — and FIRST takes on a
+				 * FRESHLY TAPPED grid (the taps said "sync to
+				 * this") — punch on the next BEAT line. F3: beat,
+				 * not bar — the <=2 s bar count-in was the "way
+				 * too late" report; the wait is <=1 beat now, and
+				 * stops still snap to whole beats so every loop
+				 * stays locked. The armed LED fast-blinks. */
+				uint64_t unit = (uint64_t)g_grid_beat_frames;
+				/* A-r2: the FIRST take on a fresh grid schedules
+				 * from the PRESS — pressing before the line catches
+				 * that line exactly (the trigger fires the moment
+				 * the arm lands if the line just passed: bounded
+				 * ~25-30 ms worst case, never a full-beat wait).
+				 * Overdubs keep arm-time scheduling: their 180 ms
+				 * hold is a deliberate content-track gesture filter,
+				 * and arming early achieves line-exact there. */
+				uint64_t ref = (g_loop_len == 0u && g_arm_press_sclk &&
+						g_arm_press_sclk > g_grid_anchor)
+					     ? g_arm_press_sclk : g_sample_clock;
+				uint64_t off = ref - g_grid_anchor;
 				g_grid_punch_at = g_grid_anchor +
 					((off + unit - 1u) / unit) * unit;
 			}
+			g_arm_press_sclk = 0;
 		} else {
 			g_grid_punch_at = 0;
 		}
@@ -1847,9 +2063,12 @@ static void looper_audio_block(int16_t *s)
 								(((uint64_t)g_grid_beat_frames *
 								  g_cur_speed_q16) >> 16);
 							g_gridrec = 1;
-							if (g_loop_len == 0u) {
+							if (g_loop_len == 0u && !g_grid_fresh) {
 								/* M8b-r2: your first loop IS the
-								 * downbeat from here on */
+								 * downbeat from here on (untapped
+								 * grids only — M20 F1: a fresh
+								 * TAPPED grid keeps its own phase;
+								 * the punch already landed on it) */
 								g_grid_anchor = g_grid_punch_at;
 								{ uint64_t _bar = (uint64_t)g_grid_beat_frames * 4u;
 			  g_grid_next_bar = g_grid_anchor +
@@ -4806,6 +5025,8 @@ static void jump_to_slot(uint32_t ns)
 	}
 	if (g_bnc_active || g_bnc_req >= 0)
 		g_bnc_abort = 1;   /* M19b: a song switch abandons the print */
+	g_grid_fresh = 0;  /* M20 F1: a persisted grid's phase is provisional */
+	g_grid_base_beats = 0; g_grid_base_blocks = 0;   /* M20 F7 */
 	g_win_free = 0;     /* M16: the free window is session performance state */
 	g_win_rev = 0;
 	g_heads_mode = 0;   /* M13: heads are per-song doctrine like speed/mutes/
@@ -5656,10 +5877,15 @@ int main(void)
 
 			/* M8a: a HOLD right after a tap run = CLEAR this song's grid.
 			 * The run also spends the press — never a power-off. */
-			if (tap_n > 0 && k_uptime_get() - tap_last < 1500) {
+			if (tap_n > 0 && k_uptime_get() - tap_last < 3000) {
+				/* M20 F6: window widened 1500 -> 3000 ms — the
+				 * any-time grid clear (tap FN once, then hold ~1 s)
+				 * was real but nearly impossible to hit
+				 * (geraasmasjien's "can't get back to free mode") */
 				if (held >= 1000 && !combo_seen) {
 					g_grid_bpm_q8[g_slot] = 0;
 					g_grid_active = 0;
+					g_grid_fresh = 0;
 					g_grid_save_req = 1;
 					tap_n = 0;
 					combo_seen = 1;      /* spend the press */
@@ -5735,6 +5961,7 @@ int main(void)
 						g_grid_bpm_q8[g_slot] = (uint16_t)bpmq8;
 						g_grid_beat_frames = (uint32_t)
 							((48000ULL * 60u * 256u) / bpmq8);
+						g_grid_fresh = 1;   /* M20 F1: taps = truth */
 						g_grid_anchor = tap_first_s;
 						g_grid_next_tick = g_sample_clock;
 						g_grid_active = 1;
@@ -6173,7 +6400,19 @@ int main(void)
 				    g_rec_track < 0 && !g_heads_mode &&
 				    trk[ti].state != TS_DONE &&
 				    k_uptime_get() - press_t[ti] >=
-				        (empt ? 100 : HOLD_RECORD_MS)) {
+				        (empt ? ((g_grid_active && g_grid_fresh)
+				                 ? 0 : 100)
+				              : HOLD_RECORD_MS)) {
+					/* A-r2: on a FRESH-TAPPED grid an empty track
+					 * arms at the press COMMIT (~25-30 ms) — the
+					 * 100 ms filter made pressing ON the beat the
+					 * worst possible phase (the line passed during
+					 * the filter and the punch waited a whole
+					 * beat; marc's "small delay"). Press ~40 ms
+					 * before the line and the punch catches it
+					 * sample-exact; a committed graze merely arms
+					 * a visible fast-blink, cancellable with a
+					 * tap. */
 					/* v2.0.0: the gridded re-record hold is HOLD_RECORD_MS
 					 * again. M8b-r5 trimmed it to 120 ms ("the punch waits
 					 * for the bar anyway") but real taps measure 50-150 ms
@@ -6201,6 +6440,16 @@ int main(void)
 					 * press — the latch clears at episode end. */
 					armed_press[ti] = 1;
 					tap_deadline[ti] = 0;            /* a hold cancels a pending single-tap */
+					{	/* A-r2: remember when the FINGER landed,
+						 * in engine samples (approximate the
+						 * elapsed ms back from now) */
+						int64_t _ago = k_uptime_get() - press_t[ti];
+						if (_ago < 0) _ago = 0;
+						uint64_t _sc = g_sample_clock;
+						uint64_t _back = (uint64_t)_ago * 48u;
+						g_arm_press_sclk =
+							(_sc > _back) ? (_sc - _back) : _sc;
+					}
 					g_arm_req[ti] = 1;
 					g_playing = 1;                   /* recording implies play */
 				}
