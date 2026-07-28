@@ -5461,6 +5461,8 @@ int main(void)
 	int64_t tap_first = 0, tap_last = 0;  /* M8a FN-tap tempo run */
 	int      tap_n = 0;
 	uint64_t tap_first_s = 0;             /* sample-clock at first tap */
+	uint64_t tap_last_s  = 0;             /* sample-clock at the latest tap */
+	uint64_t press_start_s = 0;           /* M20 F9: sample-clock at the FN PRESS edge */
 	int      fnp_low = 0;                 /* PLAY-release debounce (passes) */
 	int64_t combo_start = -1;   /* FUNCTION+PLAY: when the combo was first seen */
 	uint8_t combo_fired = 0;    /* mode already toggled this combo press */
@@ -5549,8 +5551,17 @@ int main(void)
 		 * (the same button does both, like the original device). */
 		if (pwr_pressed()) {
 			ctl_flush = 1;
-			if (press_start < 0)
+			if (press_start < 0) {
 				press_start = k_uptime_get();
+				/* M20 F9: stamp the PRESS, not the release. The tap
+				 * cannot be CLASSIFIED until the release (a long hold
+				 * means something else), but the moment it names is
+				 * the press — so remember the clock here and judge
+				 * later. FUNCTION is a plain GPIO with no debounce,
+				 * so this read trails the finger by at most one 8 ms
+				 * control pass. */
+				press_start_s = g_sample_clock;
+			}
 
 			/* MODE TOGGLE — FUNCTION + PLAY held together ~0.7 s flips the
 			 * fixed/variable loop-length mode. The normal ladder decode below
@@ -6052,8 +6063,14 @@ int main(void)
 				 * FN hold). 1-3 taps: nothing. 4+ taps in steady
 				 * rhythm: commit the grid — tempo from mean spacing,
 				 * downbeat = the first tap. Every further tap refines. */
-				int64_t tnow = k_uptime_get();
-				uint64_t snow = g_sample_clock;
+				/* M20 F9: the tap happened when the button went
+				 * DOWN. Timing it at the release planted the whole
+				 * grid late by however long the finger stayed on the
+				 * button — tens of ms, different every tap — and F8
+				 * could never see it, because refinement corrects
+				 * SPACING and leaves PHASE alone. */
+				int64_t tnow = press_start;
+				uint64_t snow = press_start_s;
 				if (tap_n > 0 && (tnow - tap_last > 1500 ||
 				                  tnow - tap_last < 200)) tap_n = 0;
 				if (tap_n > 1) {
@@ -6063,12 +6080,20 @@ int main(void)
 					if (dvi * 5 > mean) tap_n = 0;  /* >20% off: new run */
 				}
 				if (tap_n == 0) { tap_first = tnow; tap_first_s = snow; }
-				tap_last = tnow; tap_n++;
+				tap_last = tnow; tap_last_s = snow; tap_n++;
 				if (tap_n >= 4) {
-					int64_t mean = (tap_last - tap_first) / (tap_n - 1);
-					if (mean >= 300 && mean <= 1200) {  /* 50..200 BPM */
-						uint32_t bpmq8 =
-							(uint32_t)((60000LL << 8) / mean);
+					/* M20 F9: the grid spacing comes from the SAMPLE
+					 * clock — the same clock the audio is written
+					 * with — instead of the millisecond uptime it used
+					 * to be rounded through. One division, no trip
+					 * through BPM and back, and 48000 ticks per second
+					 * of resolution instead of 1000. */
+					uint32_t nf = (uint32_t)((tap_last_s - tap_first_s) /
+								 (uint64_t)(tap_n - 1));
+					if (nf >= (48000u * 60u) / 200u &&
+					    nf <= (48000u * 60u) / 50u) {   /* 50..200 BPM */
+						uint32_t bpmq8 = (uint32_t)
+							((48000ULL * 60u * 256u) / nf);
 						/* M8c BEATMATCH: if this song already has
 						 * loops, the tap run means "match THIS" —
 						 * capture their native tempo first. */
@@ -6082,8 +6107,7 @@ int main(void)
 									 g_beat_samples);
 						}
 						g_grid_bpm_q8[g_slot] = (uint16_t)bpmq8;
-						g_grid_beat_frames = (uint32_t)
-							((48000ULL * 60u * 256u) / bpmq8);
+						g_grid_beat_frames = nf;   /* F9: exact */
 						g_grid_fresh = 1;   /* M20 F1: taps = truth */
 						g_grid_anchor = tap_first_s;
 						g_grid_next_tick = g_sample_clock;
