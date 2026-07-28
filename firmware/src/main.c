@@ -1024,6 +1024,23 @@ static struct looptrk trk[NTRK];
 #define RRING_SAMPLES    16384u   /* ~341 ms record backlog (reverted 32768->16384): the compressed codecs cut flush traffic, so the doubled rec ring is no longer needed; this reclaims RAM for the play-ring revert */
 #define RRING_MASK       (RRING_SAMPLES - 1u)
 static int16_t g_rring[RRING_SAMPLES];
+/* M20 PRE-ROLL: the record ring sits IDLE whenever nothing is being captured,
+ * so the input is written into it continuously — the machine always remembers
+ * the last stretch of what it heard. A punch that arrives LATE can then start
+ * exactly on the grid line it missed, filled in from that memory: you cannot
+ * record the past, but you can remember it. Costs zero RAM (the buffer already
+ * existed) and one store per sample while idle. Capped at half the ring so a
+ * backfilled take never starts the flush against a full buffer. */
+#define PREROLL_MAX      (RRING_SAMPLES / 2u)
+/* M20b-r2: how far back a punch may REACH. Human lateness is measured in
+ * milliseconds, not in beats, so the reach window is a quarter of a beat
+ * CAPPED here — see the rescue site for why half a beat was too generous. */
+#define PREROLL_REACH_MS 120u
+static volatile uint32_t g_pre_w;         /* pre-roll write frontier (ring index) */
+static volatile uint32_t g_pre_valid;     /* consecutive valid pre-rolled samples */
+static volatile uint32_t g_pre_phase;     /* decimator phase while the transport is idle */
+static volatile uint32_t g_pre_speed;     /* tape speed the idle ring was filled at */
+static volatile uint8_t  g_done_pending;  /* a take is still flushing: ring is BUSY */
 static volatile uint32_t g_rec_overruns;         /* diag: rec ring overflow events */
 static volatile uint32_t g_starve_cnt[NTRK];     /* diag: per-track play-ring underrun episodes */
 static volatile uint32_t g_stored_glitch_cnt;    /* diag: wfail advance-anyway commits — a STORED glitch
@@ -2010,6 +2027,15 @@ static void looper_audio_block(int16_t *s)
 				g_dec_acc = 0; g_frames_since = 0;
 
 				int rt_i = g_rec_track;
+				/* M20 PRE-ROLL: nothing capturing and nothing still
+				 * flushing -> the ring is free, so keep the last
+				 * PREROLL_MAX samples of input in it. */
+				if (!g_done_pending &&
+				    (rt_i < 0 || trk[rt_i].state != TS_REC)) {
+					g_rring[g_pre_w & RRING_MASK] = lsamp;
+					g_pre_w++;
+					if (g_pre_valid < PREROLL_MAX) g_pre_valid++;
+				}
 				if (rt_i >= 0 && trk[rt_i].state == TS_ARMED) {
 					/* AUTO-START: hold armed until the input first crosses
 					 * the threshold. NO TIMEOUT any more: the old ~4 s
@@ -2021,11 +2047,48 @@ static void looper_audio_block(int16_t *s)
 					struct looptrk *rt = &trk[rt_i];
 					int32_t aa = lsamp < 0 ? -lsamp : lsamp;
 					int trigger;
+					uint32_t pre_backfill = 0u;
 					if (g_grid_active && g_grid_beat_frames && g_grid_punch_at) {
 						/* M8b PUNCH-IN: start on the scheduled bar
 						 * line, not on sound (block-granular; the
 						 * stop is sample-exact relative to it). */
 						trigger = (g_sample_clock >= g_grid_punch_at);
+						/* M20 PRE-ROLL RESCUE: the punch is waiting
+						 * for the NEXT line — but if the PREVIOUS one
+						 * is less than half a beat back and still
+						 * inside the pre-roll memory, start there
+						 * instead and fill the gap in. The punch
+						 * lands on the NEAREST line either way, so a
+						 * press just after the beat is as good as a
+						 * press just before it. */
+						if (!trigger && g_pre_valid &&
+						    g_sample_clock > g_grid_anchor) {
+							uint64_t unit = g_grid_beat_frames;
+							uint64_t off = g_sample_clock - g_grid_anchor;
+							uint64_t prev = g_grid_anchor +
+									(off / unit) * unit;
+							uint64_t back = g_sample_clock - prev;
+							uint32_t need = (uint32_t)
+								((back * g_cur_speed_q16) >> 16);
+							/* M20b-r2 REACH LIMIT: half a beat back
+							 * was ambiguous — a press 250 ms after a
+							 * line usually MEANT the next line, and
+							 * reaching back made the take a whole beat
+							 * too long, so its head repeated at its
+							 * tail. Only a genuinely LATE finger gets
+							 * rescued: a quarter beat, capped in ms. */
+							uint64_t reach = unit / 4u;
+							uint64_t rcap = (uint64_t)
+								(I2S_TRUE_HZ / 1000u) *
+								PREROLL_REACH_MS;
+							if (reach > rcap) reach = rcap;
+							if (back <= reach && need &&
+							    need <= g_pre_valid) {
+								pre_backfill = need;
+								g_grid_punch_at = prev;
+								trigger = 1;
+							}
+						}
 					} else {
 						/* trigger directly on the first sample past
 						 * threshold (no running-peak tracking) */
@@ -2033,8 +2096,12 @@ static void looper_audio_block(int16_t *s)
 					}
 					if (trigger) {
 						if (g_loop_len == 0u) {
-							/* first take: this sound is loop position 0 */
-							g_consume_pos = 0; g_midi_start_pending = 1; g_midi_cnt = 0;
+							/* first take: this sound is loop position 0
+							 * (M20: with pre-roll, position 0 is the
+							 * grid line we reached back to, so the
+							 * playhead is already that far in) */
+							g_consume_pos = pre_backfill;
+							g_midi_start_pending = 1; g_midi_cnt = 0;
 							tempo_reset();
 							rt->flush_blk = 0; rt->flush_mod = MAX_LOOP_BLOCKS;
 							rt->rec_target = 0;
@@ -2052,9 +2119,27 @@ static void looper_audio_block(int16_t *s)
 							 * Linear flush, no wrap. */
 							rt->flush_blk = 0; rt->flush_mod = MAX_LOOP_BLOCKS;
 							rt->rec_target = 0;
-							rt->start_blk = g_consume_pos / SAMP_PER_BLK;
+							{	/* M20: an overdub anchors where
+								 * recording BEGAN — the reached-back
+								 * line, not the moment of the punch */
+								uint32_t sp = g_consume_pos;
+								sp = (sp >= pre_backfill)
+								   ? (sp - pre_backfill) : 0u;
+								rt->start_blk = sp / SAMP_PER_BLK;
+							}
 						}
-						rt->r_w = 0; rt->r_r = 0; rt->rec_count = 0; rt->rec_silence = 0;
+						if (pre_backfill) {
+							/* the pre-rolled tail IS the take's head:
+							 * the ring already holds it, so simply
+							 * adopt those indices (no copy). */
+							rt->r_r = g_pre_w - pre_backfill;
+							rt->r_w = g_pre_w;
+							rt->rec_count = pre_backfill;
+						} else {
+							rt->r_w = 0; rt->r_r = 0; rt->rec_count = 0;
+						}
+						g_pre_valid = 0;   /* the ring belongs to the take now */
+						rt->rec_silence = 0;
 						if (g_grid_active && g_grid_beat_frames && g_grid_punch_at) {
 							/* M8b: beat length in STORED samples at
 							 * the punch-in tape speed (recording
@@ -2106,6 +2191,7 @@ static void looper_audio_block(int16_t *s)
 					g_rring[rt->r_w & RRING_MASK] = wsamp;
 					rt->r_w++;
 					rt->rec_count++;
+					g_pre_w = rt->r_w;   /* pre-roll follows the take */
 					if (g_tempo.active) tempo_feed(lsamp, rt->rec_count);
 					if (rt->rec_target == 0u) {
 						/* OPEN take (first take AND independent overdubs):
@@ -2125,6 +2211,7 @@ static void looper_audio_block(int16_t *s)
 							rt->len_blocks = MAX_LOOP_BLOCKS;
 							rt->content_blocks = MAX_LOOP_BLOCKS;  /* all content */
 							rt->state = TS_DONE; g_rec_track = -1;
+							g_done_pending = 1;   /* M20: ring busy */
 						}
 					} else if (rt->rec_count >= rt->rec_target) {
 						/* Take FINALIZE: rec_target is set by the stop tap
@@ -2132,6 +2219,7 @@ static void looper_audio_block(int16_t *s)
 						 * the sub-block remainder with silence and lands
 						 * here. The take now loops at its own length. */
 						rt->state = TS_DONE; g_rec_track = -1;
+							g_done_pending = 1;   /* M20: ring busy */
 					}
 				}
 
@@ -2143,6 +2231,40 @@ static void looper_audio_block(int16_t *s)
 				if (!g_grid_active && g_midi_div && ++g_midi_cnt >= g_midi_div) {
 					g_midi_cnt = 0; g_midi_clk_produced++;
 				}
+			}
+		} else if (!g_done_pending) {
+			/* M20b-r3 IDLE PRE-ROLL: the transport only runs once a
+			 * loop exists, so on an EMPTY song the ring stayed cold
+			 * and the very first take had nothing to reach back to.
+			 * But the I2S bus is clocked by the 3.072 MHz oscillator
+			 * with the nRF a frame/bit SLAVE, so input frames arrive
+			 * whether or not the looper is doing anything: decimate
+			 * them at the speed a take WOULD use (arming snaps
+			 * g_cur_speed to g_play_speed) and keep the same short
+			 * memory. No new buffer, no eMMC, and this branch cannot
+			 * touch a running transport — it is the else of one. */
+			if (g_pre_speed != g_play_speed_q16) {
+				/* rate changed: what is stored was sampled at a
+				 * different tape speed, so its LENGTH would lie */
+				g_pre_speed = g_play_speed_q16;
+				g_pre_valid = 0;
+				g_dec_acc = 0; g_frames_since = 0;
+			}
+			g_pre_phase += g_play_speed_q16 / DECIM;
+			while (g_pre_phase >= 65536u) {
+				g_pre_phase -= 65536u;
+				/* MUST MATCH the decimator above, sample for sample */
+				int16_t psamp;
+				if (g_frames_since == 0u)      psamp = (int16_t)live;
+				else if (g_frames_since == 1u) psamp = (int16_t)g_dec_acc;
+				else if (g_frames_since < 65536u)
+					psamp = (int16_t)((int32_t)g_dec_acc /
+							  (int32_t)g_frames_since);
+				else psamp = (int16_t)(g_dec_acc / (int64_t)g_frames_since);
+				g_dec_acc = 0; g_frames_since = 0;
+				g_rring[g_pre_w & RRING_MASK] = psamp;
+				g_pre_w++;
+				if (g_pre_valid < PREROLL_MAX) g_pre_valid++;
 			}
 		}
 	}
@@ -3175,6 +3297,7 @@ static void streamer_thread(void *a, void *b, void *c)
 				 * or stop_and_flush() (power-off/DFU) can observe "idle" between
 				 * the two stores and sleep with the new recording unsaved. */
 				if (t->state == TS_DONE && (t->r_w - t->r_r) < SAMP_PER_BLK) {
+					g_done_pending = 0;   /* M20: ring free again */
 					/* Start playback BLOCK-ALIGNED at the live playhead. p_w must be a
 					 * multiple of SAMP_PER_BLK or the streamer writes each eMMC block at
 					 * a misaligned ring offset and the track plays ~16 ms out of sync. */
