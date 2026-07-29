@@ -1,0 +1,156 @@
+<svg viewBox="0 0 2360 1455" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+<rect width="2360" height="1455" fill="#faf8f3"/>
+<text x="70" y="100" font-size="58" font-weight="700" fill="#1c1a17" letter-spacing="1">SP-1 TAPE LOOPER</text>
+<g transform="translate(700,58) rotate(-5)"><rect x="0" y="0" width="120" height="54" rx="10" fill="none" stroke="#e0503a" stroke-width="4"/><text x="60" y="39" font-size="34" font-weight="700" fill="#e0503a" text-anchor="middle">v2.5</text></g>
+<text x="2290" y="80" font-size="24" fill="#e0503a" text-anchor="end" font-weight="600">chattock.github.io/sp1-tape-looper</text>
+<text x="2290" y="112" font-size="20" fill="#77726a" text-anchor="end">flash: hold track 1 + track 4, plug in USB &#8594; solderless.engineering</text>
+<g transform="translate(655.5,154.8) scale(0.85)">
+
+  <g fill="#dcd8d1">
+    <rect x="430" y="232" width="58" height="34" rx="9"/>
+    <rect x="512" y="232" width="58" height="34" rx="9"/>
+    <rect x="320" y="400" width="34" height="78" rx="9"/>
+    <rect x="881" y="360" width="34" height="78" rx="9"/>
+    <rect x="881" y="800" width="34" height="78" rx="9"/>
+  </g>
+  <rect x="345" y="255" width="545" height="745" rx="34" fill="#f3f1ec" stroke="#e2ded6" stroke-width="2"/>
+  <path d="M790 255 H856 a34 34 0 0 1 34 34 V966 a34 34 0 0 1 -34 34 H790 Z" fill="#e7e4dd"/>
+  <path d="M838 350 l26 46 h-52 Z" fill="#e0503a"/>
+  <g>
+    <rect x="402" y="525" width="22" height="200" rx="11" fill="#d5cfc7"/>
+    <rect x="500" y="525" width="22" height="200" rx="11" fill="#d5cfc7"/>
+    <rect x="598" y="525" width="22" height="200" rx="11" fill="#d5cfc7"/>
+    <rect x="696" y="525" width="22" height="200" rx="11" fill="#d5cfc7"/>
+    <circle cx="413" cy="533" r="20" fill="#cdc7bf"/>
+    <circle cx="511" cy="533" r="20" fill="#cdc7bf"/>
+    <circle cx="609" cy="533" r="20" fill="#cdc7bf"/>
+    <circle cx="707" cy="533" r="20" fill="#cdc7bf"/>
+  </g>
+  <g fill="#e0503a" opacity="0.85">
+    <circle cx="413" cy="780" r="7"/>
+    <circle cx="511" cy="780" r="7"/>
+    <circle cx="609" cy="780" r="7"/>
+    <circle cx="707" cy="780" r="7"/>
+  </g>
+  <g fill="#d4cfc7">
+    <rect x="397" y="838" width="32" height="58" rx="9"/>
+    <rect x="495" y="838" width="32" height="58" rx="9"/>
+    <rect x="593" y="838" width="32" height="58" rx="9"/>
+    <rect x="691" y="838" width="32" height="58" rx="9"/>
+  </g>
+  <g fill="#e0503a" opacity="0.55">
+    <circle cx="836" cy="560" r="6"/>
+    <circle cx="836" cy="596" r="6"/>
+    <circle cx="836" cy="632" r="6"/>
+    <circle cx="836" cy="668" r="6"/>
+  </g>
+  <circle cx="836" cy="858" r="7" fill="#c9c4bb"/>
+  <circle cx="836" cy="882" r="7" fill="#cdbfa6"/>
+  <text x="452" y="220" font-size="26" fill="#8a857c" font-family="Helvetica, Arial, sans-serif">&#8722;</text>
+  <text x="536" y="220" font-size="26" fill="#8a857c" font-family="Helvetica, Arial, sans-serif">+</text>
+
+</g>
+<rect x="880" y="160" width="600" height="152" rx="16" fill="#ffffff" stroke="#e2ddd3" stroke-width="2"/>
+<text x="906" y="208" font-size="27" font-weight="700" fill="#1c1a17" letter-spacing="0.5">VOLUME</text>
+<text x="906" y="244" font-size="22" font-weight="700" fill="#1c1a17">vol − +</text>
+<text x="1076" y="244" font-size="22" fill="#1c1a17">master volume</text>
+<text x="906" y="280" font-size="22" font-weight="700" fill="#1c1a17">FN + vol</text>
+<text x="1076" y="280" font-size="22" fill="#1c1a17">slide the chop window · hold = glide</text>
+<line x1="1180" y1="312" x2="1080.5" y2="365.6" stroke="#77726a" stroke-width="2" stroke-dasharray="1 6" stroke-linecap="round"/>
+<circle cx="1080.5" cy="365.6" r="5" fill="#e0503a"/>
+<rect x="90" y="280" width="640" height="224" rx="16" fill="#ffffff" stroke="#e2ddd3" stroke-width="2"/>
+<text x="116" y="328" font-size="27" font-weight="700" fill="#1c1a17" letter-spacing="0.5">ROCKER — tape speed</text>
+<text x="116" y="364" font-size="22" font-weight="700" fill="#1c1a17">fwd / rwd</text>
+<text x="366" y="364" font-size="22" fill="#1c1a17">speed and pitch, ±1 BPM</text>
+<text x="116" y="400" font-size="22" font-weight="700" fill="#1c1a17">double-click</text>
+<text x="366" y="400" font-size="22" fill="#1c1a17">exact semitone</text>
+<text x="116" y="436" font-size="22" font-weight="700" fill="#1c1a17">FN + fwd / rwd</text>
+<text x="366" y="436" font-size="22" fill="#1c1a17">chop half / double · hold = glide</text>
+<text x="116" y="472" font-size="22" font-weight="700" fill="#1c1a17">FN + dbl-click</text>
+<text x="366" y="472" font-size="22" fill="#1c1a17">chop reset</text>
+<line x1="730" y1="420" x2="944.5" y2="528.8" stroke="#77726a" stroke-width="2" stroke-dasharray="1 6" stroke-linecap="round"/>
+<circle cx="944.5" cy="528.8" r="5" fill="#e0503a"/>
+<rect x="90" y="534" width="640" height="296" rx="16" fill="#ffffff" stroke="#e2ddd3" stroke-width="2"/>
+<text x="116" y="582" font-size="27" font-weight="700" fill="#1c1a17" letter-spacing="0.5">FADERS</text>
+<text x="116" y="618" font-size="22" font-weight="700" fill="#1c1a17">1–4</text>
+<text x="276" y="618" font-size="22" fill="#1c1a17">track volumes · per head in heads mode</text>
+<text x="116" y="654" font-size="22" fill="#77726a">with FUNCTION held —</text>
+<text x="116" y="690" font-size="22" font-weight="700" fill="#1c1a17">1 · 2 · 3</text>
+<text x="276" y="690" font-size="22" fill="#1c1a17">window start · end · shift, free sizes</text>
+<text x="116" y="726" font-size="22" font-weight="700" fill="#1c1a17">1 past 2</text>
+<text x="276" y="726" font-size="22" fill="#1c1a17">the window plays in reverse</text>
+<text x="116" y="762" font-size="22" font-weight="700" fill="#1c1a17">4</text>
+<text x="276" y="762" font-size="22" fill="#1c1a17">filter: mid = off · down LP · up HP</text>
+<text x="116" y="798" font-size="22" font-weight="700" fill="#1c1a17">in heads</text>
+<text x="276" y="798" font-size="22" fill="#1c1a17">faders scrub the heads</text>
+<line x1="730" y1="584" x2="998.9" y2="630.8" stroke="#77726a" stroke-width="2" stroke-dasharray="1 6" stroke-linecap="round"/>
+<circle cx="998.9" cy="630.8" r="5" fill="#e0503a"/>
+<rect x="90" y="860" width="640" height="224" rx="16" fill="#ffffff" stroke="#e2ddd3" stroke-width="2"/>
+<text x="116" y="908" font-size="27" font-weight="700" fill="#1c1a17" letter-spacing="0.5">TRACK BUTTONS</text>
+<text x="116" y="944" font-size="22" font-weight="700" fill="#1c1a17">hold</text>
+<text x="326" y="944" font-size="22" fill="#1c1a17">record — starts on your first sound</text>
+<text x="116" y="980" font-size="22" font-weight="700" fill="#1c1a17">tap</text>
+<text x="326" y="980" font-size="22" fill="#1c1a17">stop the take · mute / unmute</text>
+<text x="116" y="1016" font-size="22" font-weight="700" fill="#1c1a17">double-tap</text>
+<text x="326" y="1016" font-size="22" fill="#1c1a17">delete</text>
+<text x="116" y="1052" font-size="22" font-weight="700" fill="#1c1a17">FN + track</text>
+<text x="326" y="1052" font-size="22" fill="#1c1a17">banks: jump · tap again = next song</text>
+<line x1="730" y1="930" x2="995.5" y2="890.9000000000001" stroke="#77726a" stroke-width="2" stroke-dasharray="1 6" stroke-linecap="round"/>
+<circle cx="995.5" cy="890.9000000000001" r="5" fill="#e0503a"/>
+<rect x="1630" y="160" width="660" height="332" rx="16" fill="#ffffff" stroke="#e2ddd3" stroke-width="2"/>
+<text x="1656" y="208" font-size="27" font-weight="700" fill="#1c1a17" letter-spacing="0.5">PLAY</text>
+<text x="1656" y="244" font-size="22" font-weight="700" fill="#1c1a17">tap</text>
+<text x="1926" y="244" font-size="22" fill="#1c1a17">play / stop</text>
+<text x="1656" y="280" font-size="22" font-weight="700" fill="#1c1a17">hold</text>
+<text x="1926" y="280" font-size="22" fill="#1c1a17">restart from the top</text>
+<text x="1656" y="316" font-size="22" fill="#77726a">with FUNCTION held —</text>
+<text x="1656" y="352" font-size="22" font-weight="700" fill="#1c1a17">release together</text>
+<text x="1926" y="352" font-size="22" fill="#1c1a17">fixed / variable loops</text>
+<text x="1656" y="388" font-size="22" font-weight="700" fill="#1c1a17">tap ×2</text>
+<text x="1926" y="388" font-size="22" fill="#1c1a17">snap to 1.0×</text>
+<text x="1656" y="424" font-size="22" font-weight="700" fill="#1c1a17">tap ×3</text>
+<text x="1926" y="424" font-size="22" fill="#1c1a17">heads mode</text>
+<text x="1656" y="460" font-size="22" font-weight="700" fill="#1c1a17">hold thru 5 s</text>
+<text x="1926" y="460" font-size="22" fill="#1c1a17">dim / full lights</text>
+<line x1="1630" y1="260" x2="1422.1999999999998" y2="493.95" stroke="#77726a" stroke-width="2" stroke-dasharray="1 6" stroke-linecap="round"/>
+<circle cx="1422.1999999999998" cy="493.95" r="5" fill="#e0503a"/>
+<rect x="1630" y="522" width="660" height="224" rx="16" fill="#ffffff" stroke="#e2ddd3" stroke-width="2"/>
+<text x="1656" y="570" font-size="27" font-weight="700" fill="#1c1a17" letter-spacing="0.5">FUNCTION</text>
+<text x="1656" y="606" font-size="22" font-weight="700" fill="#1c1a17">hold</text>
+<text x="1926" y="606" font-size="22" fill="#1c1a17">power on / off</text>
+<text x="1656" y="642" font-size="22" font-weight="700" fill="#1c1a17">tap ×4 in rhythm</text>
+<text x="1926" y="642" font-size="22" fill="#1c1a17">the song gets a tempo grid</text>
+<text x="1656" y="678" font-size="22" font-weight="700" fill="#1c1a17">re-tap over loops</text>
+<text x="1926" y="678" font-size="22" fill="#1c1a17">beatmatch to your taps</text>
+<text x="1656" y="714" font-size="22" font-weight="700" fill="#1c1a17">hold after tapping</text>
+<text x="1926" y="714" font-size="22" fill="#1c1a17">clear the grid</text>
+<line x1="1630" y1="592" x2="1422.1999999999998" y2="867.0999999999999" stroke="#77726a" stroke-width="2" stroke-dasharray="1 6" stroke-linecap="round"/>
+<circle cx="1422.1999999999998" cy="867.0999999999999" r="5" fill="#e0503a"/>
+<rect x="90" y="1125" width="535" height="260" rx="16" fill="#ffffff" stroke="#e2ddd3" stroke-width="2"/>
+<text x="116" y="1173" font-size="27" font-weight="700" fill="#1c1a17" letter-spacing="0.5">HEADS MODE</text>
+<text x="116" y="1209" font-size="22" fill="#1c1a17">FN + triple-tap PLAY = heads on / off</text>
+<text x="116" y="1245" font-size="22" fill="#1c1a17">3 tracks replay the source, a quarter apart</text>
+<text x="116" y="1281" font-size="22" fill="#1c1a17">FN + faders scrub · double-tap = reverse</text>
+<text x="116" y="1317" font-size="22" fill="#1c1a17">hold a loaded track = make it the tape</text>
+<text x="116" y="1353" font-size="22" fill="#1c1a17">hold an EMPTY track = PRINT the canon</text>
+<rect x="649" y="1125" width="535" height="224" rx="16" fill="#ffffff" stroke="#e0503a" stroke-width="3"/>
+<rect x="1078" y="1147" width="80" height="32" rx="16" fill="#e0503a"/>
+<text x="1118.0" y="1170" font-size="20" font-weight="700" fill="#fff" text-anchor="middle">v2.5</text>
+<text x="675" y="1173" font-size="27" font-weight="700" fill="#1c1a17" letter-spacing="0.5">GRIDDED SONGS</text>
+<text x="675" y="1209" font-size="22" fill="#1c1a17">tap the tempo: lights become a metronome</text>
+<text x="675" y="1245" font-size="22" fill="#1c1a17">and MIDI clock follows. takes punch on the</text>
+<text x="675" y="1281" font-size="22" fill="#1c1a17">BEAT — press a hair late and it reaches</text>
+<text x="675" y="1317" font-size="22" fill="#1c1a17">back. the first take teaches it the tempo</text>
+<rect x="1208" y="1125" width="535" height="224" rx="16" fill="#ffffff" stroke="#e2ddd3" stroke-width="2"/>
+<text x="1234" y="1173" font-size="27" font-weight="700" fill="#1c1a17" letter-spacing="0.5">LIGHTS</text>
+<text x="1234" y="1209" font-size="22" fill="#1c1a17">dark = empty · faint = muted content</text>
+<text x="1234" y="1245" font-size="22" fill="#1c1a17">pulse = playing — each light pulses as</text>
+<text x="1234" y="1281" font-size="22" fill="#1c1a17">its own loop wraps (see the polyrhythm)</text>
+<text x="1234" y="1317" font-size="22" fill="#1c1a17">song row: solid = song · blink = bank</text>
+<rect x="1767" y="1125" width="535" height="224" rx="16" fill="#ffffff" stroke="#e2ddd3" stroke-width="2"/>
+<text x="1793" y="1173" font-size="27" font-weight="700" fill="#1c1a17" letter-spacing="0.5">16 SONGS + TRANSFER</text>
+<text x="1793" y="1209" font-size="22" fill="#1c1a17">every song remembers everything —</text>
+<text x="1793" y="1245" font-size="22" fill="#1c1a17">loops, speed, chop, mutes, grid</text>
+<text x="1793" y="1281" font-size="22" fill="#1c1a17">takes to 8:00 · longer with the tape slowed</text>
+<text x="1793" y="1317" font-size="22" fill="#1c1a17">WAVs in + out on the transfer page</text>
+</svg>

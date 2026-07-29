@@ -44,11 +44,15 @@ What 2.0 adds on top of the 1.x looper:
 - **Tapped grid + quantized capture** — tap FUNCTION 4+ times along any
   music and that song gets a tempo grid: the lights become a metronome, the
   bank light blinks on the beat, and the sync jack sends MIDI clock at your
-  tapped tempo (even while stopped). Recording then quantizes itself: the
-  first take starts the moment you arm and places the downbeat, stops snap
-  to whole beats (a loop can never contain silence), and overdubs count in
-  and punch exactly on the next bar line — every loop stays locked with no
-  timing precision required from you.
+  tapped tempo (even while stopped). Recording then quantizes itself. On a
+  grid you tapped this session the first take PUNCHES ON it rather than
+  redefining it, so the timing you tapped in is the timing you keep; takes
+  are exact whole numbers of beats and exact multiples of each other; the
+  count-in is one beat; a punch pressed slightly LATE still starts on the
+  beat, filled in from the input the machine was already holding; and the
+  first take teaches the machine the real tempo from its own audio, which
+  the grid, metronome and MIDI clock then follow. No timing precision
+  required from you.
 - **Loop chop** — a live performance window over every playing track: shrink,
   grow, slide or reset it from the FUNCTION layer — or shape it directly on
   the faders (start / end / shift, any width), cross the edges to play the
@@ -332,18 +336,35 @@ The one-page map ([full size](docs/sp1-control-map.png)):
   light blinks on the beat instead of its usual 2 Hz.
 - The sync jack sends MIDI clock at the tapped tempo, even while stopped —
   tap along to your decks and the SP-1 clocks your gear to them.
-- Hold FUNCTION for ~1 s right after tapping to **clear** the grid (that hold
-  can never power the device off).
-- **Recording on a gridded song is quantized.** The FIRST take starts the
-  moment your arm-hold completes and places the song's downbeat — your
-  loop is the "1". Stops snap to the last whole beat (instantly; the spare
-  sliver stays on flash unplayed, so a loop can never contain silence) —
-  stop within the last ~15% of a beat and it runs those few milliseconds
-  to the line, with the REC light double-blinking. OVERDUBS arm any time
-  and punch in exactly on the next bar line (the armed light fast-blinks
-  the count-in); their stops snap to beat multiples of the same base, so
-  every loop stays locked. A second tap during any count-out trims to a
-  whole beat. Songs without a grid record exactly as before.
+- **Clearing the grid:** tap FUNCTION, then press again and hold ~1 s — the
+  easiest way in is a double-tap where you hold the second press. Any tap
+  followed by a hold works, and the window is 3 s (it was 1.5 s, and nearly
+  impossible to hit). That hold can never power the device off.
+- **Recording on a gridded song is quantized.** If the grid came from taps
+  THIS session, the first take punches on it like an overdub — the phase
+  you tapped in against the music is kept, not overwritten. (A grid that
+  came from a first take, or was reloaded with the song, keeps the classic
+  behaviour: your take IS the "1".) Punches land on the next BEAT, not the
+  next bar, and are scheduled from the instant your finger lands, so
+  pressing just before a line catches that line — and pressing just AFTER
+  one is caught too: the record ring always holds the last ~340 ms of
+  input, so a late punch reaches back to the line you passed and fills the
+  gap from memory (up to a quarter beat, and never more than 120 ms —
+  beyond that it waits for the next line, because a press that late
+  usually meant the next one). Stops round to the NEAREST beat with at
+  most half a beat of run-on and the REC light double-blinking; a second
+  tap during any count-out trims to a whole beat. Loop lengths are rounded
+  ONCE for the whole take and later takes reference the same base, so
+  every loop is an exact whole number of beats and an exact multiple of
+  its siblings. Songs without a grid record exactly as before.
+- **The first take teaches the tempo.** Tapping lands 0.2–1% off, and that
+  error is what walks a loop off the track it was recorded from. The onset
+  estimator now measures the real beat from the audio of your first take
+  and retunes the grid, the metronome and the MIDI clock to it — accepted
+  only when it agrees with your tap to within 5%, so ambiguous material
+  simply keeps what you tapped. A click-track bench measures an eight-beat
+  take at exactly eight beats, to the sample, with 0.02 ms of drift across
+  the loop.
 - **Tap-to-beatmatch:** once a song has loops, a fresh 4+ tap run means
   "match THIS": the tape retunes so your loops play at the tapped tempo
   (vinyl-style — pitch moves too, clamped to the 0.5–1.5x range) and the
@@ -354,7 +375,14 @@ The one-page map ([full size](docs/sp1-control-map.png)):
   heads-mode toggle instead, and never moves the speed.)
 - The grid's tempo is remembered per song across power-off; its downbeat
   re-anchors to your next tap run (or to your first take). Bars are fixed
-  4/4; accepted range is roughly 50–200 BPM.
+  4/4; accepted range is roughly 50–200 BPM. Taps are timed on the PRESS,
+  so how long you hold the button makes no difference, and the tempo comes
+  from the audio clock rather than a millisecond counter.
+- **Known limit:** the downbeat itself is placed by your hand, and hands
+  anticipate a beat they are following by a few tens of milliseconds. It is
+  invisible playing alone — every track punches on the same grid — but it
+  offsets the MIDI clock against the music by that much. Measured, and
+  next on the list.
 
 ### Loop-length mode (FUNCTION + PLAY)
 - Hold **FUNCTION and PLAY together** and release — any time between ~1/3 s

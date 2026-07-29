@@ -5,6 +5,91 @@ Versions 1.0.0-1.2.4 below were the 2.0 development line (developed as a
 fork by marc, never announced) — kept for the honest record. The classic
 4-song firmware lives on the `v1` branch. Base: 1.x at commit c60941c.
 
+## [2.5.0] - 2026-07-30
+
+Timing truth. luuuciano reported that loops recorded over a track he was
+mixing never quite sat on it and drifted apart from each other. A
+click-track bench — 120.000 BPM over USB, recorded, exported and measured
+per sample — cleared the engine (clicks landed 24000 samples apart with
+zero in-loop drift) and found five separate causes. All are fixed here.
+An eight-beat take now comes back as exactly 192000 samples: eight beats
+to the sample, with 0.02 ms of drift across the loop. The same series
+measured 7.94, 7.77, 7.02 and 6.94 beats before.
+
+### Fixed
+- **Loop lengths rounded once, not per beat.** Lengths live in whole flash
+  blocks and the code rounded EACH BEAT before multiplying: at 120 BPM a
+  beat is 93.75 blocks, forced to 94, so even a perfect tap recorded a loop
+  that played at 119.68 — 1.33 ms per beat, compounding every lap, about
+  160 ms of slide per minute. The metronome runs off the unquantized grid
+  clock, which is exactly why the lights looked locked while the audio
+  slid. The whole take is rounded once now, and later takes reference the
+  base, so lengths track the true tempo AND stay exact multiples of each
+  other.
+- **A freshly tapped grid is the truth.** The first take used to re-anchor
+  the song's downbeat to wherever recording happened to start, discarding
+  the phase you had just tapped in against the music (bench: 21–82 ms off).
+  When a grid was tapped this session, the first take now punches ON it
+  like an overdub. Songs whose grid came from a first take keep the classic
+  feel: your take IS the "1".
+- **Stops round to the nearest beat.** First takes trimmed back past a 16%
+  window, so releasing a hair early lost a whole beat — an intended 8-beat
+  loop became 7 and phased against its 8-beat siblings forever. The window
+  is half a beat now, matching overdubs.
+- **Punch on the beat, not the bar, and schedule from the press.** The
+  count-in waited up to a bar (~2 s). Worse, a 100 ms hold filter ran
+  before the punch was scheduled, so pressing exactly ON the beat was the
+  worst possible moment: the line had passed, and the take waited a full
+  beat. Punches now key off the instant your finger lands.
+- **Tap tempo is timed on the PRESS, not the release.** A tap cannot be
+  classified until the button comes up, but the moment it names is the
+  press — so the grid was being planted late by however long your finger
+  rested on the button, tens of milliseconds and different every tap. The
+  beat spacing also comes from the sample clock now instead of being
+  rounded through a millisecond counter and back from BPM.
+- **The estimator no longer runs forever.** `tempo_finish()` is the only
+  thing that clears the onset estimator's active flag and the gridded stop
+  path never called it, so since 1.0 it kept sampling through every later
+  overdub for an answer nobody reads.
+
+### Added
+- **The first take teaches the tempo.** The onset estimator has run through
+  every first take since 1.0; on tapped-grid songs its answer was thrown
+  away. It now REFINES the tapped beat from the audio just recorded — a
+  coarse pass over ~4 beats, then a fine pass over up to 24 counted with
+  the coarse result as the ruler, plus a subdivision sanity check.
+  Accepted only within 5% of the tap; the grid, metronome and MIDI clock
+  retune with it. Human tapping is 0.2–1% off and that error is what walks
+  a loop off its source — the recording knows better. Ambiguous or
+  non-percussive material keeps the tapped value.
+- **Pre-roll: a punch pressed late still starts on the beat.** The record
+  ring sat empty whenever nothing was capturing; it now holds the input at
+  all times, so the machine always remembers what it just heard. An armed
+  punch takes the NEAREST grid line — press before it and it waits as
+  before, press just after and the take begins on the line you passed, its
+  head adopted straight out of the ring with the length, playhead and
+  overdub phase anchor all backdated to match. Reach is a quarter beat,
+  capped at 120 ms: half a beat was tried first and was too generous, since
+  a press 250 ms after a line usually MEANT the next line, and reaching
+  back made the take a beat too long. The ring fills on empty songs too, so
+  the very first take of a song can reach back. Costs zero RAM — the buffer
+  already existed.
+
+### Changed
+- The any-time grid clear is far easier to hit: tap FUNCTION, then press
+  again and hold ~1 s (a double-tap where you hold the second press). The
+  window went from 1.5 s to 3 s — the gesture was real but nearly
+  impossible to land.
+
+### Known limits
+- The downbeat itself is still placed by your hand, and hands anticipate a
+  beat they are following by a few tens of milliseconds. Invisible playing
+  alone, since every track punches on the same grid; it does offset the
+  MIDI clock against the music by that much. Measured and understood.
+- The MIDI clock's tick interval is a truncating divide, so it runs
+  slightly fast and accumulates against external gear over a long session.
+  Both of these are next.
+
 ## [2.4.0] - 2026-07-27
 
 The resample release — heads mode learns to print.
