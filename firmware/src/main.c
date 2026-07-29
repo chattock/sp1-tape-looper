@@ -1699,7 +1699,13 @@ static void looper_audio_block(int16_t *s)
 					g_loop_blocks = base;
 					if (glen && gbb) {
 						/* the TAPPED grid defines the beat — exact
-						 * stored-domain beat, not the estimator */
+						 * stored-domain beat, not the estimator.
+						 * The estimator is DONE here: this branch
+						 * never called tempo_finish(), so it was
+						 * left running for the rest of the session
+						 * and kept sampling through every later
+						 * overdub for an answer nobody reads. */
+						g_tempo.active = 0;
 						g_beat_samples = g_gridrec_beat_samps;
 						g_midi_div = g_gridrec_beat_samps / 24u;
 						if (gbeats) {   /* M20 F7: the base to lock to */
