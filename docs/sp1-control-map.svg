@@ -126,13 +126,12 @@
 <text x="1926" y="714" font-size="22" fill="#1c1a17">clear the grid</text>
 <line x1="1630" y1="592" x2="1422.1999999999998" y2="867.0999999999999" stroke="#77726a" stroke-width="2" stroke-dasharray="1 6" stroke-linecap="round"/>
 <circle cx="1422.1999999999998" cy="867.0999999999999" r="5" fill="#e0503a"/>
-<rect x="90" y="1125" width="535" height="260" rx="16" fill="#ffffff" stroke="#e2ddd3" stroke-width="2"/>
+<rect x="90" y="1125" width="535" height="224" rx="16" fill="#ffffff" stroke="#e2ddd3" stroke-width="2"/>
 <text x="116" y="1173" font-size="27" font-weight="700" fill="#1c1a17" letter-spacing="0.5">HEADS MODE</text>
 <text x="116" y="1209" font-size="22" fill="#1c1a17">FN + triple-tap PLAY = heads on / off</text>
 <text x="116" y="1245" font-size="22" fill="#1c1a17">3 tracks replay the source, a quarter apart</text>
 <text x="116" y="1281" font-size="22" fill="#1c1a17">FN + faders scrub · double-tap = reverse</text>
-<text x="116" y="1317" font-size="22" fill="#1c1a17">hold a loaded track = make it the tape</text>
-<text x="116" y="1353" font-size="22" fill="#1c1a17">hold an EMPTY track = PRINT the canon</text>
+<text x="116" y="1317" font-size="22" fill="#1c1a17">hold a track: loaded = tape, empty = PRINT</text>
 <rect x="649" y="1125" width="535" height="224" rx="16" fill="#ffffff" stroke="#e0503a" stroke-width="3"/>
 <rect x="1078" y="1147" width="80" height="32" rx="16" fill="#e0503a"/>
 <text x="1118.0" y="1170" font-size="20" font-weight="700" fill="#fff" text-anchor="middle">v2.5</text>
