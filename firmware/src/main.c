@@ -910,7 +910,21 @@ static volatile uint32_t g_dbg_lens;       /* len_samps the take got */
 static volatile uint32_t g_dbg_lenb;       /* len_blocks the take got */
 static volatile int32_t  g_dbg_punch_ph;   /* punch phase vs grid, frames (should be ~0) */
 static volatile uint32_t g_dbg_punch_sp;   /* start_samps at punch */
-static volatile uint32_t g_dbg_speed;      /* speed_q16 at punch */    /* next 24-PPQN tick, sample-clock domain */
+static volatile uint32_t g_dbg_speed;      /* speed_q16 at punch */
+/* M22c CONVERGENCE: the tempo TRUTH accrues with observation time. One take
+ * of 8 beats bounds F8 at +-10-20 samples/beat (detector jitter over a short
+ * span). But every gridded take leaves a fixed landmark — its first onset, at
+ * an absolute stored position — and the music runs at ONE tempo through all
+ * of them. Two landmarks a minute apart measure the beat to <1 sample. At
+ * each gridded stop the drift between the newest landmark and the session's
+ * first is folded into a per-beat correction, the grid retunes, and (the door
+ * Phase B opened) every gridded track's len_samps rescales with it — the
+ * loops CONVERGE onto the source instead of freezing the first estimate. */
+static uint32_t g_cnv_ref;                 /* first landmark, absolute stored samples */
+static uint8_t  g_cnv_set;
+static uint32_t g_cnv_speed;               /* speed the landmark was laid at */
+static volatile int32_t  g_dbg_cnv_beats;  /* diag: baseline length, beats */
+static volatile int32_t  g_dbg_cnv_corr;   /* diag: per-beat correction applied */    /* next 24-PPQN tick, sample-clock domain */
 static volatile uint8_t  g_grid_active;       /* current song has a live grid */
 static volatile uint8_t  g_grid_save_req;     /* control -> streamer: write block 2 */
 /* M8b quantized capture: with a grid, arming PUNCHES IN on the next bar line
@@ -1869,6 +1883,84 @@ static void looper_audio_block(int16_t *s)
 				g_dbg_lens = trk[i].len_samps;         /* r2 diag */
 				g_dbg_lenb = len;
 				g_dbg_bf   = g_grid_beat_frames;
+				/* M22c CONVERGENCE (gridded takes with an onset only) */
+				if (glen && gbeats && g_gridrec_beat_samps &&
+				    g_tempo.first_onset) {
+					uint32_t abs_k = trk[i].start_samps +
+							 g_tempo.first_onset;
+					if (!g_cnv_set) {
+						g_cnv_ref = abs_k;
+						g_cnv_speed = g_cur_speed_q16;
+						g_cnv_set = 1;
+						g_dbg_cnv_beats = 0; g_dbg_cnv_corr = 0;
+					} else if (g_cur_speed_q16 == g_cnv_speed &&
+						   abs_k > g_cnv_ref) {
+						uint32_t bs2 = g_gridrec_beat_samps;
+						uint32_t el = abs_k - g_cnv_ref;
+						uint32_t nb = (el + bs2 / 2u) / bs2;
+						g_dbg_cnv_beats = (int32_t)nb;
+						g_dbg_cnv_corr = 0;
+						if (nb >= 16u) {
+							int64_t dev = (int64_t)el -
+								(int64_t)nb * bs2;
+							int32_t corr = (int32_t)
+								((dev >= 0 ? dev + (int64_t)nb / 2
+								           : dev - (int64_t)nb / 2)
+								 / (int64_t)nb);
+							if (corr > 16) corr = 16;
+							if (corr < -16) corr = -16;
+							if (corr) {
+								uint32_t nbs = (uint32_t)
+									((int32_t)bs2 + corr);
+								grid_retune(bs2, nbs);
+								g_gridrec_beat_samps = nbs;
+								g_beat_samples = nbs;
+								g_midi_div = nbs / 24u;
+								g_det_bpm = (int)(((uint64_t)LOOP_RATE *
+									60u + nbs / 2u) / nbs);
+								/* rescale every gridded loop —
+								 * the lengths are just numbers
+								 * now (Phase B), and they are
+								 * all N x the beat */
+								for (int k2 = 0; k2 < NTRK; k2++) {
+									uint32_t Lk = trk[k2].len_samps;
+									if (!Lk) continue;
+									uint32_t Nk = (Lk + bs2 / 2u) / bs2;
+									if (!Nk) continue;
+									uint32_t Ln = Nk * nbs;
+									uint32_t cap = trk[k2].content_blocks
+										     * SAMP_PER_BLK;
+									trk[k2].len_samps =
+										(cap && Ln > cap) ? cap : Ln;
+									/* C-r2: the wrap MOVED — the ring
+									 * still holds audio fetched under
+									 * the old length, and playing it
+									 * across the new seam is a hard
+									 * splice (marc heard it). Same
+									 * cure as every chop edit: drop
+									 * the read-ahead, refill under
+									 * the new geometry, boundary-fade
+									 * covers the joint. */
+									if (trk[k2].state == TS_PLAY)
+										trk[k2].p_w =
+											(g_consume_pos / SAMP_PER_BLK)
+											* SAMP_PER_BLK;
+								}
+								g_dip_req = 1;   /* C-r2: declick, like
+								                  * every chop edit */
+								{	/* master follows the base */
+									uint32_t Nb = (g_loop_len + bs2 / 2u) / bs2;
+									if (Nb) g_loop_len = Nb * nbs;
+									if (g_slot < NUM_SLOTS) {
+										g_meta.slot[g_slot].loop_len = g_loop_len;
+										g_meta_save_req = 1;
+									}
+								}
+								g_dbg_cnv_corr = corr;
+							}
+						}
+					}
+				}
 				trk[i].rec_target     = tgt;
 				/* end the live phrase. When padding (immediate stops), the
 				 * pad used to be hard zeros — a click baked into the seam;
@@ -2232,6 +2324,19 @@ static void looper_audio_block(int16_t *s)
 							 * Linear flush, no wrap. */
 							rt->flush_blk = 0; rt->flush_mod = MAX_LOOP_BLOCKS;
 							rt->rec_target = 0;
+							/* C-r3: arm the onset estimator for THIS
+							 * take. It only ever armed on first takes,
+							 * so an overdub's stop read a STALE
+							 * first_onset from take 1 — the landmark
+							 * collapsed into pure punch spacing, the
+							 * convergence measured the grid against
+							 * itself, railed at the cap and DIVERGED
+							 * (bench: -60 then -143 ms; diag showed
+							 * cnv=128/16 then 203/14 against a truth
+							 * of -4). Each take now lands its own
+							 * landmark; the leak fix still retires
+							 * the estimator at every gridded stop. */
+							tempo_reset();
 							{	/* M20: an overdub anchors where
 								 * recording BEGAN — the reached-back
 								 * line, not the moment of the punch */
@@ -3480,11 +3585,39 @@ static void streamer_thread(void *a, void *b, void *c)
 					}
 					g_meta_save_req = 1;             /* persist the new recording */
 #if SP1_CODEC == SP1_CODEC_PCM
-					/* TRUNCATED-STOP SEAM (fixed mode, stopped late): the
-					 * played region now ends mid-audio at len_blocks — fade
-					 * its last ~2.7 ms down on flash so the loop seam
-					 * doesn't click. The overhang past len is never read. */
-					if (t->content_blocks > t->len_blocks && t->len_blocks) {
+					/* TRUNCATED-STOP SEAM: the played region ends mid-audio
+					 * at the WRAP — fade its last ~2.7 ms down on flash so
+					 * the loop seam doesn't click. M22-B FIX (marc's crack,
+					 * 3-for-3 after the first take): the wrap is now the
+					 * SAMPLE length, up to 128 samples past the block
+					 * boundary this fade used to target — the fade landed
+					 * just BEFORE the real seam and the splice itself played
+					 * unfaded, a loud crack on every lap. Fade the 128
+					 * samples ending exactly at len_samps (spans up to two
+					 * blocks); block-exact tracks keep the old math via the
+					 * same expressions (len_samps = blocks*256). */
+					if (t->len_samps && t->len_samps > 256u &&
+					    (uint64_t)t->content_blocks * SAMP_PER_BLK
+					        > t->len_samps) {
+						uint32_t _E  = t->len_samps;
+						uint32_t _s0 = _E - 128u;
+						uint32_t _b0 = _s0 / SAMP_PER_BLK;
+						uint32_t _b1 = (_E - 1u) / SAMP_PER_BLK;
+						uint32_t _nb = _b1 - _b0 + 1u;   /* 1 or 2 */
+						uint32_t _bl = trk_blk(slot, (uint32_t)i) + _b0;
+						if (emmc_read_blocks(_bl, batchbuf, _nb)) {
+							int16_t *_sm = (int16_t *)batchbuf;
+							uint32_t _base = _b0 * SAMP_PER_BLK;
+							for (uint32_t _k = 0; _k < 128u; _k++) {
+								uint32_t _ix = (_s0 - _base) + _k;
+								_sm[_ix] = (int16_t)(((int32_t)_sm[_ix] *
+										      (int32_t)(127u - _k)) >> 7);
+							}
+							if (!emmc_write_blocks(_bl, batchbuf, _nb))
+								(void)emmc_write_blocks(_bl, batchbuf, _nb);
+						}
+					} else if (t->content_blocks > t->len_blocks &&
+						   t->len_blocks) {
 						uint32_t _bl = trk_blk(slot, (uint32_t)i) +
 							       t->len_blocks - 1u;
 						if (emmc_read_blocks(_bl, batchbuf, 1)) {
@@ -4652,7 +4785,7 @@ static void controls_diag(void)
 	for (int _i = 0; _i < NTRK; _i++)
 		mg[_i] = (int)((int32_t)(trk[_i].p_w - cpos) / (int)(LOOP_RATE / 1000u));
 	printk("LOOPER %dHz song=%d %s hp=%d hpin=%d usb=%d chg=%d batt=%d bpm=%d detbpm=%d vol=%d "
-	       "trk[%s %s %s %s] rec=%d mut=%u%u%u%u ovr=%u rerr=%u werr=%u marg=[%d %d %d %d]ms stv=[%u %u %u %u] len=[%u %u %u %u] st=[%u %u %u %u] spim=%d cache=%d ckb=%u wbi=%u chop=%u/%u m22[tap=%u rf=%u bf=%u Ls=%u Lb=%u pph=%d sp=%u v=%u]\n",
+	       "trk[%s %s %s %s] rec=%d mut=%u%u%u%u ovr=%u rerr=%u werr=%u marg=[%d %d %d %d]ms stv=[%u %u %u %u] len=[%u %u %u %u] st=[%u %u %u %u] spim=%d cache=%d ckb=%u wbi=%u chop=%u/%u m22[tap=%u rf=%u bf=%u Ls=%u Lb=%u pph=%d sp=%u v=%u cnv=%d/%d]\n",
 	       (int)LOOP_RATE, (int)g_slot, g_playing ? "PLAY" : "STOP", g_hp_on, g_hp_in,
 	       usb_present() ? 1 : 0, charging() ? 1 : 0, batt,
 	       g_play_bpm, g_det_bpm, g_master_vol_q8,
@@ -4671,7 +4804,8 @@ static void controls_diag(void)
 	       (unsigned)g_chop_div, (unsigned)g_chop_off,
 	       (unsigned)g_dbg_tap_bs, (unsigned)g_dbg_rf, (unsigned)g_dbg_bf,
 	       (unsigned)g_dbg_lens, (unsigned)g_dbg_lenb,
-	       (int)g_dbg_punch_ph, (unsigned)g_dbg_punch_sp, (unsigned)g_dbg_speed);
+	       (int)g_dbg_punch_ph, (unsigned)g_dbg_punch_sp, (unsigned)g_dbg_speed,
+	       (int)g_dbg_cnv_beats, (int)g_dbg_cnv_corr);
 	{
 		/* CPU= per-thread share of the last window, in percent: audio,
 		 * streamer, midi, main, everything-else(usb/idle/isr). Answers
@@ -5429,6 +5563,7 @@ static void jump_to_slot(uint32_t ns)
 	if (g_bnc_active || g_bnc_req >= 0)
 		g_bnc_abort = 1;   /* M19b: a song switch abandons the print */
 	g_grid_fresh = 0;  /* M20 F1: a persisted grid's phase is provisional */
+	g_cnv_set = 0;     /* M22c: landmarks do not survive a song switch */
 	g_grid_base_beats = 0; g_grid_base_blocks = 0;   /* M20 F7 */
 	g_win_free = 0;     /* M16: the free window is session performance state */
 	g_win_rev = 0;
@@ -6300,6 +6435,7 @@ int main(void)
 					g_grid_bpm_q8[g_slot] = 0;
 					g_grid_active = 0;
 					g_grid_fresh = 0;
+					g_cnv_set = 0;       /* M22c */
 					g_grid_save_req = 1;
 					tap_n = 0;
 					combo_seen = 1;      /* spend the press */
