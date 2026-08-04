@@ -900,7 +900,17 @@ static volatile uint32_t g_grid_beat_frames;  /* I2S frames per grid beat (curre
 static volatile uint64_t g_grid_next_tick;
 static uint64_t          g_grid_tick_base;      /* M22-A: exact tick schedule base */
 static uint64_t          g_grid_tick_base_sync; /* M22-A: last value WE wrote to next_tick */
-static uint32_t          g_grid_tick_idx;       /* M22-A: ticks since the base */    /* next 24-PPQN tick, sample-clock domain */
+static uint32_t          g_grid_tick_idx;       /* M22-A: ticks since the base */
+/* M22b-r2 INSTRUMENTATION (diagnostic only): every quantity the -62 ms bench
+ * anomaly could implicate, captured at the moments they are decided. */
+static volatile uint32_t g_dbg_tap_bs;     /* stored beat at tap commit (frames=samples at 1.0x) */
+static volatile uint32_t g_dbg_rf;         /* F8's refined beat (0 = declined) */
+static volatile uint32_t g_dbg_bf;         /* g_grid_beat_frames after the stop */
+static volatile uint32_t g_dbg_lens;       /* len_samps the take got */
+static volatile uint32_t g_dbg_lenb;       /* len_blocks the take got */
+static volatile int32_t  g_dbg_punch_ph;   /* punch phase vs grid, frames (should be ~0) */
+static volatile uint32_t g_dbg_punch_sp;   /* start_samps at punch */
+static volatile uint32_t g_dbg_speed;      /* speed_q16 at punch */    /* next 24-PPQN tick, sample-clock domain */
 static volatile uint8_t  g_grid_active;       /* current song has a live grid */
 static volatile uint8_t  g_grid_save_req;     /* control -> streamer: write block 2 */
 /* M8b quantized capture: with a grid, arming PUNCHES IN on the next bar line
@@ -1011,6 +1021,10 @@ struct looptrk {
 	                                      * fixed-mode take finalises INSTANTLY instead of real-time-
 	                                      * padding a bar of zeros. 0 == whole track (old/variable/uploaded). */
 	uint32_t start_blk;                  /* transport block of this take's segment 0 (playback anchor) */
+	uint32_t len_samps;                  /* M22-B: loop length in SAMPLES (the wrap the
+	                                      * streamer honours on a plain, unchopped loop).
+	                                      * 0 or a block multiple = classic behaviour. */
+	uint32_t start_samps;                /* M22-B: playback anchor in SAMPLES */
 	/* AUTO-START-ON-SOUND: a take ARMS on the button hold and the recorder only
 	 * begins capturing at the first input past SOUND_THRESHOLD (armed waits
 	 * as a fallback), so dead air before the first note never lands in the loop. */
@@ -1543,6 +1557,7 @@ static void looper_audio_block(int16_t *s)
 		trk[i].state = TS_EMPTY;
 		trk[i].rec_silence = 0; trk[i].rec_target = 0; trk[i].rec_count = 0; trk[i].muted = 0;
 		trk[i].len_blocks = 0; trk[i].start_blk = 0; trk[i].content_blocks = 0;  /* drop all its segments */
+		trk[i].len_samps = 0; trk[i].start_samps = 0;
 		if (g_slot < NUM_SLOTS) {
 			g_meta.slot[g_slot].present[i] = 0;
 			g_meta.slot[g_slot].trk_len[i] = 0;
@@ -1604,7 +1619,7 @@ static void looper_audio_block(int16_t *s)
 					 * and the NEXT take hijacks the song grid. */
 					if (g_slot < NUM_SLOTS && g_meta.slot[g_slot].loop_len) {
 						g_loop_len = g_meta.slot[g_slot].loop_len;
-						g_loop_blocks = g_loop_len / SAMP_PER_BLK;
+						g_loop_blocks = (g_loop_len + SAMP_PER_BLK / 2u) / SAMP_PER_BLK;
 					}
 					int anyp = 0;
 					for (int k = 0; k < NTRK; k++)
@@ -1649,6 +1664,7 @@ static void looper_audio_block(int16_t *s)
 						 * retune the grid to match. */
 						uint32_t rf =
 							tempo_refine(g_gridrec_beat_samps);
+						g_dbg_rf = rf;             /* r2 diag */
 						if (rf) {
 							grid_retune(g_gridrec_beat_samps, rf);
 							g_det_bpm = (int)(((uint64_t)LOOP_RATE *
@@ -1706,7 +1722,20 @@ static void looper_audio_block(int16_t *s)
 				}
 				if (g_loop_len == 0u) {
 					uint32_t base = glen ? glen : content;
-					g_loop_len = base * SAMP_PER_BLK;
+					/* M22-B: a gridded take's loop is EXACTLY its beats
+					 * times the true beat — no longer forced onto a
+					 * flash-block boundary. 8 beats at 128 BPM is
+					 * 180000 samples now, not 179968: the loop and the
+					 * source can no longer diverge, which is the whole
+					 * mechanism behind "layers drift apart" (bench:
+					 * -32 samples/lap = 10.7 ms/min at 128, and worse
+					 * elsewhere; 120 BPM was one of only 12 tempos in
+					 * 60-200 that could not show it). Blocks stay what
+					 * the flash reads; samples are what the loop IS. */
+					if (glen && gbeats && g_gridrec_beat_samps)
+						g_loop_len = gbeats * g_gridrec_beat_samps;
+					else
+						g_loop_len = base * SAMP_PER_BLK;
 					g_loop_blocks = base;
 					if (glen && gbb) {
 						/* the TAPPED grid defines the beat — exact
@@ -1732,9 +1761,12 @@ static void looper_audio_block(int16_t *s)
 						 * at the quantized tempo vs an external
 						 * source — that is M22 Phase B's job.) */
 						if (gbeats) {
+							/* M22-B: with sample-exact lengths the
+							 * achievable beat IS the true beat, so
+							 * this Phase-A retune self-disarms; it
+							 * still guards the fallback paths. */
 							uint32_t ach = (uint32_t)
-								(((uint64_t)glen * SAMP_PER_BLK +
-								  gbeats / 2u) / gbeats);
+								((g_loop_len + gbeats / 2u) / gbeats);
 							if (ach && ach != g_gridrec_beat_samps) {
 								grid_retune(g_gridrec_beat_samps, ach);
 								g_det_bpm = (int)(((uint64_t)LOOP_RATE *
@@ -1827,6 +1859,16 @@ static void looper_audio_block(int16_t *s)
 				}
 				trk[i].content_blocks = content;     /* audio ends here */
 				trk[i].len_blocks     = len;         /* loop length */
+				/* M22-B: the sample-exact wrap. Gridded takes are whole
+				 * beats of the TRUE beat; everything else keeps the
+				 * block length exactly as before (their loop-vs-grid
+				 * question does not exist). */
+				trk[i].len_samps = (glen && gbeats && g_gridrec_beat_samps)
+						 ? gbeats * g_gridrec_beat_samps
+						 : len * SAMP_PER_BLK;
+				g_dbg_lens = trk[i].len_samps;         /* r2 diag */
+				g_dbg_lenb = len;
+				g_dbg_bf   = g_grid_beat_frames;
 				trk[i].rec_target     = tgt;
 				/* end the live phrase. When padding (immediate stops), the
 				 * pad used to be hard zeros — a click baked into the seam;
@@ -1971,7 +2013,7 @@ static void looper_audio_block(int16_t *s)
 		g_rec_track = -1;
 		/* this song's remembered loop length (0 = empty, ready for a fresh take) */
 		g_loop_len    = (g_slot < NUM_SLOTS) ? g_meta.slot[g_slot].loop_len : 0;
-		g_loop_blocks = g_loop_len / SAMP_PER_BLK;
+		g_loop_blocks = (g_loop_len + SAMP_PER_BLK / 2u) / SAMP_PER_BLK;
 		int any = 0;
 		for (int i = 0; i < NTRK; i++) {
 			uint8_t pres = (g_slot < NUM_SLOTS) ? g_meta.slot[g_slot].present[i] : 0;
@@ -1986,10 +2028,31 @@ static void looper_audio_block(int16_t *s)
 			if (pres && g_slot < NUM_SLOTS) {
 				uint32_t L = g_meta.slot[g_slot].trk_len[i];
 				trk[i].len_blocks = L ? L : g_loop_blocks;
+				{	/* M22-B: rebuild the sample length from the stored
+					 * master (loop_len is SAMPLES and now carries the
+					 * true length). A track is a whole multiple of the
+					 * base, so multiple x master = its exact samples.
+					 * Anchors reload block-rounded (<=2.7 ms once per
+					 * load) — the known Phase-B limit; live sessions
+					 * are sample-exact. */
+					uint32_t Lb = trk[i].len_blocks;
+					uint32_t ms = g_loop_len;
+					if (ms && Lb && (ms % SAMP_PER_BLK) != 0u) {
+						uint32_t mult = (uint32_t)
+							(((uint64_t)Lb * SAMP_PER_BLK +
+							  ms / 2u) / ms);
+						if (!mult) mult = 1u;
+						trk[i].len_samps = mult * ms;
+					} else {
+						trk[i].len_samps = Lb * SAMP_PER_BLK;
+					}
+					trk[i].start_samps = trk[i].start_blk * SAMP_PER_BLK;
+				}
 				trk[i].start_blk  = g_meta.slot[g_slot].trk_start[i];
 				trk[i].content_blocks = g_meta.trk_content[g_slot][i]; /* 0 = whole track */
 			} else {
 				trk[i].len_blocks = 0; trk[i].start_blk = 0;
+				trk[i].len_samps = 0; trk[i].start_samps = 0;
 				trk[i].content_blocks = 0;
 			}
 			if (pres) any = 1;
@@ -2091,10 +2154,16 @@ static void looper_audio_block(int16_t *s)
 					int trigger;
 					uint32_t pre_backfill = 0u;
 					if (g_grid_active && g_grid_beat_frames && g_grid_punch_at) {
-						/* M8b PUNCH-IN: start on the scheduled bar
-						 * line, not on sound (block-granular; the
-						 * stop is sample-exact relative to it). */
-						trigger = (g_sample_clock >= g_grid_punch_at);
+						/* M8b PUNCH-IN: start on the scheduled line.
+						 * M22-B: SAMPLE-exact — g_sample_clock is the
+						 * block START (it advances once per 256-frame
+						 * block), so comparing it raw fired every
+						 * punch 0-5.33 ms late, quantized to block
+						 * edges. The frame index makes it exact; the
+						 * bench showed the quantization as per-take
+						 * scatter on top of the drift. */
+						uint64_t now_f = g_sample_clock + f;
+						trigger = (now_f >= g_grid_punch_at);
 						/* M20 PRE-ROLL RESCUE: the punch is waiting
 						 * for the NEXT line — but if the PREVIOUS one
 						 * is less than half a beat back and still
@@ -2104,12 +2173,12 @@ static void looper_audio_block(int16_t *s)
 						 * press just after the beat is as good as a
 						 * press just before it. */
 						if (!trigger && g_pre_valid &&
-						    g_sample_clock > g_grid_anchor) {
+						    now_f > g_grid_anchor) {
 							uint64_t unit = g_grid_beat_frames;
-							uint64_t off = g_sample_clock - g_grid_anchor;
+							uint64_t off = now_f - g_grid_anchor;
 							uint64_t prev = g_grid_anchor +
 									(off / unit) * unit;
-							uint64_t back = g_sample_clock - prev;
+							uint64_t back = now_f - prev;
 							uint32_t need = (uint32_t)
 								((back * g_cur_speed_q16) >> 16);
 							/* M20b-r2 REACH LIMIT: half a beat back
@@ -2148,6 +2217,8 @@ static void looper_audio_block(int16_t *s)
 							rt->flush_blk = 0; rt->flush_mod = MAX_LOOP_BLOCKS;
 							rt->rec_target = 0;
 							rt->start_blk = 0;        /* the base take anchors the grid at 0 */
+							rt->start_samps = 0;
+							rt->len_samps = 0;   /* set at the stop */
 							rt->len_blocks = 0;       /* set when the held length is known */
 						} else {
 							/* INDEPENDENT LOOPS: an overdub is an OPEN take
@@ -2173,6 +2244,8 @@ static void looper_audio_block(int16_t *s)
 								 * anchors are Phase B. */
 								rt->start_blk = (sp + SAMP_PER_BLK / 2u)
 								              / SAMP_PER_BLK;
+								rt->start_samps = sp;   /* M22-B: exact */
+								rt->len_samps = 0;
 							}
 						}
 						if (pre_backfill) {
@@ -2186,6 +2259,23 @@ static void looper_audio_block(int16_t *s)
 							rt->r_w = 0; rt->r_r = 0; rt->rec_count = 0;
 						}
 						g_pre_valid = 0;   /* the ring belongs to the take now */
+						{	/* r2 diag: where did this punch land on
+							 * the grid? (frames past the nearest
+							 * line; ~0 = exact) */
+							uint64_t nowp = g_sample_clock + f;
+							if (g_grid_beat_frames &&
+							    nowp > g_grid_anchor) {
+								uint64_t ph = (nowp - g_grid_anchor)
+									% g_grid_beat_frames;
+								int32_t sp2 = (ph > g_grid_beat_frames / 2u)
+									? (int32_t)ph - (int32_t)g_grid_beat_frames
+									: (int32_t)ph;
+								g_dbg_punch_ph = pre_backfill
+									? 0 - (int32_t)pre_backfill : sp2;
+							}
+							g_dbg_punch_sp = rt->start_samps;
+							g_dbg_speed = g_cur_speed_q16;
+						}
 						rt->rec_silence = 0;
 						if (g_grid_active && g_grid_beat_frames && g_grid_punch_at) {
 							/* M8b: beat length in STORED samples at
@@ -2247,7 +2337,7 @@ static void looper_audio_block(int16_t *s)
 						if (rt->rec_count >= MAX_LOOP_SAMPLES) {
 							if (g_loop_len == 0u) {
 								g_loop_len = MAX_LOOP_SAMPLES;
-								g_loop_blocks = g_loop_len / SAMP_PER_BLK;
+								g_loop_blocks = (g_loop_len + SAMP_PER_BLK / 2u) / SAMP_PER_BLK;
 								tempo_finish();
 								if (g_slot < NUM_SLOTS) {
 									g_meta.slot[g_slot].loop_len = g_loop_len;
@@ -2256,6 +2346,7 @@ static void looper_audio_block(int16_t *s)
 							}
 							rt->rec_target = MAX_LOOP_SAMPLES;
 							rt->len_blocks = MAX_LOOP_BLOCKS;
+							rt->len_samps = MAX_LOOP_SAMPLES;
 							rt->content_blocks = MAX_LOOP_BLOCKS;  /* all content */
 							rt->state = TS_DONE; g_rec_track = -1;
 							g_done_pending = 1;   /* M20: ring busy */
@@ -2896,6 +2987,22 @@ static void codec_unpack(int16_t *ring, uint32_t ring_mask, uint32_t start,
 	if (ntot > run1)
 		memcpy(&ring[0], in + run1, (ntot - run1) * 2u);
 }
+/* M22-B: decode an arbitrary SAMPLE run out of a whole-block read. The eMMC
+ * can only read 512-byte blocks (CMD16), but the play ring is sample-granular
+ * — so a sample-exact loop seam reads the whole final block and adopts only
+ * the samples that belong to the lap. PCM only: it is a memcpy with offsets.
+ * (The compressed codecs keep block-exact loops; see the plain-path gate.) */
+static void codec_unpack_part(int16_t *ring, uint32_t ring_mask, uint32_t start,
+                              const uint8_t *flash, uint32_t skip, uint32_t nsamp)
+{
+	const int16_t *in = (const int16_t *)flash + skip;
+	uint32_t ring_samps = ring_mask + 1u;
+	uint32_t run1 = ring_samps - start;
+	if (run1 > nsamp) run1 = nsamp;
+	memcpy(&ring[start], in, run1 * 2u);
+	if (nsamp > run1)
+		memcpy(&ring[0], in + run1, (nsamp - run1) * 2u);
+}
 
 #elif SP1_CODEC == SP1_CODEC_ULAW
 /* ---- G.711 u-law, 8-bit, 2:1 --------------------------------------------- */
@@ -3458,7 +3565,52 @@ static void streamer_thread(void *a, void *b, void *c)
 						_want = 0;   /* M16: reversed window — skip the
 						              * forward prime; the starve fade-in
 						              * covers the first fill (heads rule) */
+#if SP1_CODEC == SP1_CODEC_PCM
+					/* M22-B PLAIN PATH: no chop, no free window, not a
+					 * head — the loop wraps at its SAMPLE length. The
+					 * block machinery below still chooses what to read;
+					 * this path only decides how much of the final
+					 * block belongs to the lap. */
+					bool _plain = (_cdiv == 1u && !g_win_free &&
+						       !head_active(i) && t->len_samps &&
+						       _win == _wper && _wper == _gb);
+#else
+					bool _plain = false;
+#endif
 					for (uint32_t _got = 0; _got < _want; ) {
+#if SP1_CODEC == SP1_CODEC_PCM
+						if (_plain) {
+							uint32_t _Ls  = t->len_samps;
+							uint32_t _lp  = ((_pw % _Ls) + _Ls -
+							              (t->start_samps % _Ls)) % _Ls;
+							uint32_t _off = _lp % SAMP_PER_BLK;
+							uint32_t _lb2 = _lp / SAMP_PER_BLK;
+							uint32_t _n2  = 32u;
+							{	/* clip to the lap end (whole blocks;
+								 * the decode below trims the tail) */
+								uint32_t _lapb = ((_Ls - 1u) / SAMP_PER_BLK) + 1u;
+								if (_lb2 + _n2 > _lapb) _n2 = _lapb - _lb2;
+							}
+							uint32_t _ct = t->content_blocks ? t->content_blocks
+							                                 : ((_Ls - 1u) / SAMP_PER_BLK) + 1u;
+							bool _ps = (_lb2 >= _ct);
+							if (!_ps && _lb2 + _n2 > _ct) _n2 = _ct - _lb2;
+							if (!_n2) _n2 = 1u, _ps = true;
+							if (_ps) {
+								memset(batchbuf, 0, (size_t)_n2 * EMMC_BLOCK_SIZE);
+							} else if (!emmc_read_blocks(trk_blk(slot, (uint32_t)i) + _lb2, batchbuf, _n2)) {
+								break;
+							}
+							uint32_t _ds = _n2 * SAMP_PER_BLK - _off;
+							if (_ds > _Ls - _lp) _ds = _Ls - _lp;
+							codec_unpack_part(t->pring, RING_MASK,
+									  _pw & RING_MASK,
+									  batchbuf, _off, _ds);
+							_pw  += _ds;
+							_got += _ds;
+							continue;
+						}
+#endif
 						uint32_t _pwb = _pw / SAMP_PER_BLK;
 						uint32_t _c   = ((_pwb % _cyc) + _cyc -
 								 (t->start_blk % _cyc)) % _cyc;
@@ -3639,6 +3791,67 @@ static void streamer_thread(void *a, void *b, void *c)
 					 * restart. Fill from the snapshot, COMMIT only if
 					 * unchanged. */
 					uint32_t pw = t->p_w;
+#if SP1_CODEC == SP1_CODEC_PCM
+					/* M22-B PLAIN PATH (see the prime site): the loop
+					 * wraps at its SAMPLE length. Mirrors the block
+					 * path's room/content/race discipline exactly. */
+					if (cdiv == 1u && !g_win_free && !head_active(i) &&
+					    t->len_samps && win == wper && wper == gb &&
+					    !((bool)(g_win_free && g_win_rev))) {
+						uint32_t Ls  = t->len_samps;
+						uint32_t lp  = ((pw % Ls) + Ls -
+						              (t->start_samps % Ls)) % Ls;
+						uint32_t off = lp % SAMP_PER_BLK;
+						uint32_t lb  = lp / SAMP_PER_BLK;
+						uint32_t n   = budget;
+						if (n > (RING_SAMPLES / SAMP_PER_BLK) - 1u)
+							n = (RING_SAMPLES / SAMP_PER_BLK) - 1u;
+						{	/* fill to ~full, 1-block gap (as below) */
+							int32_t av = (int32_t)(pw - cpos);
+							int32_t room = (int32_t)(RING_SAMPLES - SAMP_PER_BLK) - av;
+							uint32_t rb = room > 0 ? (uint32_t)room / SAMP_PER_BLK : 0u;
+							if (n > rb) n = rb;
+						}
+						if (!n) break;
+						{	/* clip to the lap end in whole blocks */
+							uint32_t lapb = ((Ls - 1u) / SAMP_PER_BLK) + 1u;
+							if (lb + n > lapb) n = lapb - lb;
+						}
+						uint32_t ct = t->content_blocks ? t->content_blocks
+						                                : ((Ls - 1u) / SAMP_PER_BLK) + 1u;
+						bool sil = (lb >= ct);
+						if (!sil && lb + n > ct) n = ct - lb;
+						if (!n) { n = 1u; sil = true; }
+						bool rok;
+						if (sil) { memset(batchbuf, 0, (size_t)n * EMMC_BLOCK_SIZE); rok = true; }
+						else     { rok = emmc_read_blocks(trk_blk(slot, (uint32_t)i) + lb, batchbuf, n); }
+						if (!rok) {
+							work = true;
+							g_p2rfail++;
+							bool rp = false;
+							for (int j = 0; j < NTRK; j++) {
+								uint8_t sj = trk[j].state;
+								if (sj != TS_REC && sj != TS_DONE) continue;
+								if ((trk[j].r_w - trk[j].r_r) >=
+								    (RRING_SAMPLES - RRING_SAMPLES / 4u))
+									rp = true;
+							}
+							if (rp) round_abort = true;
+							break;
+						}
+						if (t->p_w != pw) { work = true; break; } /* reset raced us */
+						uint32_t ds = n * SAMP_PER_BLK - off;
+						if (ds > Ls - lp) ds = Ls - lp;
+						codec_unpack_part(t->pring, RING_MASK, pw & RING_MASK,
+								  batchbuf, off, ds);
+						t->p_w = pw + ds;
+						g_p2blk[i] += n;
+						work = true;
+						more = true;
+						budget -= n;
+						continue;
+					}
+#endif
 					/* phase-anchored loop position: (pw_block - start_blk)
 					 * mod gb, safe when pw_block < start_blk (restart). */
 					uint32_t pwb = pw / SAMP_PER_BLK;
@@ -4439,7 +4652,7 @@ static void controls_diag(void)
 	for (int _i = 0; _i < NTRK; _i++)
 		mg[_i] = (int)((int32_t)(trk[_i].p_w - cpos) / (int)(LOOP_RATE / 1000u));
 	printk("LOOPER %dHz song=%d %s hp=%d hpin=%d usb=%d chg=%d batt=%d bpm=%d detbpm=%d vol=%d "
-	       "trk[%s %s %s %s] rec=%d mut=%u%u%u%u ovr=%u rerr=%u werr=%u marg=[%d %d %d %d]ms stv=[%u %u %u %u] len=[%u %u %u %u] st=[%u %u %u %u] spim=%d cache=%d ckb=%u wbi=%u chop=%u/%u\n",
+	       "trk[%s %s %s %s] rec=%d mut=%u%u%u%u ovr=%u rerr=%u werr=%u marg=[%d %d %d %d]ms stv=[%u %u %u %u] len=[%u %u %u %u] st=[%u %u %u %u] spim=%d cache=%d ckb=%u wbi=%u chop=%u/%u m22[tap=%u rf=%u bf=%u Ls=%u Lb=%u pph=%d sp=%u v=%u]\n",
 	       (int)LOOP_RATE, (int)g_slot, g_playing ? "PLAY" : "STOP", g_hp_on, g_hp_in,
 	       usb_present() ? 1 : 0, charging() ? 1 : 0, batt,
 	       g_play_bpm, g_det_bpm, g_master_vol_q8,
@@ -4455,7 +4668,10 @@ static void controls_diag(void)
 	       (unsigned)trk[0].len_blocks, (unsigned)trk[1].len_blocks, (unsigned)trk[2].len_blocks, (unsigned)trk[3].len_blocks,
 	       (unsigned)trk[0].start_blk, (unsigned)trk[1].start_blk, (unsigned)trk[2].start_blk, (unsigned)trk[3].start_blk,
 	       emmc_spim_active() ? 1 : 0, g_cache_on ? 1 : 0, (unsigned)g_cache_kb, (unsigned)emmc_dbg_wr_busy_max,
-	       (unsigned)g_chop_div, (unsigned)g_chop_off);
+	       (unsigned)g_chop_div, (unsigned)g_chop_off,
+	       (unsigned)g_dbg_tap_bs, (unsigned)g_dbg_rf, (unsigned)g_dbg_bf,
+	       (unsigned)g_dbg_lens, (unsigned)g_dbg_lenb,
+	       (int)g_dbg_punch_ph, (unsigned)g_dbg_punch_sp, (unsigned)g_dbg_speed);
 	{
 		/* CPU= per-thread share of the last window, in percent: audio,
 		 * streamer, midi, main, everything-else(usb/idle/isr). Answers
@@ -6172,6 +6388,7 @@ int main(void)
 						}
 						g_grid_bpm_q8[g_slot] = (uint16_t)bpmq8;
 						g_grid_beat_frames = nf;   /* F9: exact */
+						g_dbg_tap_bs = nf;         /* r2 diag */
 						g_grid_fresh = 1;   /* M20 F1: taps = truth */
 						g_grid_anchor = tap_first_s;
 						g_grid_next_tick = g_sample_clock;
@@ -6695,6 +6912,8 @@ int main(void)
 				trk[bd].len_blocks = bnc_cyc;
 				trk[bd].content_blocks = bnc_cyc;
 				trk[bd].start_blk = bnc_start;
+				trk[bd].len_samps = bnc_cyc * SAMP_PER_BLK;   /* prints stay block loops */
+				trk[bd].start_samps = bnc_start * SAMP_PER_BLK;
 				trk[bd].muted = 0;
 				trk[bd].p_w = (g_consume_pos / SAMP_PER_BLK) * SAMP_PER_BLK;
 				trk[bd].state = TS_PLAY;
