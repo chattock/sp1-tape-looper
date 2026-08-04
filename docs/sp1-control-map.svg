@@ -1,7 +1,7 @@
 <svg viewBox="0 0 2360 1455" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
 <rect width="2360" height="1455" fill="#faf8f3"/>
 <text x="70" y="100" font-size="58" font-weight="700" fill="#1c1a17" letter-spacing="1">SP-1 TAPE LOOPER</text>
-<g transform="translate(700,58) rotate(-5)"><rect x="0" y="0" width="120" height="54" rx="10" fill="none" stroke="#e0503a" stroke-width="4"/><text x="60" y="39" font-size="34" font-weight="700" fill="#e0503a" text-anchor="middle">v2.5</text></g>
+<g transform="translate(700,58) rotate(-5)"><rect x="0" y="0" width="120" height="54" rx="10" fill="none" stroke="#e0503a" stroke-width="4"/><text x="60" y="39" font-size="34" font-weight="700" fill="#e0503a" text-anchor="middle">v2.6</text></g>
 <text x="2290" y="80" font-size="24" fill="#e0503a" text-anchor="end" font-weight="600">chattock.github.io/sp1-tape-looper</text>
 <text x="2290" y="112" font-size="20" fill="#77726a" text-anchor="end">flash: hold track 1 + track 4, plug in USB &#8594; solderless.engineering</text>
 <g transform="translate(655.5,154.8) scale(0.85)">
@@ -114,7 +114,9 @@
 <text x="1926" y="460" font-size="22" fill="#1c1a17">dim / full lights</text>
 <line x1="1630" y1="260" x2="1422.1999999999998" y2="493.95" stroke="#77726a" stroke-width="2" stroke-dasharray="1 6" stroke-linecap="round"/>
 <circle cx="1422.1999999999998" cy="493.95" r="5" fill="#e0503a"/>
-<rect x="1630" y="522" width="660" height="224" rx="16" fill="#ffffff" stroke="#e2ddd3" stroke-width="2"/>
+<rect x="1630" y="522" width="660" height="296" rx="16" fill="#ffffff" stroke="#e0503a" stroke-width="3"/>
+<rect x="2184" y="544" width="80" height="32" rx="16" fill="#e0503a"/>
+<text x="2224" y="567" font-size="20" font-weight="700" fill="#fff" text-anchor="middle">v2.6</text>
 <text x="1656" y="570" font-size="27" font-weight="700" fill="#1c1a17" letter-spacing="0.5">FUNCTION</text>
 <text x="1656" y="606" font-size="22" font-weight="700" fill="#1c1a17">hold</text>
 <text x="1926" y="606" font-size="22" fill="#1c1a17">power on / off</text>
@@ -122,8 +124,12 @@
 <text x="1926" y="642" font-size="22" fill="#1c1a17">the song gets a tempo grid</text>
 <text x="1656" y="678" font-size="22" font-weight="700" fill="#1c1a17">re-tap over loops</text>
 <text x="1926" y="678" font-size="22" fill="#1c1a17">beatmatch to your taps</text>
-<text x="1656" y="714" font-size="22" font-weight="700" fill="#1c1a17">hold after tapping</text>
+<text x="1656" y="714" font-size="22" font-weight="700" fill="#1c1a17">tap, then quick hold</text>
 <text x="1926" y="714" font-size="22" fill="#1c1a17">clear the grid</text>
+<text x="1656" y="750" font-size="22" font-weight="700" fill="#e0503a">tap ×4, then hold</text>
+<text x="1926" y="750" font-size="22" fill="#e0503a">round to the nearest whole BPM</text>
+<text x="1656" y="786" font-size="22" font-weight="700" fill="#e0503a">unless it’s far off</text>
+<text x="1926" y="786" font-size="22" fill="#e0503a">all four blink, nothing moves</text>
 <line x1="1630" y1="592" x2="1422.1999999999998" y2="867.0999999999999" stroke="#77726a" stroke-width="2" stroke-dasharray="1 6" stroke-linecap="round"/>
 <circle cx="1422.1999999999998" cy="867.0999999999999" r="5" fill="#e0503a"/>
 <rect x="90" y="1125" width="535" height="224" rx="16" fill="#ffffff" stroke="#e2ddd3" stroke-width="2"/>
@@ -134,12 +140,12 @@
 <text x="116" y="1317" font-size="22" fill="#1c1a17">hold a track: loaded = tape, empty = PRINT</text>
 <rect x="649" y="1125" width="535" height="224" rx="16" fill="#ffffff" stroke="#e0503a" stroke-width="3"/>
 <rect x="1078" y="1147" width="80" height="32" rx="16" fill="#e0503a"/>
-<text x="1118.0" y="1170" font-size="20" font-weight="700" fill="#fff" text-anchor="middle">v2.5</text>
+<text x="1118.0" y="1170" font-size="20" font-weight="700" fill="#fff" text-anchor="middle">v2.6</text>
 <text x="675" y="1173" font-size="27" font-weight="700" fill="#1c1a17" letter-spacing="0.5">GRIDDED SONGS</text>
 <text x="675" y="1209" font-size="22" fill="#1c1a17">tap the tempo: lights become a metronome</text>
 <text x="675" y="1245" font-size="22" fill="#1c1a17">and MIDI clock follows. takes punch on the</text>
 <text x="675" y="1281" font-size="22" fill="#1c1a17">BEAT — press a hair late and it reaches</text>
-<text x="675" y="1317" font-size="22" fill="#1c1a17">back. the first take teaches it the tempo</text>
+<text x="675" y="1317" font-size="22" fill="#1c1a17">back. <tspan fill="#e0503a">the grid keeps learning the tempo</tspan></text>
 <rect x="1208" y="1125" width="535" height="224" rx="16" fill="#ffffff" stroke="#e2ddd3" stroke-width="2"/>
 <text x="1234" y="1173" font-size="27" font-weight="700" fill="#1c1a17" letter-spacing="0.5">LIGHTS</text>
 <text x="1234" y="1209" font-size="22" fill="#1c1a17">dark = empty · faint = muted content</text>

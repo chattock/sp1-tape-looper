@@ -254,6 +254,13 @@ The one-page map ([full size](docs/sp1-control-map.png)):
 - **FUNCTION + fader 4 = a DJ filter** on everything: center = clean,
   slide down = low-pass sweep, slide up = high-pass sweep. It latches
   where you leave it and resets to neutral at power-on.
+- **Moving the window doesn't gap the audio.** Sweeping a fader, or holding a
+  glide, used to stutter and drop out while you moved — every change threw
+  away the read-ahead and dipped the output, and a fader reports movement
+  many times a second. Continuous gestures now hold their edits and settle
+  once when you let go; single button presses still take effect instantly.
+  The trade is that during a sweep the window follows your hand with a
+  slight lag rather than jumping — you hear it travel.
 - Non-destructive: recorded audio, loop lengths, the beat grid and the MIDI
   clock are untouched. The chop is saved with the song. In fixed mode it
   slices the shared bar across all layers together; in variable mode each
@@ -336,10 +343,12 @@ The one-page map ([full size](docs/sp1-control-map.png)):
   light blinks on the beat instead of its usual 2 Hz.
 - The sync jack sends MIDI clock at the tapped tempo, even while stopped —
   tap along to your decks and the SP-1 clocks your gear to them.
-- **Clearing the grid:** tap FUNCTION, then press again and hold ~1 s — the
-  easiest way in is a double-tap where you hold the second press. Any tap
-  followed by a hold works, and the window is 3 s (it was 1.5 s, and nearly
-  impossible to hit). That hold can never power the device off.
+- **Clearing the grid:** tap FUNCTION, then **quickly** press again and hold
+  ~1 s — a double-tap where you hold the second press. The speed is the point:
+  the second press has to land within a fraction of a second of the tap, which
+  is faster than any tempo, and that is what tells this apart from tapping a
+  tempo and holding (which rounds the BPM instead). That hold can never power
+  the device off.
 - **Recording on a gridded song is quantized.** If the grid came from taps
   THIS session, the first take punches on it like an overdub — the phase
   you tapped in against the music is kept, not overwritten. (A grid that
@@ -349,22 +358,29 @@ The one-page map ([full size](docs/sp1-control-map.png)):
   pressing just before a line catches that line — and pressing just AFTER
   one is caught too: the record ring always holds the last ~340 ms of
   input, so a late punch reaches back to the line you passed and fills the
-  gap from memory (up to a quarter beat, and never more than 120 ms —
-  beyond that it waits for the next line, because a press that late
-  usually meant the next one). Stops round to the NEAREST beat with at
-  most half a beat of run-on and the REC light double-blinking; a second
-  tap during any count-out trims to a whole beat. Loop lengths are rounded
-  ONCE for the whole take and later takes reference the same base, so
-  every loop is an exact whole number of beats and an exact multiple of
-  its siblings. Songs without a grid record exactly as before.
-- **The first take teaches the tempo.** Tapping lands 0.2–1% off, and that
-  error is what walks a loop off the track it was recorded from. The onset
-  estimator now measures the real beat from the audio of your first take
-  and retunes the grid, the metronome and the MIDI clock to it — accepted
-  only when it agrees with your tap to within 5%, so ambiguous material
-  simply keeps what you tapped. A click-track bench measures an eight-beat
-  take at exactly eight beats, to the sample, with 0.02 ms of drift across
-  the loop.
+  gap from memory (up to a third of a beat — beyond that it waits for the
+  next line, because a press that late usually meant the next one). Stops
+  round to the NEAREST beat with at most half a beat of run-on and the REC
+  light double-blinking; a second tap during any count-out trims to a whole
+  beat. Loop lengths are stored to the **sample**, not rounded to flash
+  blocks, so a loop is exactly the number of beats you played and an exact
+  multiple of its siblings. Songs without a grid record exactly as before.
+- **The grid keeps learning the tempo.** Tapping lands 0.2–1% off, and that
+  error is what walks a loop off the track it was recorded from. Every
+  gridded take leaves a landmark — its first onset — and the music runs at
+  one tempo through all of them, so each take is measured against your
+  *first* one and the baseline grows all session. A rough tap ends up exact
+  after a couple of takes without you doing anything. Corrections are small
+  and need enough material to be sure. A click-track bench at 128.000 BPM:
+  a tap of 128.24 refined to 127.985, converged on 128.000, then found
+  nothing left to correct — an eight-beat take comes back as exactly eight
+  beats, to the sample. This fixes how *fast*, not where "one" is.
+- **Round to a whole BPM.** Tap a tempo, then hold FUNCTION about a second.
+  The track lights sweep, catch the beat the grid is on, and the tempo
+  rounds to the nearest whole number. If your tap isn't near one it won't
+  guess — all four lights blink together and nothing changes, because a
+  deck sitting at 122.2 is hurt by being forced to 122. Nothing persists
+  either way; there is no mode to leave.
 - **Tap-to-beatmatch:** once a song has loops, a fresh 4+ tap run means
   "match THIS": the tape retunes so your loops play at the tapped tempo
   (vinyl-style — pitch moves too, clamped to the 0.5–1.5x range) and the

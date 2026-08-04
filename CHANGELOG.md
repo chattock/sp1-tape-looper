@@ -5,6 +5,73 @@ Versions 1.0.0-1.2.4 below were the 2.0 development line (developed as a
 fork by marc, never announced) — kept for the honest record. The classic
 4-song firmware lives on the `v1` branch. Base: 1.x at commit c60941c.
 
+## [2.6.0] - 2026-08-05
+
+One clock. v2.5.0's bench ran at 120 BPM — one of only twelve
+integer tempos whose eight-beat loop lands exactly on a flash-block boundary —
+so it could not see what was left. A 128.000 BPM bench found it, plus five bugs
+of its own and a way to round to the nearest whole number BPM. An eight-beat take 
+now comes back as **exactly 180000 samples at exactly 128.000 BPM** and stays locked 
+to takes recorded minutes later. No format change: songs, grids and settings survive.
+
+### Added
+
+- **The grid learns the tempo from what you played.** Every gridded take leaves
+  a landmark — its first onset — and the music runs at one tempo through all of
+  them. Each take is measured against your *first*, so the baseline grows all
+  session and the estimate sharpens. Bench: a tap of 128.24 refined to 127.985,
+  converged on 128.000, then found nothing left to correct. Fixes tempo, not
+  phase — the downbeat stays yours.
+- **Round to a whole BPM.** Tap a tempo, hold FUNCTION about a second: the
+  lights sweep, catch the beat, and the grid rounds. If the tap isn't near a
+  whole number it declines and all four lights blink.
+
+### Changed
+
+- **Loop geometry is samples, not 512-byte blocks.** At 128 an eight-beat take
+  stored 179968 against a true 180000 — 32 samples a lap, ~10.7 ms/min. Worse,
+  the grid kept the *true* beat while the loop wrapped at the *stored* one, so
+  they slid apart at four samples per beat and a late overdub punched where the
+  grid was, not where the loop was. That was the layering complaint.
+- **Window gestures no longer flush the audio.** Every edit used to drop the
+  read-ahead and dip master gain to zero; the fader commits every 60 ms, so a
+  sweep was a ~16 Hz tremolo with real silence under it. Reported by
+  geraasmasjien and luuuciano. Continuous gestures settle once on release now;
+  button presses stay instant. The window trails your hand instead of jumping.
+- **A late punch is forgiven up to a third of a beat**, was a quarter.
+- **One owner for the beat** — it lived in three variables written from twelve
+  places, tied by a convention asserted once and never re-checked.
+
+### Fixed
+
+- **A later take could shove an earlier one half a beat out of time**, in one
+  step, when a second recording finished. The rescale after a tempo correction
+  clamped each loop to its *recorded audio* — but a gridded take is deliberately
+  longer, since the stop rounds to the nearest beat and pads to the line. That
+  pad was discarded. Needs a second landmark to fire, which is why take one was
+  always fine.
+- **The loop and the grid could land on different tempos** — 22612 against
+  22504, 0.48%, walking the first take ~290 ms/min away from everything after
+  it.
+- **Overdubs came back at the wrong point in the loop** after a song switch or
+  power-cycle: the anchor was read one line before it was loaded, so it used the
+  previous song's value. First takes anchor at zero and always survived.
+- **Reverse survived a rocker reset.** With the faders crossed, FUNCTION +
+  rocker double-click silently un-reversed playback while the faders still said
+  reverse. Reported by nervouskidz.
+- **Deleting a still-flushing take switched off the late-punch rescue** for the
+  session, silently.
+- **MIDI clock ran fast** — the tick truncated and accumulated, ~32 ms/min.
+- **The DJ filter ducked entering high-pass**, and could wrap and click on a
+  loud four-track mix near its top corner.
+
+### Known limits
+
+- Prints and chopped windows stay block-quantized and can drift slightly over
+  several minutes. Recorded takes don't. (This can be improved in the future)
+- Anchors reload rounded to a block (<3 ms, once per song load, this can be improved in the future).
+- Printing is slower at high tape speed: the render yields to playback.
+
 ## [2.5.0] - 2026-07-30
 
 Timing truth. luuuciano reported that loops recorded over a track he was
