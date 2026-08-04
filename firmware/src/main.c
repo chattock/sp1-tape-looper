@@ -897,7 +897,10 @@ BUILD_ASSERT(sizeof(struct grid_ext) <= 512, "grid ext must fit one block");
 static volatile uint16_t g_grid_bpm_q8[NUM_SLOTS];
 static volatile uint64_t g_grid_anchor;       /* sample-clock frame of a downbeat */
 static volatile uint32_t g_grid_beat_frames;  /* I2S frames per grid beat (current song) */
-static volatile uint64_t g_grid_next_tick;    /* next 24-PPQN tick, sample-clock domain */
+static volatile uint64_t g_grid_next_tick;
+static uint64_t          g_grid_tick_base;      /* M22-A: exact tick schedule base */
+static uint64_t          g_grid_tick_base_sync; /* M22-A: last value WE wrote to next_tick */
+static uint32_t          g_grid_tick_idx;       /* M22-A: ticks since the base */    /* next 24-PPQN tick, sample-clock domain */
 static volatile uint8_t  g_grid_active;       /* current song has a live grid */
 static volatile uint8_t  g_grid_save_req;     /* control -> streamer: write block 2 */
 /* M8b quantized capture: with a grid, arming PUNCHES IN on the next bar line
@@ -1529,6 +1532,14 @@ static void looper_audio_block(int16_t *s)
 		if (!g_del_req[i]) continue;
 		g_del_req[i] = 0;
 		if (g_rec_track == i) g_rec_track = -1;
+		if (trk[i].state == TS_DONE)
+			g_done_pending = 0;   /* M22-A: deleting a still-flushing take
+			                       * must free the rec ring, or pre-roll is
+			                       * silently OFF for the session (the only
+			                       * other clear is the promotion, which
+			                       * needs TS_DONE to still be true). Only
+			                       * one take can flush at a time, so there
+			                       * is never a second one to protect. */
 		trk[i].state = TS_EMPTY;
 		trk[i].rec_silence = 0; trk[i].rec_target = 0; trk[i].rec_count = 0; trk[i].muted = 0;
 		trk[i].len_blocks = 0; trk[i].start_blk = 0; trk[i].content_blocks = 0;  /* drop all its segments */
@@ -1706,6 +1717,31 @@ static void looper_audio_block(int16_t *s)
 						 * and kept sampling through every later
 						 * overdub for an answer nobody reads. */
 						g_tempo.active = 0;
+						/* M22-A: THE GRID FOLLOWS THE LOOP. The loop
+						 * wraps at a block-quantized length, so the
+						 * beat it can actually honour is stored/beats
+						 * — up to 128 samples per take away from the
+						 * true beat. v2.5.0 kept the TRUE beat on the
+						 * grid, so grid lines slid past the loop at
+						 * up to ~9 samples a beat and later overdubs
+						 * punched visibly off the layers already
+						 * down (bench: +16 ms in 85 s at 128 BPM).
+						 * The loop is the instrument; the grid now
+						 * tunes itself to what the loop plays.
+						 * (Residual: the song as a whole still runs
+						 * at the quantized tempo vs an external
+						 * source — that is M22 Phase B's job.) */
+						if (gbeats) {
+							uint32_t ach = (uint32_t)
+								(((uint64_t)glen * SAMP_PER_BLK +
+								  gbeats / 2u) / gbeats);
+							if (ach && ach != g_gridrec_beat_samps) {
+								grid_retune(g_gridrec_beat_samps, ach);
+								g_det_bpm = (int)(((uint64_t)LOOP_RATE *
+									60u + ach / 2u) / ach);
+								g_gridrec_beat_samps = ach;
+							}
+						}
 						g_beat_samples = g_gridrec_beat_samps;
 						g_midi_div = g_gridrec_beat_samps / 24u;
 						if (gbeats) {   /* M20 F7: the base to lock to */
@@ -2131,7 +2167,12 @@ static void looper_audio_block(int16_t *s)
 								uint32_t sp = g_consume_pos;
 								sp = (sp >= pre_backfill)
 								   ? (sp - pre_backfill) : 0u;
-								rt->start_blk = sp / SAMP_PER_BLK;
+								/* M22-A: NEAREST, not truncate — the
+								 * old floor put every overdub 0-5.3 ms
+								 * early, always early. Full sample
+								 * anchors are Phase B. */
+								rt->start_blk = (sp + SAMP_PER_BLK / 2u)
+								              / SAMP_PER_BLK;
 							}
 						}
 						if (pre_backfill) {
@@ -2481,10 +2522,27 @@ static void looper_audio_block(int16_t *s)
 	 * with the transport stopped — the grid is the decks' clock, not the
 	 * tape's. Bounded catch-up: a block is ~5 ms, ticks are >=10 ms. */
 	if (g_grid_active && g_grid_beat_frames) {
-		uint32_t gtick = g_grid_beat_frames / 24u;
-		if (!gtick) gtick = 1u;
+		/* M22-A: EXACT tick schedule. beat/24 truncates (937.5 -> 937 at
+		 * 128 BPM), and the old += accumulated that truncation forever:
+		 * always fast, ~32 ms/min at 128 — marc heard it against his gear
+		 * before the code review found it. Ticks now come from an index
+		 * against a fixed base, so the error is bounded at ±1 frame no
+		 * matter how long the session runs. The base re-arms whenever
+		 * anything resets g_grid_next_tick (tap, retune, song load): the
+		 * first tick of a fresh base fires AT the base, like before. */
+		if (g_grid_next_tick != g_grid_tick_base_sync) {
+			/* someone else wrote next_tick (tap-commit, retune, song
+			 * load, beatmatch): that value is the new base */
+			g_grid_tick_base = g_grid_next_tick;
+			g_grid_tick_base_sync = g_grid_next_tick;
+			g_grid_tick_idx = 0;
+		}
 		while (g_sample_clock >= g_grid_next_tick) {
-			g_grid_next_tick += gtick;
+			g_grid_tick_idx++;
+			g_grid_next_tick = g_grid_tick_base +
+				(uint64_t)(((uint64_t)g_grid_tick_idx *
+					    g_grid_beat_frames) / 24u);
+			g_grid_tick_base_sync = g_grid_next_tick;
 			g_midi_clk_produced++;
 		}
 		/* M8c: BAR-LINE service — launch-quantized mutes apply here, and a
