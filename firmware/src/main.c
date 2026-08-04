@@ -910,6 +910,31 @@ static volatile uint32_t g_dbg_lens;       /* len_samps the take got */
 static volatile uint32_t g_dbg_lenb;       /* len_blocks the take got */
 static volatile int32_t  g_dbg_punch_ph;   /* punch phase vs grid, frames (should be ~0) */
 static volatile uint32_t g_dbg_punch_sp;   /* start_samps at punch */
+/* M25-r5: the anchor decision, exactly as it is made. The stored anchor is
+ * consume_pos MINUS the pre-roll backfill, and the suspicion is that those two
+ * do not leave it on a grid line even when pph says the punch did. Printing
+ * all three settles it without another guess: cp = consume_pos at the trigger,
+ * bkf = samples reached back, and the anchor's own phase against the beat,
+ * which should read the SAME for every take if the anchors are beat-aligned. */
+static volatile uint32_t g_dbg_anc_cp;     /* consume_pos at the trigger */
+static volatile uint32_t g_dbg_anc_bkf;    /* pre_backfill applied */
+static volatile uint32_t g_dbg_anc_mod;    /* start_samps % beat */
+/* M25-r9: the overdub anchors read 264 and 336 samples EARLY against the beat
+ * while pph says the punch landed exactly on the line. Both cannot be right —
+ * but "early against a grid line" and "early against an origin that was never
+ * on one" are indistinguishable in the log without the anchor to measure from.
+ * Low 32 bits is plenty: the question is a phase, not an absolute. */
+static volatile uint32_t g_dbg_ganc;       /* g_grid_anchor at the punch */
+static volatile uint32_t g_dbg_pat;        /* g_grid_punch_at at the punch */
+/* M25-r6 THE CHAIN. bf ended at 22504 while rf measured 22612 — the loop was
+ * built on one beat and the grid ran on another, 0.48% apart, which walks the
+ * first take ~290 ms/min away from everything recorded after it. At the punch
+ * the two are tied by an identity at 1.0x speed, and refine calls grid_retune,
+ * so bf SHOULD come out equal to rf. It does not. These three snapshots bracket
+ * the whole path so the step that moves it is visible instead of deduced. */
+static volatile uint32_t g_dbg_gbf0;       /* grid beat at TAP commit */
+static volatile uint32_t g_dbg_grs0;       /* rec beat at the PUNCH */
+static volatile uint32_t g_dbg_gbf1;       /* grid beat AFTER refine's retune */
 static volatile uint32_t g_dbg_speed;      /* speed_q16 at punch */
 /* M22c CONVERGENCE: the tempo TRUTH accrues with observation time. One take
  * of 8 beats bounds F8 at +-10-20 samples/beat (detector jitter over a short
@@ -924,7 +949,51 @@ static uint32_t g_cnv_ref;                 /* first landmark, absolute stored sa
 static uint8_t  g_cnv_set;
 static uint32_t g_cnv_speed;               /* speed the landmark was laid at */
 static volatile int32_t  g_dbg_cnv_beats;  /* diag: baseline length, beats */
-static volatile int32_t  g_dbg_cnv_corr;   /* diag: per-beat correction applied */    /* next 24-PPQN tick, sample-clock domain */
+static volatile int32_t  g_dbg_cnv_corr;   /* diag: per-beat correction applied */
+/* M23 INTEGER-BPM SNAP (session-only, opt-in). Phase B is what makes this
+ * worth having: with block-quantized lengths the flash grid dominated and
+ * rounding the BPM changed nothing (at 128 BPM an 8-beat loop was 703.125
+ * blocks either way). Sample-exact loops mean an integer BPM lands EXACTLY —
+ * 2880000/128 = 22500 frames, no residual — so when the source really is a
+ * whole number, snapping puts the grid on truth immediately, instead of
+ * waiting for the convergence to walk there. It is opt-in because DJs pitch
+ * their decks: a mix sitting at 122.2 is hurt by being forced to 122, which
+ * is exactly the call the player has to make, not the machine. */
+static volatile uint8_t  g_snap_sweep;     /* LED confirm: 0=idle, else frames left */
+static volatile uint8_t  g_snap_took;      /* diag: the last nudge actually moved */
+#define SNAP_GATE_BPM100 40u   /* 0.40 BPM, in hundredths — see bpm_snap */
+/* Round a beat length (frames) to the nearest WHOLE BPM, if it is close
+ * enough to be a rounding rather than a reinterpretation. Applied LAST at
+ * every point the beat is decided (tap commit, F8 refine, convergence) — if
+ * it ran anywhere else the two would fight, one rounding to 122 while the
+ * other measures 122.2. */
+static uint32_t bpm_snap(uint32_t bf)
+{
+	if (!bf) return bf;
+	uint32_t bpm100 = (uint32_t)(((uint64_t)48000u * 60u * 100u + bf / 2u) / bf);
+	uint32_t whole  = (bpm100 + 50u) / 100u;
+	if (whole < 50u || whole > 200u) return bf;
+	/* M25-r10 DISTANCE GATE. The nearest whole number is never more than
+	 * 0.5 BPM away, so this window only ever rejects the outer part of
+	 * that range — at 0.35 it passes 70% of it. The point is not safety,
+	 * it is HONESTY: past the gate the machine says "that is not a whole
+	 * tempo" with a shrug instead of silently inventing one. Convergence
+	 * would walk a wrong snap back anyway, so a decline costs nothing.
+	 * The number is set by TAP SCATTER, not by taste. marc's bench taps
+	 * against a 128.000 click landed 0.02-0.45 from whole; at 0.35 five
+	 * of fourteen would have shrugged at a genuinely whole tempo, which
+	 * is the machine arguing with his finger. 0.40 passes thirteen of the
+	 * fourteen and still declines a deliberately pitched 122.2, which is
+	 * the only case the gate was ever for. Adjust only against real taps:
+	 * the bench ones are the evidence, not a preference. */
+	uint32_t w100 = whole * 100u;
+	uint32_t d100 = (bpm100 > w100) ? (bpm100 - w100) : (w100 - bpm100);
+	if (d100 > SNAP_GATE_BPM100) return bf;   /* too far: the caller shrugs */
+	uint32_t nf = (uint32_t)(((uint64_t)48000u * 60u + whole / 2u) / whole);
+	if (!nf) return bf;
+	g_snap_took = (nf != bf);
+	return nf;
+}    /* next 24-PPQN tick, sample-clock domain */
 static volatile uint8_t  g_grid_active;       /* current song has a live grid */
 static volatile uint8_t  g_grid_save_req;     /* control -> streamer: write block 2 */
 /* M8b quantized capture: with a grid, arming PUNCHES IN on the next bar line
@@ -1066,7 +1135,7 @@ static int16_t g_rring[RRING_SAMPLES];
 /* M20b-r2: how far back a punch may REACH. Human lateness is measured in
  * milliseconds, not in beats, so the reach window is a quarter of a beat
  * CAPPED here — see the rescue site for why half a beat was too generous. */
-#define PREROLL_REACH_MS 120u
+#define PREROLL_REACH_MS 180u
 static volatile uint32_t g_pre_w;         /* pre-roll write frontier (ring index) */
 static volatile uint32_t g_pre_valid;     /* consecutive valid pre-rolled samples */
 static volatile uint32_t g_pre_phase;     /* decimator phase while the transport is idle */
@@ -1137,6 +1206,10 @@ static volatile int      g_restart_req;            /* main -> engine: hold PLAY 
 static volatile uint32_t g_chop_div = 1;           /* 1,2,4,... 64 (1 = full loop) */
 static volatile uint32_t g_chop_off = 0;           /* window index: 0..div-1 */
 static volatile int      g_chop_req;               /* main -> engine: window changed, snap rings */
+static volatile uint8_t  g_chop_defer;             /* M24: a CONTINUOUS window gesture is in
+                                                    * progress — accumulate the edits and pay
+                                                    * for them ONCE when the finger lifts. See
+                                                    * the FUNCTION-release hook. */
 /* M13 HEADS MODE (prototype, session-only): FN+PLAY TRIPLE-tap toggles it.
  * Tracks 2-4 stop playing their own loops and become three extra TAPE HEADS
  * on track 1's loop, offset by quarters of its audible cycle (Count-to-Five
@@ -1429,13 +1502,32 @@ static uint32_t tempo_refine(uint32_t bs)
  * clock and every later punch follow the corrected tempo instead of the tapped
  * one (otherwise overdubs would quantize to a grid the base loop no longer
  * agrees with). Phase is untouched — only the spacing changes. */
-static void grid_retune(uint32_t old_bs, uint32_t new_bs)
+/* Forward tentative declaration: the smoothed tape speed is defined further
+ * down (audio thread only) but beat_set has to derive the recording beat from
+ * it, and it must be the SAME variable the punch uses — g_play_speed_q16 is
+ * the rocker's setting, not the settled value, and picking a different one
+ * here would reintroduce exactly the inconsistency this change removes. */
+static uint32_t g_cur_speed_q16;
+
+/* M25-r7 THE ONE OWNER. The beat lived in three variables written from twelve
+ * places, tied together only by a convention asserted once at the punch and
+ * never re-checked. That is how the loop and the grid ended up on tempos 0.48%
+ * apart (rf=22612 vs bf=22504) and walked the first take ~290 ms/min away from
+ * everything recorded after it — a divergence no read of the code could
+ * explain, because nothing in the code forbade it.
+ * Now: every mechanism PROPOSES a beat in grid-domain frames and calls this.
+ * This is the only writer. The grid/recording identity is structural instead of
+ * conventional, so the divergence is no longer expressible. */
+static void beat_set(uint32_t nf)
 {
-	if (!old_bs || !new_bs || !g_grid_beat_frames) return;
-	uint32_t nf = (uint32_t)(((uint64_t)g_grid_beat_frames * new_bs +
-				  old_bs / 2u) / old_bs);
 	if (!nf) return;
 	g_grid_beat_frames = nf;
+	/* recording domain follows the tape, exactly as the punch derived it */
+	uint32_t rs = (uint32_t)(((uint64_t)nf * g_cur_speed_q16) >> 16);
+	if (!rs) rs = nf;
+	g_gridrec_beat_samps = rs;
+	g_beat_samples       = rs;
+	g_midi_div           = rs / 24u;
 	if (g_slot < NUM_SLOTS) {
 		g_grid_bpm_q8[g_slot] = (uint16_t)((48000ULL * 60u * 256u) / nf);
 		g_grid_save_req = 1;
@@ -1443,6 +1535,18 @@ static void grid_retune(uint32_t old_bs, uint32_t new_bs)
 	{ uint64_t _bar = (uint64_t)nf * 4u;
 	  g_grid_next_bar = g_grid_anchor +
 		(((g_sample_clock - g_grid_anchor) / _bar) + 1u) * _bar; }
+}
+
+/* Convert a RECORDING-domain beat to grid domain and hand it to beat_set. The
+ * three estimator paths (refine, achieved-length, convergence) all measure in
+ * stored samples, so they come through here; the snap already has a grid-domain
+ * number and calls beat_set directly. Same ratio maths as before — but it no
+ * longer WRITES anything, so it can no longer preserve a divergence. */
+static void grid_retune(uint32_t old_bs, uint32_t new_bs)
+{
+	if (!old_bs || !new_bs || !g_grid_beat_frames) return;
+	beat_set((uint32_t)(((uint64_t)g_grid_beat_frames * new_bs +
+			     old_bs / 2u) / old_bs));
 	g_grid_next_tick = g_sample_clock;
 }
 
@@ -1683,8 +1787,11 @@ static void looper_audio_block(int16_t *s)
 							grid_retune(g_gridrec_beat_samps, rf);
 							g_det_bpm = (int)(((uint64_t)LOOP_RATE *
 								60u + rf / 2u) / rf);
-							g_gridrec_beat_samps = rf;
+							/* r7: beat_set already derived the rec beat
+							 * from the grid. Re-assigning it here is
+							 * exactly what let the two come apart. */
 						}
+						g_dbg_gbf1 = g_grid_beat_frames;   /* r6 */
 					}
 					gbb = (g_gridrec_beat_samps + SAMP_PER_BLK / 2u)
 					      / SAMP_PER_BLK;
@@ -1784,8 +1891,7 @@ static void looper_audio_block(int16_t *s)
 							if (ach && ach != g_gridrec_beat_samps) {
 								grid_retune(g_gridrec_beat_samps, ach);
 								g_det_bpm = (int)(((uint64_t)LOOP_RATE *
-									60u + ach / 2u) / ach);
-								g_gridrec_beat_samps = ach;
+									60u + ach / 2u) / ach);   /* r7 */
 							}
 						}
 						g_beat_samples = g_gridrec_beat_samps;
@@ -1909,13 +2015,11 @@ static void looper_audio_block(int16_t *s)
 								 / (int64_t)nb);
 							if (corr > 16) corr = 16;
 							if (corr < -16) corr = -16;
-							if (corr) {
-								uint32_t nbs = (uint32_t)
-									((int32_t)bs2 + corr);
-								grid_retune(bs2, nbs);
-								g_gridrec_beat_samps = nbs;
-								g_beat_samples = nbs;
-								g_midi_div = nbs / 24u;
+							uint32_t nbs = corr
+								? (uint32_t)((int32_t)bs2 + corr)
+								: bs2;
+							if (nbs != bs2) {
+								grid_retune(bs2, nbs);   /* r7: sole writer */
 								g_det_bpm = (int)(((uint64_t)LOOP_RATE *
 									60u + nbs / 2u) / nbs);
 								/* rescale every gridded loop —
@@ -1928,10 +2032,32 @@ static void looper_audio_block(int16_t *s)
 									uint32_t Nk = (Lk + bs2 / 2u) / bs2;
 									if (!Nk) continue;
 									uint32_t Ln = Nk * nbs;
-									uint32_t cap = trk[k2].content_blocks
-										     * SAMP_PER_BLK;
-									trk[k2].len_samps =
-										(cap && Ln > cap) ? cap : Ln;
+									/* M25-r8: this used to clamp to
+									 * content_blocks * 256. content is
+									 * the RECORDED AUDIO; len_samps is
+									 * the MUSICAL length, and on a
+									 * gridded take those differ on
+									 * purpose — the stop rounds to the
+									 * nearest beat and pads out to the
+									 * line, so the loop is legitimately
+									 * longer than the audio in it. That
+									 * pad is up to HALF A BEAT, and the
+									 * clamp threw it away in one step
+									 * the first time convergence
+									 * retuned — i.e. at the SECOND
+									 * take's stop, which is exactly
+									 * where marc heard track 1 jump.
+									 * It guarded nothing: the rescale is
+									 * proportional and corr is capped at
+									 * +/-16 per beat, so Ln cannot run
+									 * past the allocation. Sanity-bound
+									 * the CHANGE instead; refuse absurd
+									 * ones rather than truncating. */
+									uint32_t dL = (Ln > Lk) ? (Ln - Lk)
+											        : (Lk - Ln);
+									if (Ln && (uint64_t)dL * 16u <=
+									          (uint64_t)Lk)
+										trk[k2].len_samps = Ln;
 									/* C-r2: the wrap MOVED — the ring
 									 * still holds audio fetched under
 									 * the old length, and playing it
@@ -1956,7 +2082,7 @@ static void looper_audio_block(int16_t *s)
 										g_meta_save_req = 1;
 									}
 								}
-								g_dbg_cnv_corr = corr;
+								g_dbg_cnv_corr = (int32_t)nbs - (int32_t)bs2;
 							}
 						}
 					}
@@ -2138,9 +2264,17 @@ static void looper_audio_block(int16_t *s)
 					} else {
 						trk[i].len_samps = Lb * SAMP_PER_BLK;
 					}
-					trk[i].start_samps = trk[i].start_blk * SAMP_PER_BLK;
 				}
 				trk[i].start_blk  = g_meta.slot[g_slot].trk_start[i];
+				/* M25 BUG FIX: this used to sit one line ABOVE the
+				 * load, so it read the anchor belonging to the
+				 * PREVIOUSLY loaded song (or 0 at boot) — not the
+				 * block-rounded anchor the comment above claims, an
+				 * arbitrary one. First takes anchor at block 0 and
+				 * survived; overdubs came back at the wrong phase
+				 * after a song switch or power-cycle. Introduced by
+				 * M22-B, found while planning M25. */
+				trk[i].start_samps = trk[i].start_blk * SAMP_PER_BLK;
 				trk[i].content_blocks = g_meta.trk_content[g_slot][i]; /* 0 = whole track */
 			} else {
 				trk[i].len_blocks = 0; trk[i].start_blk = 0;
@@ -2280,7 +2414,17 @@ static void looper_audio_block(int16_t *s)
 							 * too long, so its head repeated at its
 							 * tail. Only a genuinely LATE finger gets
 							 * rescued: a quarter beat, capped in ms. */
-							uint64_t reach = unit / 4u;
+							/* M25-r9: a THIRD of a beat. r5 tried this,
+							 * r6 reverted it on suspicion, and the bisect
+							 * then cleared it outright — the half-beat
+							 * jump was a truncating clamp in the
+							 * convergence rescale, present since M22-C
+							 * and reproducible on M24-R1, which predates
+							 * the reach change entirely. So this returns
+							 * on its own merits: 156 ms of forgiveness at
+							 * 128 instead of 117, still well short of the
+							 * half beat that caused the head-repeats. */
+							uint64_t reach = unit / 3u;
 							uint64_t rcap = (uint64_t)
 								(I2S_TRUE_HZ / 1000u) *
 								PREROLL_REACH_MS;
@@ -2288,6 +2432,7 @@ static void looper_audio_block(int16_t *s)
 							if (back <= reach && need &&
 							    need <= g_pre_valid) {
 								pre_backfill = need;
+								g_dbg_anc_bkf = need;   /* r6: ANY take */
 								g_grid_punch_at = prev;
 								trigger = 1;
 							}
@@ -2350,6 +2495,12 @@ static void looper_audio_block(int16_t *s)
 								rt->start_blk = (sp + SAMP_PER_BLK / 2u)
 								              / SAMP_PER_BLK;
 								rt->start_samps = sp;   /* M22-B: exact */
+								g_dbg_anc_cp  = g_consume_pos;
+								g_dbg_anc_bkf = pre_backfill;
+								g_dbg_anc_mod = g_grid_beat_frames
+									      ? (sp % g_grid_beat_frames) : 0u;
+								g_dbg_ganc = (uint32_t)g_grid_anchor;
+								g_dbg_pat  = (uint32_t)g_grid_punch_at;
 								rt->len_samps = 0;
 							}
 						}
@@ -2389,6 +2540,7 @@ static void looper_audio_block(int16_t *s)
 							g_gridrec_beat_samps = (uint32_t)
 								(((uint64_t)g_grid_beat_frames *
 								  g_cur_speed_q16) >> 16);
+							g_dbg_grs0 = g_gridrec_beat_samps;   /* r6 */
 							g_gridrec = 1;
 							if (g_loop_len == 0u && !g_grid_fresh) {
 								/* M8b-r2: your first loop IS the
@@ -2682,9 +2834,17 @@ static void looper_audio_block(int16_t *s)
 			if (nm != flt_mode) {
 				flt_mode = nm;
 				flt_f = tf;
-				flt_low = mix32[0];   /* LP starts transparent-ish; */
-				flt_band = 0;         /* HP starts near-silent and
-				                       * converges in a few ms */
+				/* M25: a HIGH-pass must start TRANSPARENT — it has
+				 * no accumulated low content yet — while a LOW-pass
+				 * starts at the signal. Priming both to mix32[0]
+				 * made hi = x - flt_low - flt_band come out at ~0,
+				 * so every entry into HP ducked for a few ms. The
+				 * worst case now is a low-corner HP briefly passing
+				 * more bass than it should while the integrator
+				 * catches up, which is what any analog high-pass
+				 * does when you patch it in. */
+				flt_low  = (nm == 2u) ? 0 : mix32[0];
+				flt_band = 0;
 			} else if (tf != flt_f) {
 				int32_t fd = (tf - flt_f) >> 3;
 				if (fd == 0) fd = (tf > flt_f) ? 1 : -1;
@@ -2703,9 +2863,17 @@ static void looper_audio_block(int16_t *s)
 				/* Chamberlin SVF, Q14, damping 1.0 (a touch of DJ
 				 * resonance); coefficients capped ~6.5 kHz for
 				 * stability at this damping. */
-				flt_low += (flt_f * flt_band) >> 14;
+				/* M25: these were int32 x int32. flt_lp_tab peaks at
+				 * 13524 and a four-track mix reaches 131068, so the
+				 * product is 1.77e9 against a 2.147e9 ceiling —
+				 * 1.21x of margin, and the "touch of DJ resonance"
+				 * above is exactly what pushes flt_band past the
+				 * input and eats it. Overflow here wraps hard: a
+				 * loud click. smull is single-cycle on the M4, so
+				 * the widening costs ~25 us of a 5333 us block. */
+				flt_low += (int32_t)(((int64_t)flt_f * flt_band) >> 14);
 				int32_t hi = x - flt_low - flt_band;
-				flt_band += (flt_f * hi) >> 14;
+				flt_band += (int32_t)(((int64_t)flt_f * hi) >> 14);
 				x = (flt_mode == 1u) ? flt_low : hi;
 			}
 			int32_t m = gd ? (g0 + ((gd * (int32_t)(f + 1)) >> 8)) : ge;
@@ -3694,7 +3862,7 @@ static void streamer_thread(void *a, void *b, void *c)
 					}
 					uint32_t _want = (RING_SAMPLES / 2u) + 16u * SAMP_PER_BLK;
 					if (_want > RING_SAMPLES) _want = RING_SAMPLES - SAMP_PER_BLK;
-					if (g_win_free && g_win_rev)
+					if (g_win_rev)
 						_want = 0;   /* M16: reversed window — skip the
 						              * forward prime; the starve fade-in
 						              * covers the first fill (heads rule) */
@@ -3705,6 +3873,7 @@ static void streamer_thread(void *a, void *b, void *c)
 					 * this path only decides how much of the final
 					 * block belongs to the lap. */
 					bool _plain = (_cdiv == 1u && !g_win_free &&
+						       !g_win_rev &&
 						       !head_active(i) && t->len_samps &&
 						       _win == _wper && _wper == _gb);
 #else
@@ -3930,7 +4099,7 @@ static void streamer_thread(void *a, void *b, void *c)
 					 * path's room/content/race discipline exactly. */
 					if (cdiv == 1u && !g_win_free && !head_active(i) &&
 					    t->len_samps && win == wper && wper == gb &&
-					    !((bool)(g_win_free && g_win_rev))) {
+					    !g_win_rev) {
 						uint32_t Ls  = t->len_samps;
 						uint32_t lp  = ((pw % Ls) + Ls -
 						              (t->start_samps % Ls)) % Ls;
@@ -4000,7 +4169,7 @@ static void streamer_thread(void *a, void *b, void *c)
 					 * block's samples are flipped after decode below:
 					 * together a continuous time-reversed stream. */
 					bool hrev = (bool)(heads_engaged() && g_head_rev[i]) ^
-						    (bool)(g_win_free && g_win_rev);
+						    (bool)g_win_rev;
 					if (hrev) c = (cyc - 1u) - c;
 					uint32_t loop_blk = (c / win) * wper + wbase + (c % win);
 					uint32_t n = budget;
@@ -4142,7 +4311,7 @@ static void streamer_thread(void *a, void *b, void *c)
 						uint32_t ci = (c + (((uint32_t)bnc_pos[hk] *
 							bnc_cyc) >> 8)) % bnc_cyc;
 						uint32_t hr = (uint32_t)bnc_rev[hk] ^
-							(uint32_t)(bnc_wfree && bnc_wrev);
+							(uint32_t)bnc_wrev;
 						if (hr) ci = (bnc_cyc - 1u) - ci;
 						uint32_t lb = (ci / bnc_win) * bnc_wper +
 							bnc_wbase + (ci % bnc_win);
@@ -4784,8 +4953,19 @@ static void controls_diag(void)
 	int mg[NTRK];
 	for (int _i = 0; _i < NTRK; _i++)
 		mg[_i] = (int)((int32_t)(trk[_i].p_w - cpos) / (int)(LOOP_RATE / 1000u));
+	/* M25-r4 INSTRUMENTATION (diag only): each track's phase INSIDE its own
+	 * loop, start_samps mod len_samps. This number is the one thing a
+	 * convergence retune must NOT change — it rescales len_samps for every
+	 * track but never touches start_samps, so if the hypothesis is right
+	 * this jumps at the retune for any track whose anchor is non-zero.
+	 * Track 1 anchors at 0 and is immune, which is why the symptom only
+	 * ever showed on an overdub. */
+	uint32_t phz[NTRK];
+	for (int _i = 0; _i < NTRK; _i++)
+		phz[_i] = trk[_i].len_samps
+			? (trk[_i].start_samps % trk[_i].len_samps) : 0u;
 	printk("LOOPER %dHz song=%d %s hp=%d hpin=%d usb=%d chg=%d batt=%d bpm=%d detbpm=%d vol=%d "
-	       "trk[%s %s %s %s] rec=%d mut=%u%u%u%u ovr=%u rerr=%u werr=%u marg=[%d %d %d %d]ms stv=[%u %u %u %u] len=[%u %u %u %u] st=[%u %u %u %u] spim=%d cache=%d ckb=%u wbi=%u chop=%u/%u m22[tap=%u rf=%u bf=%u Ls=%u Lb=%u pph=%d sp=%u v=%u cnv=%d/%d]\n",
+	       "trk[%s %s %s %s] rec=%d mut=%u%u%u%u ovr=%u rerr=%u werr=%u marg=[%d %d %d %d]ms stv=[%u %u %u %u] len=[%u %u %u %u] st=[%u %u %u %u] spim=%d cache=%d ckb=%u wbi=%u chop=%u/%u ph=[%u %u %u %u] anc[cp=%u bkf=%u mod=%u] chain[gbf0=%u grs0=%u gbf1=%u ganc=%u pat=%u] m22[tap=%u rf=%u bf=%u Ls=%u Lb=%u pph=%d sp=%u v=%u cnv=%d/%d snap=%u/%u]\n",
 	       (int)LOOP_RATE, (int)g_slot, g_playing ? "PLAY" : "STOP", g_hp_on, g_hp_in,
 	       usb_present() ? 1 : 0, charging() ? 1 : 0, batt,
 	       g_play_bpm, g_det_bpm, g_master_vol_q8,
@@ -4802,10 +4982,15 @@ static void controls_diag(void)
 	       (unsigned)trk[0].start_blk, (unsigned)trk[1].start_blk, (unsigned)trk[2].start_blk, (unsigned)trk[3].start_blk,
 	       emmc_spim_active() ? 1 : 0, g_cache_on ? 1 : 0, (unsigned)g_cache_kb, (unsigned)emmc_dbg_wr_busy_max,
 	       (unsigned)g_chop_div, (unsigned)g_chop_off,
+	       (unsigned)phz[0], (unsigned)phz[1], (unsigned)phz[2], (unsigned)phz[3],
+	       (unsigned)g_dbg_anc_cp, (unsigned)g_dbg_anc_bkf, (unsigned)g_dbg_anc_mod,
+	       (unsigned)g_dbg_gbf0, (unsigned)g_dbg_grs0, (unsigned)g_dbg_gbf1,
+	       (unsigned)g_dbg_ganc, (unsigned)g_dbg_pat,
 	       (unsigned)g_dbg_tap_bs, (unsigned)g_dbg_rf, (unsigned)g_dbg_bf,
 	       (unsigned)g_dbg_lens, (unsigned)g_dbg_lenb,
 	       (int)g_dbg_punch_ph, (unsigned)g_dbg_punch_sp, (unsigned)g_dbg_speed,
-	       (int)g_dbg_cnv_beats, (int)g_dbg_cnv_corr);
+	       (int)g_dbg_cnv_beats, (int)g_dbg_cnv_corr,
+	       (unsigned)g_snap_took, (unsigned)g_snap_took);
 	{
 		/* CPU= per-thread share of the last window, in percent: audio,
 		 * streamer, midi, main, everything-else(usb/idle/isr). Answers
@@ -5156,7 +5341,57 @@ static void led_service(void)
 	for (int i = 0; i < NTRK; i++)
 		if (trk[i].state != TS_EMPTY) active = 1;
 
-	if (!ever_streamed && !active) {
+	if (g_snap_sweep) {
+		/* M23-r5 THE HOOK. A one-shot nudge deserves a one-shot picture:
+		 * the row sweeps BACK AND FORTH — hunting, not yet sure — and
+		 * then catches the beat and rides it BACKWARD, hand-in-hand,
+		 * before letting go. It reads as "found it, locked, done", and
+		 * because nothing persists afterwards there is no mode to
+		 * explain. Sits above standby and the metronome: those own the
+		 * whole row unconditionally and would overwrite it. */
+		/* It sweeps, then it HUNTS FOR THE BEAT AND STOPS ON IT. The
+		 * row bounces 1-2-3-4-3-2-1-2... off a single index, two
+		 * frames per LED so the turnaround is not a stall (r8 split
+		 * it in two and the shared end LED held double). From the
+		 * second bounce on, every frame asks whether the walking LED
+		 * is the one the grid is on RIGHT NOW, and the first time it
+		 * is, the sweep ends there. led_service falls straight
+		 * through to the metronome, already lit on that same LED, so
+		 * there is no jump: the hunt catches the beat and the beat
+		 * carries on. The walker steps ~9x faster than the beat, so a
+		 * catch inside one bounce is certain; 48 is only a floor. */
+		uint32_t sstep = (uint32_t)(48u - g_snap_sweep) / 2u;
+		uint32_t sp_   = sstep % 6u;
+		uint32_t lit   = (sp_ <= 3u) ? sp_ : (6u - sp_);
+		int sgb = -1;
+		if (g_grid_active && g_grid_beat_frames)
+			sgb = (int)(((g_sample_clock - g_grid_anchor) /
+				g_grid_beat_frames) & 3u);
+		for (int i = 0; i < NUM_TRACK_LEDS; i++)
+			((uint32_t)i == lit) ? track_led_on(i) : track_led_off(i);
+		if (sstep >= 6u && sgb >= 0 && (uint32_t)sgb == lit) g_snap_sweep = 0;
+		else g_snap_sweep--;
+	} else if (g_led_shrug) {
+		/* M25-r12 THE SHRUG, HOISTED. It used to be handled INSIDE the
+		 * per-track LED loop, which only runs once something is
+		 * recorded or audio has streamed. But the snap declines while
+		 * you are still SETTING UP a grid — nothing recorded, no input
+		 * — so the standby chase owned the row, the shrug was never
+		 * drawn, and it never decremented either. It sat at 20 until
+		 * the first track was armed and then drained all at once at
+		 * the ~8 ms released cadence: a 15 Hz flicker arriving long
+		 * after the gesture that caused it. This is EXACTLY the bug
+		 * the snap sweep had in M23, hoisted for exactly the same
+		 * reason: anything that answers a GESTURE has to outrank the
+		 * ambient displays, because the gesture can happen while they
+		 * own the row. (The copy still inside the per-track loop is
+		 * now unreachable and harmless; the bounce's shrug comes
+		 * through here too and gets the same guarantee.) */
+		uint32_t son = (g_led_shrug >> 2) & 1u;
+		for (int i = 0; i < NUM_TRACK_LEDS; i++)
+			son ? track_led_on(i) : track_led_off(i);
+		g_led_shrug--;
+	} else if (!ever_streamed && !active) {
 		/* STANDBY: no audio in + nothing recorded -> gentle chase = "waiting" */
 		static uint32_t ch;
 		uint32_t pos = (ch++ / 40u) % NUM_TRACK_LEDS;   /* advance ~every 320 ms */
@@ -5177,7 +5412,8 @@ static void led_service(void)
 			if (trk[i].state != TS_EMPTY) loaded = 1;
 		if (gbeat >= 0 && !loaded) {
 			/* gridded song, nothing recorded yet: 1-2-3-4 metronome
-			 * chase (downbeat = LED 1) — the tapped grid made visible. */
+			 * chase (downbeat = LED 1) — the tapped grid made visible.
+ */
 			for (int i = 0; i < NUM_TRACK_LEDS; i++)
 				((i == gbeat) && on_beat) ? track_led_on(i)
 				                          : track_led_off(i);
@@ -5253,7 +5489,7 @@ static void led_service(void)
 					uint32_t c2 = ((pwb2 % cyc2) + cyc2 -
 						       (hs2->start_blk % cyc2) + ho2) % cyc2;
 					{
-						int rv2 = (g_win_free && g_win_rev) ? 1 : 0;
+						int rv2 = g_win_rev ? 1 : 0;
 						if (heads_engaged() && g_head_rev[i]) rv2 ^= 1;
 						if (rv2)
 							c2 = (cyc2 - 1u) - c2;   /* chase walks back */
@@ -5878,6 +6114,8 @@ int main(void)
 	uint64_t tap_first_s = 0;             /* sample-clock at first tap */
 	uint64_t tap_last_s  = 0;             /* sample-clock at the latest tap */
 	uint64_t press_start_s = 0;           /* M20 F9: sample-clock at the FN PRESS edge */
+	int64_t  any_tap_t = 0;               /* M23-r6: every FN tap, run or not */
+	uint8_t  fast_pair = 0;               /* M23-r6: last two taps < 280 ms apart */
 	int      fnp_low = 0;                 /* PLAY-release debounce (passes) */
 	int64_t combo_start = -1;   /* FUNCTION+PLAY: when the combo was first seen */
 	uint8_t combo_fired = 0;    /* mode already toggled this combo press */
@@ -5976,6 +6214,26 @@ int main(void)
 				 * so this read trails the finger by at most one 8 ms
 				 * control pass. */
 				press_start_s = g_sample_clock;
+				/* M23-r6b: measure the gap from the last completed
+				 * tap to THIS PRESS. The clear gesture is tap then
+				 * press-and-HOLD, so the second press never becomes
+				 * a tap — detecting at tap-release (r6) could not
+				 * fire for the very gesture it was written for. */
+				/* 280 ms is NOT an accident guard — it is the
+				 * discriminator, and it pairs with the tap-run
+				 * rule below that resets tap_n whenever two taps
+				 * land under 200 ms apart. Both encode the same
+				 * idea: this pair is FASTER THAN ANY TEMPO, so it
+				 * cannot be a tap run. M25 tried widening it to
+				 * 800 ms for #33 and that was wrong — 800 ms is
+				 * 75 BPM, squarely musical. Worse, a tap run that
+				 * FAILS to register (taps <200 ms, >1500 ms, or
+				 * >20% irregular) leaves tap_n at 1, so the very
+				 * next hold takes the clear branch: a fumbled snap
+				 * would erase the grid. #33's discoverability is a
+				 * DOCS problem, not a timing one. */
+				fast_pair = (any_tap_t &&
+					     (press_start - any_tap_t) < 280) ? 1u : 0u;
 			}
 
 			/* MODE TOGGLE — FUNCTION + PLAY held together ~0.7 s flips the
@@ -6196,8 +6454,19 @@ int main(void)
 					if (cp_cnt == 3) {          /* committed press edge */
 						int64_t cnow = k_uptime_get();
 						combo_seen = 1;
-						g_win_free = 0;   /* M16: buttons reclaim the */
-						g_win_rev = 0;    /* stepped div/off window   */
+						/* M23-r11 (nervouskidz): the buttons reclaim
+						 * the window SHAPE from the faders — they do
+						 * NOT get to overrule which DIRECTION the
+						 * faders are asking for. Crossing the pair is
+						 * a physical statement that stays true while
+						 * the faders stay crossed, so a rocker reset
+						 * must not silently un-reverse playback while
+						 * the hardware still says reversed. Clearing
+						 * g_win_free alone used to do exactly that,
+						 * because every consumer read the direction as
+						 * (g_win_free && g_win_rev) — see below, they
+						 * now read g_win_rev on its own. */
+						g_win_free = 0;
 						uint32_t d = g_chop_div, o = g_chop_off;
 						if (vb == VOL_TEMPO_UP || vb == VOL_TEMPO_DOWN) {
 							if (cp_dcl_band == (int)vb &&
@@ -6244,8 +6513,7 @@ int main(void)
 							g_meta.chop[g_slot][1] = (uint8_t)o2;
 							g_meta_save_req = 1;  /* writer coalesces */
 						}
-						g_chop_req = 1;
-						g_dip_req = 1;
+						g_chop_defer = 1;   /* M24: glide is continuous */
 						cp_rep_at = cp_cnt + cp_rep_iv;
 						if (cp_rep_iv > 5) cp_rep_iv--;   /* floor ~125 ms */
 					} else if (cp_cnt > 3 && cp_rep_at && cp_cnt >= cp_rep_at &&
@@ -6274,8 +6542,7 @@ int main(void)
 								g_meta.chop[g_slot][1] = (uint8_t)g_chop_off;
 								g_meta_save_req = 1;
 							}
-							g_chop_req = 1;
-							g_dip_req = 1;
+							g_chop_defer = 1;   /* M24 */
 						}
 						cp_rep_at = cp_cnt + 15;   /* steady ~375 ms */
 					}
@@ -6406,8 +6673,17 @@ int main(void)
 					g_win_e8 = (uint8_t)we;
 					g_win_rev = (uint8_t)rv;
 					g_win_free = 1;
-					g_chop_req = 1;   /* engine: snap rings to it */
-					g_dip_req = 1;    /* declicked, like every chop edit */
+					/* M24 (geraasmasjien + luuuciano): this used to
+					 * snap the rings and dip the master EVERY 60 ms
+					 * for the whole sweep. The dip slams gain to 0
+					 * and recovers over ~28 ms, so at a 60 ms cadence
+					 * it is a ~16 Hz tremolo — and the snap threw away
+					 * the read-ahead on top, which is the silence they
+					 * described. Neither is needed while moving: the
+					 * streamer re-reads g_win_* on every fill round,
+					 * so the ring converges on the new window all by
+					 * itself. Defer, and settle up on release. */
+					g_chop_defer = 1;
 				}
 			}
 			if (combo_seen) {
@@ -6431,12 +6707,92 @@ int main(void)
 				 * any-time grid clear (tap FN once, then hold ~1 s)
 				 * was real but nearly impossible to hit
 				 * (geraasmasjien's "can't get back to free mode") */
-				if (held >= 1000 && !combo_seen) {
+				if (held >= 1000 && !combo_seen && fast_pair) {
+					/* DOUBLE-TAP then hold = clear the grid.
+					 * fast_pair alone decides this: a press
+					 * landing within 280 ms of a tap is faster
+					 * than any tempo, so it IS a double-click.
+					 * M25-r3: the old extra tap_n < 4 test broke
+					 * the gesture. The first tap of the double
+					 * click is indistinguishable from another
+					 * TEMPO tap, so after a 4-tap run it pushed
+					 * tap_n to 5 and the hold fell through to the
+					 * snap branch — marc's "sometimes it rounds
+					 * instead of deleting". It only misfired when
+					 * the delete-tap happened to land near the
+					 * beat being tapped, which is why it was
+					 * intermittent. Snap still needs tap_n >= 4
+					 * AND a gap wider than 280 ms, which is what
+					 * tapping a tempo and then holding gives you
+					 * at any sane BPM (469 ms at 128). */
 					g_grid_bpm_q8[g_slot] = 0;
 					g_grid_active = 0;
 					g_grid_fresh = 0;
-					g_cnv_set = 0;       /* M22c */
+					g_cnv_set = 0;
 					g_grid_save_req = 1;
+					tap_n = 0;
+					fast_pair = 0;
+					any_tap_t = 0;
+					combo_seen = 1;      /* spend the press */
+				} else if (held >= 1000 && !combo_seen && tap_n >= 4) {
+					/* M23: a hold after a COMMITTED run (4+ taps)
+					 * toggles integer-BPM snap. The press that
+					 * lands here would otherwise do nothing, and
+					 * a held press never registers as a tap (the
+					 * tap branch needs a release under 600 ms),
+					 * so tap_n is still the run's count. 1-3 taps
+					 * then hold stays the grid clear, exactly as
+					 * documented. */
+					/* M23-r5: a ONE-SHOT nudge, not a mode. The
+					 * grid you just tapped is pulled onto the
+					 * nearest whole BPM, once, right now — and
+					 * then everything behaves exactly as normal.
+					 * Nothing to remember, nothing to turn off,
+					 * no state to read off the panel afterwards. */
+					if (g_grid_active && g_grid_beat_frames) {
+						uint32_t nb = bpm_snap(g_grid_beat_frames);
+						g_snap_took = (nb && nb != g_grid_beat_frames);
+						if (g_snap_took) {
+							beat_set(nb);   /* r7: already grid-domain */
+							g_det_bpm = (int)(((uint64_t)LOOP_RATE *
+								60u + nb / 2u) / nb);
+							for (int k3 = 0; k3 < NTRK; k3++) {
+								uint32_t Lk = trk[k3].len_samps;
+								if (!Lk || !g_gridrec_beat_samps)
+									continue;
+								uint32_t Nk = (Lk +
+									g_gridrec_beat_samps / 2u) /
+									g_gridrec_beat_samps;
+								if (!Nk) continue;
+								uint32_t Ln = Nk * nb;
+								/* M25-r8: same truncating clamp as the
+								 * convergence path — see there. */
+								uint32_t dL3 = (Ln > Lk) ? (Ln - Lk)
+										         : (Lk - Ln);
+								if (Ln && (uint64_t)dL3 * 16u <=
+								          (uint64_t)Lk)
+									trk[k3].len_samps = Ln;
+								if (trk[k3].state == TS_PLAY)
+									trk[k3].p_w =
+										(g_consume_pos / SAMP_PER_BLK)
+										* SAMP_PER_BLK;
+							}
+							/* r7: beat_set did the rec beat too */
+							g_dip_req = 1;   /* declick, as ever */
+						}
+					}
+					if (g_snap_took) {
+						g_snap_sweep = 48;   /* budget; the catch ends it */
+					} else {
+						/* M25-r10: declined — the tapped tempo is not
+						 * near a whole number (or is out of range). Say
+						 * so. Reuses the bounce's shrug: all four
+						 * double-blink. Silence would be worse than
+						 * either outcome, because the gesture and the
+						 * grid-clear share a shape and you would not
+						 * know which one you had just missed. */
+						g_led_shrug = 20;
+					}
 					tap_n = 0;
 					combo_seen = 1;      /* spend the press */
 				}
@@ -6451,12 +6807,20 @@ int main(void)
 			/* show the power-off countdown only once it's clearly a hold, so a
 			 * quick tap (song change) doesn't flash it. Clear BOTH rows so the
 			 * countdown fills cleanly against a dark track row. */
-			if (held > 400) {
+			if (held > 400 && !g_snap_sweep) {
+				/* M23: a pending snap sweep owns the display. The
+				 * countdown clears BOTH rows every 25 ms and skips
+				 * led_service, so without this the confirmation was
+				 * invisible for as long as the finger stayed down —
+				 * which is the whole duration of the gesture. */
 				int lit = (int)((held * NUM_LEDS) / HOLD_MS_TO_OFF) + 1;
 				if (lit > NUM_LEDS) lit = NUM_LEDS;
 				all_off();
 				track_all_off();
 				for (int i = 0; i < lit; i++) led_on(i);
+			} else if (held > 400 && g_snap_sweep) {
+				all_off();          /* side row dark; sweep is the message */
+				led_service();
 			}
 			k_msleep(25);
 			continue;
@@ -6487,6 +6851,15 @@ int main(void)
 				 * SPACING and leaves PHASE alone. */
 				int64_t tnow = press_start;
 				uint64_t snow = press_start_s;
+				/* M23-r6: a DOUBLE-TAP is faster than any tempo.
+				 * The grid runs 50-200 BPM, i.e. 300-1200 ms
+				 * between taps, so anything under 280 ms cannot
+				 * be someone tapping time — it can only be a
+				 * deliberate double. That is now what separates
+				 * "clear the grid" from "round the BPM", instead
+				 * of the tap COUNT, which the two gestures kept
+				 * confusing each other over. */
+				any_tap_t = tnow;
 				if (tap_n > 0 && (tnow - tap_last > 1500 ||
 				                  tnow - tap_last < 200)) tap_n = 0;
 				if (tap_n > 1) {
@@ -6525,6 +6898,7 @@ int main(void)
 						g_grid_bpm_q8[g_slot] = (uint16_t)bpmq8;
 						g_grid_beat_frames = nf;   /* F9: exact */
 						g_dbg_tap_bs = nf;         /* r2 diag */
+						g_dbg_gbf0   = g_grid_beat_frames;   /* r6 */
 						g_grid_fresh = 1;   /* M20 F1: taps = truth */
 						g_grid_anchor = tap_first_s;
 						g_grid_next_tick = g_sample_clock;
@@ -6564,6 +6938,18 @@ int main(void)
 		combo_start = -1;
 		combo_fired = 0;
 		combo_seen  = 0;
+		if (g_chop_defer) {
+			/* M24: the gesture is over — pay once. The rings have been
+			 * tracking the window all along, so this is a latency snap
+			 * rather than a correction; the single dip covers whatever
+			 * splice the last edit left in flight. Discrete presses do
+			 * NOT come through here — they still take effect instantly,
+			 * because chop is a rhythmic gesture and immediacy is the
+			 * whole point of it. */
+			g_chop_defer = 0;
+			g_chop_req = 1;
+			g_dip_req = 1;
+		}
 		if (fnp_pend_snap) {   /* M15-r3: released mid-window — still a double */
 			fnp_pend_snap = 0;
 			g_play_speed_q16 = 65536u;
