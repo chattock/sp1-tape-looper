@@ -131,6 +131,11 @@ static bool charging(void);
 
 /* hold this long (ms) to power off - "a few seconds" like the real device */
 #define HOLD_MS_TO_OFF  2500
+/* M27: how long TRACK 1 + TRACK 4 must be held before we reset into the
+ * bootloader. Was 1200 ms, which collided with using 1+4 as a musical
+ * gesture; a mute tap is 100-200 ms, so 3000 gives ~15x margin and lines
+ * up with the power-off hold above. */
+#define DFU_HOLD_MS     3000
 
 /* ---- button ladders (Milestone 1: read + report the controls) ----
  * The PLAY/track and Vol/FWD/RWD buttons are resistor ladders read on the
@@ -6972,16 +6977,87 @@ int main(void)
 			 * (which freezes this block for the whole combo) a PLAY release
 			 * sweeping through the 1280-1390 band must not find a >1.2 s-old
 			 * combo14_t and reboot to the bootloader mid-performance. */
-			if (ctl_flush) combo14_t = -1;
-			if (trk_raw >= 1280 && trk_raw <= 1390) {
-				/* time-based (not a +8/iter counter) so the diag-print path can't
-				 * skew the 1.2 s threshold; the oversampled read + the band needing
-				 * to hold for a full 1.2 s makes an accidental Track-4 drift safe. */
-				if (combo14_t < 0) combo14_t = k_uptime_get();
-				else if (k_uptime_get() - combo14_t >= 1200) enter_dfu();
+			static uint8_t combo_held;         /* M27: tracks seen during this gesture */
+			static int combo_cand, combo_cnt;  /* M27-r3: two-pass confirm */
+			if (ctl_flush) { combo14_t = -1; combo_held = 0; combo_cand = 0; combo_cnt = 0; }
+			/* ===== M27-r3 COMBO DECODE =====================================
+			 * Any set of track buttons pressed together makes its OWN code on this
+			 * ladder. All sixteen states measured on hardware, all separable
+			 * (SP1-BUTTON-LADDER-MAP.md):
+			 *
+			 *   idle    2 | T1   213 | T2    404 | 1+2   572 | T3    728
+			 *   1+3   862 | 2+3  989 | 1+2+3 1100 | T4   1209 | 1+4  1303
+			 *   2+4  1391 | 1+2+4 1470 | 3+4  1548 | 1+3+4 1618
+			 *   2+3+4 1683 | ALL4 1743 | PLAY 1804
+			 *
+			 * Tightest gap 60 counts against +/-9 of noise. Bands are midpoints;
+			 * anything unlisted falls through to decode_tracks(), which still owns
+			 * idle / T1 / T2 / T3 / T4 / PLAY.
+			 *
+			 * THE HARD PART IS NOT THE BANDS, IT IS THE EDGES. Fingers neither
+			 * land nor lift together, so pressing 2+3+4 walks
+			 *   idle -> T2 -> 2+3 -> 2+3+4 -> 2+3 -> T2 -> idle
+			 * Hence three rules, each of which fixed a real hardware symptom:
+			 *  1. ACCUMULATE the mask (|=). r2 assigned it, so the 2+3 on the way
+			 *     OUT overwrote 2+3+4 and track 4 was never toggled — 'muting 3
+			 *     leaves one behind'.
+			 *  2. Toggle only at TRUE IDLE, not merely when no combo is present:
+			 *     the release sweep sits in single-button bands for several passes.
+			 *  3. Require a combo to hold for TWO passes before accepting it. A
+			 *     fast single press can transit a combo band for one sample on the
+			 *     way up, which would otherwise mute tracks nobody pressed.
+			 *
+			 * Bit order: 1<<0 = track 1 ... 1<<3 = track 4. */
+			int combo_now = 0;
+			if      (trk_raw >=  488 && trk_raw <  650) combo_now = 0x3; /* 1+2   ~572  */
+			else if (trk_raw >=  795 && trk_raw <  925) combo_now = 0x5; /* 1+3   ~862  */
+			else if (trk_raw >=  925 && trk_raw < 1044) combo_now = 0x6; /* 2+3   ~989  */
+			else if (trk_raw >= 1044 && trk_raw < 1154) combo_now = 0x7; /* 1+2+3 ~1100 */
+			else if (trk_raw >= 1256 && trk_raw < 1347) combo_now = 0x9; /* 1+4   ~1303 */
+			else if (trk_raw >= 1347 && trk_raw < 1430) combo_now = 0xA; /* 2+4   ~1391 */
+			else if (trk_raw >= 1430 && trk_raw < 1509) combo_now = 0xB; /* 1+2+4 ~1470 */
+			else if (trk_raw >= 1509 && trk_raw < 1583) combo_now = 0xC; /* 3+4   ~1548 */
+			else if (trk_raw >= 1583 && trk_raw < 1650) combo_now = 0xD; /* 1+3+4 ~1618 */
+			else if (trk_raw >= 1650 && trk_raw < 1713) combo_now = 0xE; /* 2+3+4 ~1683 */
+			else if (trk_raw >= 1713 && trk_raw < 1773) combo_now = 0xF; /* ALL4  ~1743 */
+			if (combo_now) {
+				raw = TRK_NONE;          /* a combo must never reach the single decode */
+				if (combo_now == combo_cand) { if (combo_cnt < 3) combo_cnt++; }
+				else { combo_cand = combo_now; combo_cnt = 1; }
+				if (combo_cnt >= 2) combo_held |= (uint8_t)combo_now;   /* rule 1 + 3 */
+				if (combo_now == 0x9) {  /* ONLY exactly 1+4 arms the bootloader */
+					/* time-based (not a +8/iter counter) so the diag-print path
+					 * can't skew the threshold. */
+					if (combo14_t < 0) combo14_t = k_uptime_get();
+					else if (k_uptime_get() - combo14_t >= DFU_HOLD_MS) enter_dfu();
+				} else {
+					combo14_t = -1;
+				}
+			} else if (combo_held) {
+				/* Mid-release: still sweeping down through single-button bands.
+				 * Swallow everything and wait for TRUE idle (rule 2). */
 				raw = TRK_NONE;
+				combo14_t = -1;
+				combo_cand = 0; combo_cnt = 0;
+				if (trk_raw >= 0 && trk_raw < 110) {
+					for (int _p = 0; _p < NTRK; _p++) {
+						if (!(combo_held & (1u << _p))) continue;
+						if (trk[_p].state == TS_EMPTY) continue;  /* nothing to mute */
+						trk[_p].muted ^= 1u;
+						if (g_slot < NUM_SLOTS) {
+							if (trk[_p].muted)
+								g_meta.song_mode[g_slot] |= (uint8_t)(0x10u << _p);
+							else
+								g_meta.song_mode[g_slot] &= (uint8_t)~(uint8_t)(0x10u << _p);
+						}
+					}
+					if (g_slot < NUM_SLOTS) g_meta_save_req = 1;  /* mutes persist */
+					combo_held = 0;
+					suppress_play = 1;
+				}
 			} else {
 				combo14_t = -1;
+				combo_cand = 0; combo_cnt = 0;
 				raw = decode_tracks(trk_raw);
 			}
 			/* trailing-PLAY guard (see the FUNCTION+PLAY combo exit): ignore
