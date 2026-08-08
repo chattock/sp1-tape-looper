@@ -6806,13 +6806,19 @@ int main(void)
 				continue;
 			}
 
-			if (held >= HOLD_MS_TO_OFF)
+			/* M28 (luuuciano): HOLD FN both rounds a tapped BPM and powers the
+			 * device off, and people were switching it off mid-performance
+			 * reaching for the musical gesture. Only honour the power-off hold
+			 * when the tape is STOPPED — his own suggestion, and it also frees
+			 * a plain HOLD FN while playing for future use. To power off, stop
+			 * the tape first. */
+			if (held >= HOLD_MS_TO_OFF && !g_playing)
 				power_off();             /* never returns */
 
 			/* show the power-off countdown only once it's clearly a hold, so a
 			 * quick tap (song change) doesn't flash it. Clear BOTH rows so the
 			 * countdown fills cleanly against a dark track row. */
-			if (held > 400 && !g_snap_sweep) {
+			if (held > 400 && !g_snap_sweep && !g_playing) {
 				/* M23: a pending snap sweep owns the display. The
 				 * countdown clears BOTH rows every 25 ms and skips
 				 * led_service, so without this the confirmation was
