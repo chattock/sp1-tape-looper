@@ -3993,6 +3993,12 @@ static void streamer_thread(void *a, void *b, void *c)
 				if (g_slot != slot) break;
 				struct looptrk *t = &trk[i];
 				if (t->state != TS_PLAY && !head_active(i)) continue;
+				/* ===== M29: do not read what nobody can hear =================
+				 * A muted track is still TS_PLAY, so its ring was filled at full
+				 * rate from flash and the mixer discarded every sample. During a
+				 * take that waste is the difference between over-budget and 84%
+				 * of the bus. Scoped to takes only; heads sources never skipped. */
+				if (g_rec_track >= 0 && t->muted && !head_active(i)) continue;
 				int32_t avail = (int32_t)(t->p_w - cpos);
 				/* DEAD-HISTORY SNAP: a frontier BEHIND the playhead is pure
 				 * waste — the mixer reads exactly pring[cpos], so every
@@ -6259,7 +6265,12 @@ int main(void)
 				g_play_bpm = 80;
 			}
 			int fraw = ladder_read(&adc_ladder[LAD_TRACKS]);
-			if (fraw > 1600) {
+			/* M31: 1600 -> 1773. M27 made multi-track combos reachable codes on
+			 * this ladder (2+3+4 = 1683, ALL4 = 1743), and anything over the old
+			 * 1600 counted as a PLAY press under FN - three phantom taps inside
+			 * 600 ms toggled heads mode. 1773 sits between ALL4 and PLAY (1798+)
+			 * with 25+ counts of margin against +/-9 measured noise. */
+			if (fraw > 1773) {
 				fnp_low = 0;
 				combo_seen = 1;
 				if (combo_start < 0) {           /* fresh PLAY press edge */
@@ -6416,8 +6427,18 @@ int main(void)
 			 * with FUNCTION held reads as the Track-4 band -> bank 4; the
 			 * DFU combo remains a no-FUNCTION gesture. */
 			{
-				enum trk_btn tb = (fraw >= 110 && fraw < 1500)
-						  ? decode_tracks(fraw) : TRK_NONE;
+				/* M31-r2: only the four MEASURED single-track bands may bank-jump.
+				 * The old filter (110..1500 -> decode_tracks) let combo codes through
+				 * as WRONG single tracks (1+2=572 read as track 3, 2+3=989 as track 4,
+				 * 1+4=1303 as track 4...), so pressing several tracks with FN held
+				 * fired phantom jump_to_slot() calls - songs switched by themselves
+				 * and could land on an empty slot. Combos under FN now do NOTHING.
+				 * Bands from SP1-BUTTON-LADDER-MAP.md, gaps between bands excluded. */
+				enum trk_btn tb = TRK_NONE;
+				if      (fraw >= 110  && fraw <  308) tb = TRK_1;   /* ~213  */
+				else if (fraw >= 308  && fraw <  488) tb = TRK_2;   /* ~404  */
+				else if (fraw >= 650  && fraw <  795) tb = TRK_3;   /* ~728  */
+				else if (fraw >= 1099 && fraw < 1256) tb = TRK_4;   /* ~1209 */
 				if (tb >= TRK_1 && tb <= TRK_4) {
 					if (tb == bj_cand) bj_cnt++;
 					else { bj_cand = tb; bj_cnt = 1; }
@@ -6587,7 +6608,12 @@ int main(void)
 					if (!hf_eng[hf]) {
 						int d = q - hf_snap[hf];
 						if (d < 0) d = -d;
-						if (d < 3) continue;      /* intent gate */
+						/* M31: intent gate 3 -> 7 (~2.7% of travel). 3 was under the
+						 * measured drift of a loose fader and under hand-wobble while
+						 * holding FN for something else; one accidental crossing keeps
+						 * the fader engaged for the WHOLE hold, which was the phantom
+						 * head-scrub during unrelated FN gestures. */
+						if (d < 7) continue;      /* intent gate */
 						hf_eng[hf] = 1;
 						combo_seen = 1;           /* press is spent */
 						g_fh_latch[hf] = 1;
@@ -6633,7 +6659,12 @@ int main(void)
 					if (!wf_eng[wf]) {
 						int d = q - wf_snap[wf];
 						if (d < 0) d = -d;
-						if (d < 3) continue;      /* intent gate */
+						/* M31: intent gate 3 -> 7, same reasoning as the heads loop.
+						 * This is ALSO the row-49 fix: fader 4 here is the DJ filter,
+						 * and its physical drift crossing the old 3-count gate while
+						 * FN was held for chopping is what stripped the low end from
+						 * all four loops (luuuciano's video, marc's random high-pass). */
+						if (d < 7) continue;      /* intent gate */
 						wf_eng[wf] = 1;
 						combo_seen = 1;           /* press is spent */
 						g_fh_latch[wf] = 1;
@@ -6812,13 +6843,16 @@ int main(void)
 			 * when the tape is STOPPED — his own suggestion, and it also frees
 			 * a plain HOLD FN while playing for future use. To power off, stop
 			 * the tape first. */
-			if (held >= HOLD_MS_TO_OFF && !g_playing)
+			/* M31-r2: also allow power-off when NO LOOP EXISTS. A song switch
+			 * onto an empty slot leaves g_playing latched with nothing loaded,
+			 * and the M28 gate then refused power-off on a silent device. */
+			if (held >= HOLD_MS_TO_OFF && (!g_playing || !g_loop_active))
 				power_off();             /* never returns */
 
 			/* show the power-off countdown only once it's clearly a hold, so a
 			 * quick tap (song change) doesn't flash it. Clear BOTH rows so the
 			 * countdown fills cleanly against a dark track row. */
-			if (held > 400 && !g_snap_sweep && !g_playing) {
+			if (held > 400 && !g_snap_sweep && (!g_playing || !g_loop_active)) {
 				/* M23: a pending snap sweep owns the display. The
 				 * countdown clears BOTH rows every 25 ms and skips
 				 * led_service, so without this the confirmation was
