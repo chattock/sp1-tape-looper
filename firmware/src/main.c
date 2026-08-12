@@ -5650,6 +5650,19 @@ static bool charging(void)
 static void stop_and_flush(void)
 {
 	g_stop_req = 1;                       /* finalize any in-progress take */
+	/* M39: stamp the live tape speed into the song index before the final
+	 * flush. The only other copy happens on song SWITCH, so a tempo set
+	 * and powered straight off reverted to the last saved value — while
+	 * switching songs first made it stick (confirmed on hardware, both
+	 * ways). Every save trigger (take end, delete, brightness) wrote a
+	 * stale slot speed. The busy wait below already blocks until
+	 * g_meta_save_req is serviced, so this is one index write at
+	 * power-off and nothing anywhere else. */
+	if (g_meta_loaded && g_slot < NUM_SLOTS &&
+	    g_meta.slot[g_slot].speed_q16 != g_play_speed_q16) {
+		g_meta.slot[g_slot].speed_q16 = g_play_speed_q16;
+		g_meta_save_req = 1;
+	}
 	for (int i = 0; i < 300; i++) {      /* bounded ~3 s (WDT is 4 s, fed each pass) */
 		feed_wdt();
 		int busy = (g_rec_track >= 0) || g_meta_save_req;
