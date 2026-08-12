@@ -238,6 +238,25 @@ bool emmc_spim_active(void) { return s_spim_ok; }  /* diag: 32MHz SPIM3 DMA live
 /* Table-driven CRC16-CCITT: the bitwise version costs ~14% CPU at the 48 kHz
  * read rate; the table costs ~1%. Built once at init. */
 static uint16_t s_crc16_tab[256];
+/* SLICE-BY-4: three companion tables. Each one advances a byte further
+ * than the last, so crc16() can fold four bytes in one pass. The tables
+ * are built at init from the same polynomial, so no constants go in
+ * flash and the result is bit-identical to the byte-at-a-time version.
+ *
+ * WHY: a thread census found the processor saturated at high tape speed
+ * (0% idle). CRC16 cost 0.34 ms of the 0.81 ms spent on each block read.
+ * That is 42%, the largest single item in the read path, and it is pure
+ * computation that this firmware owns. The change took the same bench
+ * routine from 122 starve events to 0.
+ *
+ * VERIFIED off-target before the first build: all 65,536 two-byte inputs,
+ * 280,000 random cases at every unaligned offset, and the CRC-16/XMODEM
+ * known answer ("123456789" = 0x31c3). Verified on hardware by rerr=0
+ * and werr=0 across a full bench run. A wrong CRC cannot hide. It shows
+ * up at once as a storm of retries.
+ *
+ * COST: 1,536 bytes of RAM. */
+static uint16_t s_crc16_t1[256], s_crc16_t2[256], s_crc16_t3[256];
 static void crc16_tab_init(void)
 {
 	for (uint32_t i = 0; i < 256; i++) {
@@ -246,6 +265,15 @@ static void crc16_tab_init(void)
 			crc = (crc & 0x8000) ? (uint16_t)((crc << 1) ^ 0x1021)
 					     : (uint16_t)(crc << 1);
 		s_crc16_tab[i] = crc;
+	}
+	for (uint32_t i = 0; i < 256; i++) {
+		uint16_t v = s_crc16_tab[i];
+		v = (uint16_t)((v << 8) ^ s_crc16_tab[(v >> 8) & 0xFFu]);
+		s_crc16_t1[i] = v;
+		v = (uint16_t)((v << 8) ^ s_crc16_tab[(v >> 8) & 0xFFu]);
+		s_crc16_t2[i] = v;
+		v = (uint16_t)((v << 8) ^ s_crc16_tab[(v >> 8) & 0xFFu]);
+		s_crc16_t3[i] = v;
 	}
 }
 /* READ-ONLY -O2: -O2 just this CRC + the read bit-bang below. -O2 is proven safe
@@ -256,7 +284,23 @@ __attribute__((optimize("O2")))
 static uint16_t crc16(const uint8_t *data, uint32_t len)
 {
 	uint16_t crc = 0;
-	for (uint32_t i = 0; i < len; i++)
+	uint32_t i = 0;
+	/* Four bytes per pass. The block is MSB-first on the wire, so the
+	 * 32-bit load is byte-swapped before it folds in. The Cortex-M4
+	 * handles the unaligned case in hardware. __builtin_memcpy keeps
+	 * this strictly conforming and still compiles to one LDR. The tail
+	 * loop is the original code and covers any length. */
+	while (len - i >= 4u) {
+		uint32_t w;
+		__builtin_memcpy(&w, data + i, 4);
+		uint32_t t = ((uint32_t)crc << 16) ^ __builtin_bswap32(w);
+		crc = (uint16_t)(s_crc16_t3[(t >> 24) & 0xFFu] ^
+				 s_crc16_t2[(t >> 16) & 0xFFu] ^
+				 s_crc16_t1[(t >>  8) & 0xFFu] ^
+				 s_crc16_tab[t & 0xFFu]);
+		i += 4u;
+	}
+	for (; i < len; i++)
 		crc = (uint16_t)((crc << 8) ^ s_crc16_tab[(crc >> 8) ^ data[i]]);
 	return crc;
 }
