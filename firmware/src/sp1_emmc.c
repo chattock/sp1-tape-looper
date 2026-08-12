@@ -41,7 +41,7 @@
 
 /* Command-phase half-period: starts safe (eMMC identification requires a slow
  * clock), switched to 0 (full-speed bit-bang, ~1-2 MHz) once init completes —
- * the data path already proved the bus at 8 MHz, and each CMD18/CMD25/CMD12
+ * the data path already proved the bus at 32 MHz, and each CMD18/CMD25/CMD12
  * handshake at the slow clock cost ~400-600 us of pure overhead per chunk. */
 static uint32_t s_cmd_half_us = CMD_SAFE_HALF_US;
 
@@ -100,7 +100,8 @@ uint16_t emmc_dbg_rd_crc     = 0;    /* CRC16 the card appended to last read blo
 
 /* ===== SPIM3 hardware-accelerated DATA path ===================================
  * The bit-bang moves data at ~1.3 Mbit/s with the CPU pinned for every bit;
- * SPIM3 + EasyDMA clocks the identical wire format at 16 MHz with the CPU free.
+ * SPIM3 + EasyDMA clocks the identical wire format at 32 MHz with the CPU free
+ * on the 48 kHz build (the 24 kHz build uses M16).
  * eMMC DAT0 at default speed is SPI-mode-0 compatible: the host launches data
  * while CLK is low, the card samples (and launches) on the rising edge, MSB
  * first. Only the raw 512-byte payloads ride SPIM; commands, start-bit hunts,
@@ -110,7 +111,7 @@ uint16_t emmc_dbg_rd_crc     = 0;    /* CRC16 the card appended to last read blo
 /* SPIM3 (the only instance with >8MHz) flash clock. eMMC default-speed mode is
  * spec'd to <=26 MHz; the nRF SPIM has no 26 MHz step, so the choices are
  * M16 (16 MHz, in spec) or M32 (32 MHz, slightly over). M32 doubles the data
- * rate -- it halves the ~4 ms per-read data floor AND speeds the record flush,
+ * rate -- it halves the per-read data floor AND speeds the record flush,
  * which is what attacks the real 4-stream bottleneck (card-stall + flush-rate),
  * not CPU. It is a calculated overclock: the CRC verify+retry layer catches any
  * signal-integrity errors (watch rerr=/werr= in the diag) and a corrupted write
@@ -160,7 +161,7 @@ static void spim_xfer(const uint8_t *tx, uint32_t txlen, uint8_t *rx, uint32_t r
 	NRF_SPIM3->EVENTS_END = 0;
 	NRF_SPIM3->TASKS_START = 1;
 	while (!NRF_SPIM3->EVENTS_END) {
-		/* ~260 us for a full block at 16 MHz */
+		/* ~130 us for a full block at 32 MHz (measured 32.02 Mbit/s) */
 	}
 	NRF_SPIM3->ENABLE = 0;
 }
@@ -220,7 +221,7 @@ static uint8_t crc7(const uint8_t *data, uint8_t len)
 	return (crc << 1) | 1;
 }
 
-/* CRC error counters: at 8 MHz SPIM speeds, occasional bit errors are a fact of
+/* CRC error counters: at 32 MHz SPIM speeds, occasional bit errors are a fact of
  * life on this bus — every read is now verified and every write's CRC-status
  * token is enforced, with the caller retrying. These count the catches. */
 volatile uint32_t emmc_crc_rd_errs;
@@ -459,7 +460,7 @@ static bool read_data_block(uint8_t *buf)
 	if (s_spim_ok) {
 		/* FAST PATH: the start bit was just consumed by the bit-bang hunt
 		 * above, so the remaining 512 data bytes + CRC16 are exactly byte-
-		 * aligned — one 8 MHz SPIM RX DMA (~515 us vs ~1.7 ms bit-banged). */
+		 * aligned — one 32 MHz SPIM RX DMA (~130 us vs ~1.7 ms bit-banged). */
 		spim_xfer(NULL, 0, s_dma_rx, sizeof(s_dma_rx));
 		memcpy(buf, s_dma_rx, EMMC_BLOCK_SIZE);
 		emmc_dbg_rd_crc = (uint16_t)(((uint16_t)s_dma_rx[EMMC_BLOCK_SIZE] << 8) |
@@ -516,7 +517,7 @@ static bool write_data_block(const uint8_t *buf)
 	RDAT_HIGH();
 	if (s_spim_ok) {
 		/* FAST PATH: the whole framed block — Nwr gap, start bit, 512 data
-		 * bytes, CRC16, end bit — as one 8 MHz SPIM DMA burst (~520 us vs
+		 * bytes, CRC16, end bit — as one 32 MHz SPIM DMA burst (~130 us vs
 		 * ~3.3 ms bit-banged, with the CPU free for the audio engine). */
 		uint16_t crc = crc16(buf, EMMC_BLOCK_SIZE);
 		s_dma_tx[0] = 0xFF;                       /* Nwr idle gap          */
