@@ -29,7 +29,7 @@ transfer page reads the device's layout, so the one page handles 1.x and
 Build it yourself: Zephyr v4.3.1 + SDK 0.17.4, apply
 zephyr-patches/uac2-windows-fs-feedback.patch to the Zephyr tree, then
 `west build -p -b stem_player firmware -- -DBOARD_ROOT=$(pwd)`.
-Flash: hold Track 1 + Track 4 while plugging in USB, then use
+Flash: hold Track 1 + Track 4 for 3 s while plugging in USB, then use
 solderless.engineering with sp1_looper.bin.
 
 ## Features
@@ -163,8 +163,10 @@ SP-1 custom firmware) — no soldering or opening the device required:
 
 1. Open the Solderless SP-1 update tool: <https://solderless.engineering>
 2. Connect the SP-1 to your computer with a USB-C cable.
-3. Put the SP-1 into firmware-loading mode (hold **Track 1 + Track 4** while
-   powering on) and select the `.bin` file.
+3. Put the SP-1 into firmware-loading mode (hold **Track 1 + Track 4** for
+   **3 seconds** while powering on) and select the `.bin` file. A shorter
+   press just mutes those two tracks, so keep holding until the lights
+   change.
 4. Flash, then unplug and replug.
 
 > Note: loops you record survive re-flashing this firmware. The first time you
@@ -188,7 +190,8 @@ The one-page map ([full size](docs/sp1-control-map.png)):
   lands. A quick press does nothing (one dim blink), so the device can't
   switch on by accident in a bag or pocket.
 - Hold FUNCTION for about 2.5 s to turn it off (the four centre LEDs fill as a
-  countdown; release early to cancel).
+  countdown; release early to cancel). Power-off works only while the tape is
+  stopped, so a FUNCTION hold during playback cannot kill a performance.
 - Powering off while plugged into USB lands in the charging gauge instead of
   going dark; unplug from there to power off fully.
 
@@ -199,6 +202,8 @@ The one-page map ([full size](docs/sp1-control-map.png)):
 | Hold (~0.2 s), then let go | **Arms and records, hands-free.** Capture begins on the first sound it hears (a count-in is never recorded), and keeps going after you release. |
 | Tap the same track while it records | **Ends the take** — it starts looping immediately, exactly as long as you played it. A tap before any sound has arrived cancels the arm instead. |
 | Quick tap (playing track) | Mutes / unmutes that track (content kept). |
+| Quick tap on several tracks together | Mutes / unmutes **all of them at once** — any combination of the four works. |
+| Quick tap the **other three** together | **Solo** — everything but that track mutes in one press; the same press brings them back. |
 | Double-tap | Deletes that track. |
 
 - **Every track loops at its own length** — tracks freely coexist at
@@ -535,7 +540,7 @@ Build knobs:
 The most important rule when modifying the firmware: the SP-1 has no hardware
 reset, so the firmware must always feed the watchdog and must always offer a
 path back to the bootloader (here: hold FUNCTION to power off, or the
-Track 1 + Track 4 recovery combo). Do not remove those.
+Track 1 + Track 4 recovery combo, held 3 s). Do not remove those.
 
 ---
 
@@ -545,8 +550,12 @@ This is unofficial, community-made firmware, not affiliated with or endorsed by
 Teenage Engineering. Flashing custom firmware is at your own risk. It has been
 tested and works well, but no warranty is implied. If in doubt, make sure you
 understand the [Solderless](https://solderless.engineering) update process and
-the recovery options above before flashing. The Track 1 + Track 4 combo always
-returns the device to firmware-loading mode.
+the recovery options above before flashing. Two paths reach firmware-loading
+mode. While the firmware runs, hold exactly Track 1 + Track 4 for 3 seconds.
+If the firmware does not respond, hold Track 1 + Track 4 while you plug in
+USB power. The second path is part of the bootloader and always works. It
+must be those two alone: 1+2+4, 1+3+4 and all four are their own codes and
+will not reach the bootloader.
 
 ## Credits and licence
 

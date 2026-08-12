@@ -5,6 +5,47 @@ Versions 1.0.0-1.2.4 below were the 2.0 development line (developed as a
 fork by marc, never announced) — kept for the honest record. The classic
 4-song firmware lives on the `v1` branch. Base: 1.x at commit c60941c.
 
+## [2.7.0] - stabilization
+
+We measured the button ladder on hardware, all sixteen
+states. That explained mutes that missed, low end that vanished, and song
+jumps that nobody asked for. Flash reads also got 20% cheaper. Dropouts with 4 tracks at high speeds are still an issue 
+with audio feeding in over USB (no dropouts if audio input is paused)
+The full fix needs a storage change for CPU optimization which will ship with 3.0.
+
+### Small Optimizations
+- **Fewer dropouts.** Each 512-byte flash read gets a CRC check, and that
+  check ran one byte at a time. It was 42% of the read path. The CRC now
+  folds four bytes per pass.
+- **A muted track stops reading from flash during a take.** That bandwidth
+  goes to what you can hear.
+
+### Added
+- **Mute any set of tracks at once.** The four track buttons share one
+  analog pin. A multi-button press makes its own voltage, and most of those
+  voltages had no meaning in the decode table. All sixteen states are
+  measured and mapped now. Tap the other three tracks to solo one. This was
+  filed as a hardware limit for months. It was a table.
+- **Track 1 + Track 4 is two gestures.** A quick press mutes tracks 1 and 4.
+  A 3 s hold enters the bootloader. Only exactly 1+4 can arm it. 1+2+4,
+  1+3+4 and all four are their own codes and can never reach it.
+
+### Fixed
+- **The high-pass no longer turns on by itself.** The FUNCTION fader layer
+  engaged at 1.2% of travel. A loose fader or a hand-wobble crossed that.
+  The gate is 2.7% now, still trivial to cross on purpose.
+- **The window and the chop no longer edit themselves.**
+- **The start/end faders no longer flip to reverse when they are only near.**
+- **FUNCTION + several track buttons no longer changes the song.**
+- **FUNCTION + three or four track buttons no longer counts as PLAY.**
+- **The device can always power off.** A phantom song change latched the
+  transport with nothing loaded. The power-off gate then refused to run.
+- **Power-off no longer competes with the transport.** Holding function no longer accidently
+powers off device. The tape must be stopped to power-off.
+- **Tape speed survives power-off.** The speed reached the song index only
+  on a song switch. Power-off now stores the live speed before the final
+  flush. Found in release testing.
+
 ## [2.6.0] - 2026-08-05
 
 One clock. v2.5.0's bench ran at 120 BPM — one of only twelve
