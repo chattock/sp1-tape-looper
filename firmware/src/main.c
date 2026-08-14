@@ -1391,12 +1391,26 @@ static inline void tempo_feed(int16_t sv, uint32_t pos)
 	int32_t thr = g_tempo.peak >> 1;
 	if (!g_tempo.above && g_tempo.env > thr && thr > 200) {
 		g_tempo.above = 1;
-		if (g_tempo.last_onset && g_tempo.n < TEMPO_MAX_ONSETS) {
+		/* M42 (row 81): advance the IOI reference ONLY on a beat-scale
+		 * gap. Near-sine hits sag the envelope between half-cycles and
+		 * fire 2-3 crossings per hit; the <1/8 s gaps were already
+		 * dropped, but the reference still moved to the LAST SPUTTER,
+		 * so every real gap measured short — a uniform ~1-3% bias the
+		 * agreement guards could not see (grid retuned after a gridded
+		 * take; sim-reproduced on the narrowband corpus). Rolls and
+		 * fast subdivisions now accumulate into beat-multiples instead,
+		 * which the musical fold already handles. */
+		if (g_tempo.last_onset) {
 			uint32_t d = pos - g_tempo.last_onset;
-			if (d > LOOP_RATE / 8u) g_tempo.ioi[g_tempo.n++] = d;
+			if (d > LOOP_RATE / 8u) {
+				if (g_tempo.n < TEMPO_MAX_ONSETS)
+					g_tempo.ioi[g_tempo.n++] = d;
+				g_tempo.last_onset = pos;
+			}
+		} else {
+			g_tempo.last_onset = pos;
 		}
 		if (!g_tempo.first_onset) g_tempo.first_onset = pos ? pos : 1u;
-		g_tempo.last_onset = pos;
 	} else if (g_tempo.above && g_tempo.env < (thr * 3 >> 2)) {
 		g_tempo.above = 0;
 	}
@@ -1463,6 +1477,36 @@ static uint32_t tempo_refine(uint32_t bs)
 	if (!bs || g_tempo.n < 4u) return 0u;
 	if (!g_tempo.first_onset || g_tempo.last_onset <= g_tempo.first_onset)
 		return 0u;
+	/* M42 GATES: refinement can move a TAPPED grid, so the content must
+	 * actually be discrete, regular onsets. The old code got that
+	 * protection BY ACCIDENT — retrigger-corrupted gap lists failed the
+	 * span checks. With true references (M42) a wobbling pad logs gaps
+	 * pinned just above the 1/8 s floor, perfectly regular, plausible
+	 * enough to move the tap 4%+ (caught in offline sim). Deliberate now:
+	 *  - FLOOR CLEARANCE: median gap > 1.5x the floor — continuous
+	 *    envelope wobble piles up at floor+eps, real onsets do not;
+	 *  - REGULARITY: at least half the gaps within 12.5% of their
+	 *    median — rubato and mixed material keep the tap. */
+	{
+		uint32_t tmp[TEMPO_MAX_ONSETS];
+		memcpy(tmp, g_tempo.ioi, g_tempo.n * sizeof(tmp[0]));
+		for (uint32_t i = 1; i < g_tempo.n; i++) {
+			uint32_t v = tmp[i]; int j = (int)i - 1;
+			while (j >= 0 && tmp[j] > v) {
+				tmp[j + 1] = tmp[j]; j--;
+			}
+			tmp[j + 1] = v;
+		}
+		uint32_t med = tmp[g_tempo.n / 2u];
+		if (med * 2u <= (LOOP_RATE / 8u) * 3u) return 0u;
+		uint32_t good = 0;
+		for (uint32_t i = 0; i < g_tempo.n; i++) {
+			uint32_t d = (g_tempo.ioi[i] > med)
+				   ? g_tempo.ioi[i] - med : med - g_tempo.ioi[i];
+			if (d * 8u <= med) good++;
+		}
+		if (good * 2u < g_tempo.n) return 0u;
+	}
 	/* STAGE 1 — COARSE, over a SHORT span (<=4 beats). Counting half-beats
 	 * here needs the hypothesis only to be better than ~6%, so even a badly
 	 * tapped grid (marc's bench had one 3% out) still counts correctly. */
