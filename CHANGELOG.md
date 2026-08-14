@@ -5,6 +5,34 @@ Versions 1.0.0-1.2.4 below were the 2.0 development line (developed as a
 fork by marc, never announced) — kept for the honest record. The classic
 4-song firmware lives on the `v1` branch. Base: 1.x at commit c60941c.
 
+## [2.7.1] - instant record
+
+No format change: songs, grids and settings survive when flashed.
+
+### Added
+- **Instant record, on by default.** But recording still keeps the same behavior
+ of audio-threshold activation or right on the grid if there is one.
+- **Opt for slight-hold record.** Uncheck instant record on the transfer
+  site and takes keep only what comes after the short arm delay, like
+  before.
+
+### Fixed
+- **Grids hold still.** The machine measured each gridded take and moved
+  the grid afterward. It does not move the grid anymore. The grid you set
+  is the grid you keep, until you re-tap it.
+
+### Transfer site (ships with this firmware)
+- **Play.** Listen to any track in the browser before you download or
+  replace it. It loops at the song's tape speed.
+- **Delete.** Remove a track from the site. Same as double-tap delete.
+- **Upload many.** Select a batch of downloaded files. Each file goes to
+  its song and track by name. With Download all, this is a full backup
+  and restore.
+- **True lengths.** Cells show the recorded audio's length, not the loop
+  region. No more "56.3 s" on a two-bar take.
+- **A settings panel** with the instant-record switch, and progress bars
+  in a sticky activity log.
+
 ## [2.7.0] - stabilization
 
 We measured the button ladder on hardware, all sixteen
