@@ -49,10 +49,8 @@ What 2.0 adds on top of the 1.x looper:
   redefining it, so the timing you tapped in is the timing you keep; takes
   are exact whole numbers of beats and exact multiples of each other; the
   count-in is one beat; a punch pressed slightly LATE still starts on the
-  beat, filled in from the input the machine was already holding; and the
-  first take teaches the machine the real tempo from its own audio, which
-  the grid, metronome and MIDI clock then follow. No timing precision
-  required from you.
+  beat, filled in from the input the machine was already holding. No
+  timing precision required from you.
 - **Loop chop** — a live performance window over every playing track: shrink,
   grow, slide or reset it from the FUNCTION layer — or shape it directly on
   the faders (start / end / shift, any width), cross the edges to play the
@@ -199,7 +197,8 @@ The one-page map ([full size](docs/sp1-control-map.png)):
 
 | Gesture | Action |
 |---|---|
-| Hold (~0.2 s), then let go | **Arms and records, hands-free.** Capture begins on the first sound it hears (a count-in is never recorded), and keeps going after you release. |
+| Tap an **empty** track — the lightest touch | **Arms and records, hands-free.** Everything from the moment your finger lands is kept; capture begins on the first sound it hears (a count-in is never recorded), and keeps going after you release. |
+| Hold (~0.2 s) a **playing** track | **Re-records it** — the old take is replaced. |
 | Tap the same track while it records | **Ends the take** — it starts looping immediately, exactly as long as you played it. A tap before any sound has arrived cancels the arm instead. |
 | Quick tap (playing track) | Mutes / unmutes that track (content kept). |
 | Quick tap on several tracks together | Mutes / unmutes **all of them at once** — any combination of the four works. |
@@ -370,16 +369,6 @@ The one-page map ([full size](docs/sp1-control-map.png)):
   beat. Loop lengths are stored to the **sample**, not rounded to flash
   blocks, so a loop is exactly the number of beats you played and an exact
   multiple of its siblings. Songs without a grid record exactly as before.
-- **The grid keeps learning the tempo.** Tapping lands 0.2–1% off, and that
-  error is what walks a loop off the track it was recorded from. Every
-  gridded take leaves a landmark — its first onset — and the music runs at
-  one tempo through all of them, so each take is measured against your
-  *first* one and the baseline grows all session. A rough tap ends up exact
-  after a couple of takes without you doing anything. Corrections are small
-  and need enough material to be sure. A click-track bench at 128.000 BPM:
-  a tap of 128.24 refined to 127.985, converged on 128.000, then found
-  nothing left to correct — an eight-beat take comes back as exactly eight
-  beats, to the sample. This fixes how *fast*, not where "one" is.
 - **Round to a whole BPM.** Tap a tempo, then hold FUNCTION about a second.
   The track lights sweep, catch the beat the grid is on, and the tempo
   rounds to the nearest whole number. If your tap isn't near one it won't
