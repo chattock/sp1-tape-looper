@@ -962,6 +962,19 @@ static uint8_t  g_cnv_set;
 static uint32_t g_cnv_speed;               /* speed the landmark was laid at */
 static volatile int32_t  g_dbg_cnv_beats;  /* diag: baseline length, beats */
 static volatile int32_t  g_dbg_cnv_corr;   /* diag: per-beat correction applied */
+/* M43 GRID FREEZE. A grid is a trust contract: loose punches are absorbed
+ * by a FIXED clock. Once set — tapped, rounded, or detected — the grid
+ * does not move; re-tap to change it. 0 gates the two CONTENT-CHASING
+ * retunes (F8 refine at the first gridded stop; M22-C convergence at
+ * every gridded stop). KEPT: the M22-A achieved-length retune (the grid
+ * following the LOOP's own quantization — removing that would bring back
+ * the v2.5.0 grid-vs-loop slide) and the explicit snap gesture. The
+ * chase's one deliverable was multi-minute lock to an external AUDIO
+ * source: zero field requests in the corpus, two maintainer-found bugs
+ * in 48 h (rows 81, 82); external-sync users ask for MIDI clock IN
+ * (3.0). The estimator + refine still RUN — g_dbg_rf / g_dbg_cnv_*
+ * record what WOULD have been applied, field data for the 3.0 call. */
+#define SP1_GRID_FOLLOW 0
 /* M23 INTEGER-BPM SNAP (session-only, opt-in). Phase B is what makes this
  * worth having: with block-quantized lengths the flash grid dominated and
  * rounding the BPM changed nothing (at 128 BPM an 8-beat loop was 703.125
@@ -1849,7 +1862,9 @@ static void looper_audio_block(int16_t *s)
 						uint32_t rf =
 							tempo_refine(g_gridrec_beat_samps);
 						g_dbg_rf = rf;             /* r2 diag */
-						if (rf) {
+						/* M43: measured, recorded, NOT applied —
+						 * the tapped/snapped grid is the clock. */
+						if (SP1_GRID_FOLLOW && rf) {
 							grid_retune(g_gridrec_beat_samps, rf);
 							g_det_bpm = (int)(((uint64_t)LOOP_RATE *
 								60u + rf / 2u) / rf);
@@ -2084,7 +2099,8 @@ static void looper_audio_block(int16_t *s)
 							uint32_t nbs = corr
 								? (uint32_t)((int32_t)bs2 + corr)
 								: bs2;
-							if (nbs != bs2) {
+							/* M43: measured, recorded, NOT applied. */
+							if (SP1_GRID_FOLLOW && nbs != bs2) {
 								grid_retune(bs2, nbs);   /* r7: sole writer */
 								g_det_bpm = (int)(((uint64_t)LOOP_RATE *
 									60u + nbs / 2u) / nbs);
