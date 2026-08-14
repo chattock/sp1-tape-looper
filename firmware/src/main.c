@@ -1357,8 +1357,20 @@ static volatile int g_play_bpm = 80;
  * ~= 55 ms — backdated out of every take so the captured end lands where the
  * finger did, not where the pipeline noticed. */
 #define STOP_COMP_SAMPLES 2600u             /* ~55 ms at 48 kHz */
+/* M44 PRESS side of the same budget: ladder debounce (~24 ms) + control
+ * pass (~8 ms) ~= 32 ms between skin-on-button and the committed press.
+ * Added to the A-r2 press stamp so head recovery (M41) and the gridded
+ * punch schedule reach the PHYSICAL touchdown, not the commit. */
+#define PRESS_COMP_MS    32
 /* track-button gesture timing */
 #define HOLD_RECORD_MS   180   /* physical button-down this long (ms) => RECORD; shorter => TAP */
+/* M44 INSTANT ARM: an EMPTY track arms at 48 ms — above the 40 ms
+ * transit/graze bound (a finger sweeping to a higher button can commit
+ * a lower band for ~24-32 ms; arming on that would steal the take from
+ * the button actually pressed), below any real tap's finger-down time.
+ * A tap means nothing on an empty track, so there is nothing else to
+ * disambiguate. Fresh-tapped-grid empty keeps 0 (A-r2). */
+#define EMPTY_ARM_MS     48
 #define DTAP_GAP_MS      420   /* 2nd tap within this of the 1st tap's release => DOUBLE-TAP delete */
 
 /* BEAT GRID for the LED pulse + MIDI clock — defaults to the nominal beat, but
@@ -7252,6 +7264,13 @@ int main(void)
 			static int64_t press_t[NTRK];        /* when committed first named this track */
 			static int64_t tap_deadline[NTRK];   /* >0: a single tap awaiting a possible 2nd */
 			static uint8_t armed_press[NTRK];    /* this press already armed a take */
+			/* M44-r2 instant-arm bookkeeping: when the current arm fired,
+			 * whether it was an instant EMPTY arm (migration only ever
+			 * cancels those), and whether a press edge arrived from a
+			 * HIGHER band (= that button's release down-sweep). */
+			static int64_t arm_t;
+			static uint8_t arm_was_instant;
+			static uint8_t press_from_above[NTRK];
 			static int stop_tap_trk = -1;        /* R1: stop already fired at press;
 			                                      * swallow that press's release */
 			static int64_t ep_time[TRK_PLAY + 1];/* committed ms per button, this episode */
@@ -7322,11 +7341,37 @@ int main(void)
 					ep_open = 1;
 					for (int k = TRK_1; k < (int)committed; k++)
 						ep_time[k] = 0;  /* below = up-sweep transit */
+					/* M44-r2 ARM MIGRATION: with instant empty arms, an
+					 * up-sweep transit can arm a LOWER empty track for
+					 * the ~24-32 ms the finger needs to land on the
+					 * button it actually wants. The theft signature is
+					 * this exact transition: a DIFFERENT button commits
+					 * while a young (<=40 ms), still-silent instant arm
+					 * waits. Cancel it — stop-on-ARMED is already the
+					 * cancel and nothing was recorded; the real button
+					 * then arms on its own press within a pass. Also
+					 * catches PLAY presses sweeping the track bands. A
+					 * fast roll between two empty tracks resolves to
+					 * the LAST one — the finger's final word. */
+					if (g_rec_track >= 0 &&
+					    (int)committed != g_rec_track &&
+					    arm_was_instant &&
+					    trk[g_rec_track].state == TS_ARMED &&
+					    tnow - arm_t <= 40) {
+						g_stop_req = 1;
+						armed_press[g_rec_track] = 0;
+						arm_was_instant = 0;
+					}
 				}
 				if (committed >= TRK_1 && committed <= TRK_4) { /* PRESS edge */
 					int ti = (int)committed;
 					press_t[ti] = tnow;
 					armed_press[ti] = 0;
+					/* M44-r2: from a HIGHER band = that button's release
+					 * down-sweep; it must not instant-arm (the 48 ms
+					 * floor below outlasts any transit). */
+					press_from_above[ti] =
+						(before > committed && before <= TRK_PLAY) ? 1u : 0u;
 				}
 			}
 			if (ep_open && committed == TRK_NONE &&
@@ -7596,8 +7641,11 @@ int main(void)
 				    g_rec_track < 0 && !g_heads_mode &&
 				    trk[ti].state != TS_DONE &&
 				    k_uptime_get() - press_t[ti] >=
-				        (empt ? ((g_grid_active && g_grid_fresh)
-				                 ? 0 : 100)
+				        (empt ? (((g_grid_active && g_grid_fresh) ||
+				                  !press_from_above[ti])
+				                 ? 0 : EMPTY_ARM_MS)   /* M44-r2: instant
+				                  * from idle/lower; 48 ms only for the
+				                  * release down-sweep case */
 				              : HOLD_RECORD_MS)) {
 					/* A-r2: on a FRESH-TAPPED grid an empty track
 					 * arms at the press COMMIT (~25-30 ms) — the
@@ -7635,11 +7683,17 @@ int main(void)
 					 * it recording all by itself). Arming requires a FRESH
 					 * press — the latch clears at episode end. */
 					armed_press[ti] = 1;
+					arm_t = k_uptime_get();          /* M44-r2 */
+					arm_was_instant = empt ? 1u : 0u;
 					tap_deadline[ti] = 0;            /* a hold cancels a pending single-tap */
 					{	/* A-r2: remember when the FINGER landed,
 						 * in engine samples (approximate the
-						 * elapsed ms back from now) */
-						int64_t _ago = k_uptime_get() - press_t[ti];
+						 * elapsed ms back from now). M44: plus the
+						 * constant pipeline latency press_t itself
+						 * cannot see (debounce + pass), so the
+						 * stamp lands on the touchdown. */
+						int64_t _ago = k_uptime_get() - press_t[ti]
+						             + PRESS_COMP_MS;
 						if (_ago < 0) _ago = 0;
 						uint64_t _sc = g_sample_clock;
 						uint64_t _back = (uint64_t)_ago * 48u;
