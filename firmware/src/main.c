@@ -863,9 +863,16 @@ struct meta_blk {
 	uint32_t trk_content[NUM_SLOTS][NTRK]; /* per-track recorded content length in blocks; 0 = whole
 	                                        * track. Also appended in the tail -> layout-safe; a website
 	                                        * upload zeroes it (0 = full track = correct for uploads). */
-	uint32_t led_full;         /* 0 = dim LEDs (default), 1 = full brightness.
-	                            * Tail-appended like fixed_len -> layout-safe;
-	                            * repaired in xfer_commit like fixed_len. */
+	uint32_t led_full;         /* SETTINGS WORD, site-owned (adopted in
+	                            * xfer_commit like fixed_len; tail-appended
+	                            * -> layout-safe). BIT 0: 1 = full LED
+	                            * brightness (0 = dim, the default). BIT 1
+	                            * (M41-r5): 1 = CLASSIC record arm (no head
+	                            * recovery), i.e. head recovery is the
+	                            * DEFAULT and bit 1 opts out. The struct is
+	                            * exactly 1024 B (the 2-block maximum), so
+	                            * new settings ride spare bits here. Old
+	                            * indexes/sites write 0/1 -> bit 1 = 0. */
 	uint8_t  chop[NUM_SLOTS][2]; /* M7a: per-song chop window: [0]=div (0/1=none,
 	                              * 2..64), [1]=offset. Zeros = unchopped. */
 	uint8_t  song_mode[NUM_SLOTS]; /* LOW nibble, M7c: recorded-with mode stamp:
@@ -1146,6 +1153,16 @@ static volatile uint32_t g_pre_valid;     /* consecutive valid pre-rolled sample
 static volatile uint32_t g_pre_phase;     /* decimator phase while the transport is idle */
 static volatile uint32_t g_pre_speed;     /* tape speed the idle ring was filled at */
 static volatile uint8_t  g_done_pending;  /* a take is still flushing: ring is BUSY */
+/* M41 HEAD RECOVERY (row 79), ON BY DEFAULT. The start rules are
+ * unchanged (ungridded = first sound, gridded = on the line); when set,
+ * an ungridded trigger scans the pre-roll ring back to the sound's
+ * ONSET (capped at the press) so the 100/180 ms arm window never eats
+ * the head. Clear = the exact shipped slight-hold feel. Opt-out lives
+ * in BIT 1 of the index settings word (led_full): SET = classic. Set
+ * on the transfer site; adopted in xfer_commit and at the boot index
+ * load, like brightness (M8c). Old indexes read bit 1 = 0 -> instant,
+ * so the default reaches every existing device. */
+static volatile uint8_t  g_instant_rec = 1;
 static volatile uint32_t g_rec_overruns;         /* diag: rec ring overflow events */
 static volatile uint32_t g_starve_cnt[NTRK];     /* diag: per-track play-ring underrun episodes */
 static volatile uint32_t g_stored_glitch_cnt;    /* diag: wfail advance-anyway commits — a STORED glitch
@@ -2446,6 +2463,44 @@ static void looper_audio_block(int16_t *s)
 						/* trigger directly on the first sample past
 						 * threshold (no running-peak tracking) */
 						trigger = (aa >= SOUND_THRESHOLD);
+						/* M41 HEAD RECOVERY: the rule above is
+						 * UNCHANGED — but the first sound may have
+						 * arrived while the button was still in its
+						 * 100/180 ms arm window, and shipped code then
+						 * started the take mid-note. Scan the pre-roll
+						 * ring BACKWARDS in 64-sample windows while
+						 * each window's peak stays above the threshold
+						 * and adopt that tail: the take begins at the
+						 * sound's ONSET. Caps: the PRESS
+						 * (g_arm_press_sclk, engine frames -> ring
+						 * samples via tape speed — recording never
+						 * reaches back before the finger) and
+						 * g_pre_valid. Silence at arm = shipped exact.
+						 * Same ring adoption as the gridded rescue
+						 * below; no provisional phase, no catch-up
+						 * burst. g_instant_rec clear = classic: skip
+						 * the scan, shipped behavior bit-for-bit. */
+						if (trigger && g_instant_rec && g_pre_valid) {
+							uint64_t now_f = g_sample_clock + f;
+							uint64_t backf = (g_arm_press_sclk &&
+							                  now_f > g_arm_press_sclk)
+							               ? (now_f - g_arm_press_sclk) : 0u;
+							uint32_t cap = (uint32_t)
+								((backf * g_cur_speed_q16) >> 16);
+							if (cap > g_pre_valid) cap = g_pre_valid;
+							uint32_t n = 0u;
+							while (n + 64u <= cap) {
+								int32_t pk = 0;
+								for (uint32_t k = 1u; k <= 64u; k++) {
+									int32_t sv = g_rring[(g_pre_w - n - k) & RRING_MASK];
+									if (sv < 0) sv = -sv;
+									if (sv > pk) pk = sv;
+								}
+								if (pk < SOUND_THRESHOLD) break;
+								n += 64u;
+							}
+							pre_backfill = n;
+						}
 					}
 					if (trigger) {
 						if (g_loop_len == 0u) {
@@ -3095,7 +3150,8 @@ static void xfer_commit(void)
 			 * length, then write the repaired index back (skipped when the
 			 * host's copy already matches, e.g. a read-only session). */
 			g_meta.fixed_len = g_mode_pref;      /* M7c: field = preference */
-			g_led_dim = g_meta.led_full ? 0u : 1u;   /* M8c: site owns it */
+			g_led_dim = (g_meta.led_full & 1u) ? 0u : 1u;   /* M8c: site owns it */
+			g_instant_rec = (uint8_t)(((g_meta.led_full >> 1) & 1u) ? 0u : 1u);   /* M41-r5: bit 1 SET = classic */
 			memcpy(g_meta.chop, keep_chop, sizeof(keep_chop));
 			memcpy(g_meta.song_mode, keep_mode, sizeof(keep_mode));
 			if (g_slot < NUM_SLOTS) {   /* reload effective for current song */
@@ -5974,7 +6030,7 @@ int main(void)
 			 * report). The early streamer (r6) has the index loaded
 			 * well inside the 600 ms hold. */
 			if (g_meta_loaded)
-				g_led_dim = g_meta.led_full ? 0u : 1u;
+				g_led_dim = (g_meta.led_full & 1u) ? 0u : 1u;
 			if (pwr_pressed()) {
 				int64_t hnow = k_uptime_get();
 				if (hold_t < 0) hold_t = hnow;
@@ -6016,7 +6072,7 @@ int main(void)
 				 * mode (user report). Apply it here as soon as the
 				 * streamer has the index; idempotent per pass. */
 				if (g_meta_loaded)
-					g_led_dim = g_meta.led_full ? 0u : 1u;
+					g_led_dim = (g_meta.led_full & 1u) ? 0u : 1u;
 				static const int batt_thr[3] = { 2020, 2140, 2260 };
 				static int bavg = -1;   /* smoothed reading (EMA over ~10 passes) */
 				static int blvl = 0;    /* sticky displayed level (hysteresis) */
@@ -6090,7 +6146,7 @@ int main(void)
 	 * effectively zero. */
 	for (int bw = 0; bw < 100 && !g_meta_loaded; bw++) { feed_wdt(); k_msleep(5); }
 	if (g_meta_loaded)
-		g_led_dim = g_meta.led_full ? 0u : 1u;
+		g_led_dim = (g_meta.led_full & 1u) ? 0u : 1u;
 
 	/* ---- power-ON indication: sweep the LEDs on, then clear ---- */
 	for (int i = 0; i < NUM_LEDS; i++) {
@@ -6110,7 +6166,8 @@ int main(void)
 		g_play_bpm = (int)(((uint64_t)g_play_speed_q16 * LOOP_BPM_BASE + 32768u) / 65536u);
 		if (g_play_bpm < BPM_MIN) g_play_bpm = BPM_MIN;
 		if (g_play_bpm > BPM_MAX) g_play_bpm = BPM_MAX;
-		g_led_dim = g_meta.led_full ? 0u : 1u;   /* restore brightness mode */
+		g_led_dim = (g_meta.led_full & 1u) ? 0u : 1u;   /* restore brightness mode */
+		g_instant_rec = (uint8_t)(((g_meta.led_full >> 1) & 1u) ? 0u : 1u);   /* M41-r5: bit 1 SET = classic */
 		{	/* M7: current song's persisted chop + effective mode */
 			uint32_t cd = g_meta.chop[g_slot][0]; if (cd < 1u || cd > 64u) cd = 1u;
 			uint32_t co = g_meta.chop[g_slot][1]; if (co >= cd) co = 0u;
@@ -6391,7 +6448,7 @@ int main(void)
 					 * toggle moved to PLAY-RELEASE (0.7-5 s), so a
 					 * hold that reaches 5 s never flips the mode. */
 					g_led_dim ^= 1u;
-					g_meta.led_full = g_led_dim ? 0u : 1u;
+					g_meta.led_full = (g_meta.led_full & ~1u) | (g_led_dim ? 0u : 1u);   /* keep bit 1 (M41-r5) */
 					g_meta_save_req = 1;
 					combo_fired = 1;
 				}
