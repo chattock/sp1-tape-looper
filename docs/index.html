@@ -38,16 +38,37 @@
   .cell .name{font-size:14px;font-weight:500}
   .cell .len{font-size:13px;color:var(--muted);min-height:18px}
   .cell .acts{margin-top:auto;display:flex;flex-direction:column;gap:7px}
-  .mini{font-size:14px;border-radius:8px;padding:8px 0;text-align:center}
+  .mini{font-size:14px;border-radius:8px;padding:8px 0;text-align:center;cursor:pointer}
   .mini.dl{background:#f0f0f3;color:var(--ink)}
   .mini.dl:hover{background:#e7e7ec}
+  .mini.del{background:transparent;color:var(--err);font-size:12px;padding:3px 0}
+  .mini.del:hover{text-decoration:underline}
   label.up{display:block;font-size:13px;color:var(--tint);text-align:center;border:1px dashed #c7c7cc;
     border-radius:8px;padding:8px 4px;cursor:pointer}
   label.up:hover{border-color:var(--tint)}
   label.up input{display:none}
   .empty .name{color:var(--muted)}
-  .log{margin-top:30px;font-size:13px;color:var(--muted);white-space:pre-wrap;
-    font-family:"SF Mono",ui-monospace,Menlo,monospace;max-height:220px;overflow:auto}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:18px 0 0}
+  @media (max-width:640px){ .cards{grid-template-columns:1fr} }
+  .card{border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;font-size:14px}
+  .card > b, .logbox > b{display:block;font-size:12px;font-weight:600;letter-spacing:.04em;
+    text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+  .card p{margin:0 0 10px;color:var(--muted)}
+  .cardacts{display:flex;gap:10px;flex-wrap:wrap}
+  button.small{font-size:14px;padding:8px 16px}
+  label.btnlike{font-size:14px;border-radius:980px;padding:8px 16px;cursor:pointer;
+    background:#f0f0f3;color:var(--ink);display:inline-block}
+  label.btnlike:hover{background:#e7e7ec}
+  label.btnlike input{display:none}
+  .logbox{background:var(--cell);border:1px solid var(--line);border-radius:var(--radius);
+    padding:12px 16px;margin:14px 0 0;display:none;
+    position:sticky;top:10px;z-index:5;box-shadow:0 1px 10px rgba(0,0,0,.05)}
+  .log{font-size:13px;color:var(--muted);white-space:pre-wrap;
+    font-family:"SF Mono",ui-monospace,Menlo,monospace;max-height:160px;overflow:auto}
+  #plab{font-size:12px;color:var(--muted);margin-bottom:4px}
+  .ptrack{height:6px;background:#e5e5e7;border-radius:3px;overflow:hidden;margin-bottom:10px}
+  #pfill{height:100%;width:0;background:var(--tint);border-radius:3px;transition:width .15s}
+  .songs{margin-top:18px}
   .err{color:var(--err)}
   .ok{color:var(--ok)}
   .gone{opacity:.45;pointer-events:none}
@@ -62,8 +83,7 @@
     <button id="connect">Connect</button>
     <span class="dot" id="dot"></span>
     <span class="status" id="status">Not connected</span>
-    <button class="ghost" id="dlall" style="margin-left:auto;display:none">Download all</button>
-    <button class="ghost" id="done" style="display:none">Done</button>
+    <button class="ghost" id="done" style="margin-left:auto;display:none">Disconnect</button>
   </div>
 
   <div class="hint" id="hint">
@@ -75,14 +95,46 @@
     independently (the first clip in a song also sets its beat grid).
   </div>
 
-  <div class="songs" id="songs"></div>
-  <div class="log" id="log"></div>
-
-  <div id="settings" style="display:none;margin-top:14px;padding:12px 14px;border:1px solid var(--line);border-radius:10px">
-    <b>Device settings</b> <span style="opacity:.6;font-size:.85em">(hidden panel — you found #settings)</span><br>
-    <label style="display:block;margin-top:8px"><input type="checkbox" id="ledfull">
-      Full LED brightness — for direct sunlight. The device is always-dim otherwise.</label>
+  <div class="cards" id="cards" style="display:none">
+    <div class="card">
+      <b>Backup &amp; restore</b>
+      <p>Download all saves every track as a WAV named by its place —
+      <span style="font-family:ui-monospace,monospace">sp1_song3_track2.wav</span>.
+      Upload many takes any batch of files named that way and puts each back in its
+      song and track. Together they're the round trip for moving your loops to a
+      fresh or reformatted device.</p>
+      <div class="cardacts">
+        <button class="small" id="dlall">Download all</button>
+        <label class="btnlike" id="upmany">Upload many…<input type="file" multiple accept=".wav,.mp3,audio/*"></label>
+      </div>
+    </div>
+    <div class="card" id="settings">
+      <b>Device settings</b>
+      <label style="display:block"><input type="checkbox" id="instrec" checked>
+        Instant record (default) — takes keep everything from the moment you press.
+        If unchecked, recording keeps only what comes after the short arm delay
+        (the old behavior).</label>
+    </div>
   </div>
+
+  <div class="card" id="admin" style="display:none;border-color:#f0b4ba;margin-top:14px">
+    <b style="color:var(--err)">Admin — test tools</b>
+    <p>Unlisted (you found #admin). Erase clears every song from the index and the
+    saved beat grids; audio blocks stay behind but unreachable. Device settings
+    survive. This is the "factory fresh" state for testing backup &amp; restore.</p>
+    <div class="cardacts"><button class="small" id="eraseall" style="background:var(--err)">Erase all songs</button></div>
+  </div>
+
+  <div class="logbox" id="logbox">
+    <b>Activity</b>
+    <div id="pbar" style="display:none">
+      <div id="plab"></div>
+      <div class="ptrack"><div id="pfill"></div></div>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="songs" id="songs"></div>
 </div>
 
 <script>
@@ -94,7 +146,21 @@ function rateFromMagic(magic){ return (magic === 0x53453234 || magic === 0x53453
 const $ = s => document.querySelector(s);
 const logEl = $("#log");
 function log(msg, cls){ const t = new Date().toLocaleTimeString();
+  document.getElementById("logbox").style.display = "block";   // reveal on first line
   logEl.innerHTML += `<span class="${cls||''}">${t}  ${msg}</span>\n`; logEl.scrollTop = logEl.scrollHeight; }
+
+/* ---- progress bar (lives in the sticky Activity box) ----
+ * progress("label", 0..1) shows/updates; progress(null) hides.
+ * bulkTag prefixes the label during Download all / Upload many. */
+let bulkTag = "";
+function progress(label, frac){
+  const wrap = $("#pbar");
+  if (label == null){ wrap.style.display = "none"; $("#pfill").style.width = "0"; return; }
+  document.getElementById("logbox").style.display = "block";
+  wrap.style.display = "";
+  $("#plab").textContent = bulkTag + label;
+  $("#pfill").style.width = Math.round(Math.max(0, Math.min(1, frac))*100) + "%";
+}
 
 /* ---- WebSerial transport: read/write exact byte counts over the CDC port ----
  * A background pump drains the read stream into a buffer; read() then waits on
@@ -243,28 +309,34 @@ function parseMeta(b){
   }
   return m;
 }
-/* ---- hidden #settings panel: the device is always-dim since v1.2.0; the
- * led_full byte (offset 8 + numSlots*SLOT_SZ + 1, after fixed_len) is now
- * OWNED by this page — the firmware adopts it at transfer commit. ---- */
+/* ---- settings panel (shown once connected) ----
+ * The device settings word is meta_blk.led_full: a uint32 AFTER fixed_len
+ * (4 B) and trk_content (numSlots*4*4 B) — byte 972 on a 16-song index,
+ * 492 on 8-song. (The old brightness checkbox here wrote byte 713, an
+ * offset from before trk_content entered the struct — it was silently
+ * broken. Brightness is the on-device FN+PLAY long-hold now; this page
+ * PRESERVES bit 0 and never sets it.)
+ * BIT 1 (M41-r5): SET = classic slight-hold arm; clear = instant record
+ * (head recovery, the default). Firmware adopts it at transfer commit. */
+function settingsOff(){ return 8 + layout.numSlots*SLOT_SZ + 4 + layout.numSlots*16; }
 function syncSettings(){
-  const panel = document.getElementById('settings');
-  if (location.hash !== '#settings'){ panel.style.display='none'; return; }
-  panel.style.display = 'block';
-  const cb = document.getElementById('ledfull');
-  const OFF = 8 + layout.numSlots*SLOT_SZ + 1;
-  cb.checked = !!(meta && meta.raw && meta.raw[OFF]);
+  /* the card's visibility follows setConnected; here we just mirror the
+   * device's setting onto the checkbox */
+  if (!meta || !meta.raw) return;
+  const cb = document.getElementById('instrec');
+  const OFF = settingsOff();
+  cb.checked = !(meta.raw[OFF] & 2);            // bit 1 clear = instant (default)
   cb.onchange = async () => {
     if (!meta || !meta.raw){ log("Connect to the device first.", "err"); return; }
-    meta.raw[OFF] = cb.checked ? 1 : 0;
+    meta.raw[OFF] = (meta.raw[OFF] & ~2) | (cb.checked ? 0 : 2);   // preserve bit 0
     const mb = buildMeta(meta);
     if (layout.numSlots > 8) await writeBlock(1, mb.slice(512, 1024));
     await writeBlock(0, mb.slice(0, 512));
     await commitToDevice();
-    log(cb.checked ? "Full brightness ON — applied to the device."
-                   : "Back to dim — applied.", "ok");
+    log(cb.checked ? "Instant record ON (default) — applied."
+                   : "Classic capture — applied.", "ok");
   };
 }
-window.addEventListener('hashchange', syncSettings);
 
 function buildMeta(m){
   // start from the device's own block so fields this tool doesn't manage
@@ -317,8 +389,9 @@ $("#connect").onclick = async () => {
     io = null;
   }
 };
-$("#done").onclick = async () => { if (!io) return; stopKeepalive(); await exit(); await io.close(); io=null;
-  log("Done — device resumed.", "ok"); setConnected(false); $("#songs").innerHTML=""; };
+$("#done").onclick = async () => { if (!io) return; stopPreview(); stopKeepalive(); await exit(); await io.close(); io=null;
+  log("Done — device resumed.", "ok"); setConnected(false); $("#songs").innerHTML="";
+  meta = null; syncSettings(); };
 
 /* ---- Download all: every track with content, sequentially (one shared port).
  * The browser asks for multi-download permission after the first file. ---- */
@@ -326,20 +399,23 @@ $("#dlall").onclick = async () => {
   if (!io || !meta) return;
   const btn = $("#dlall"); btn.disabled = true;
   try{
-    let n = 0;
+    const todo = [];
     for (let s = 0; s < layout.numSlots; s++){
       const slot = meta.slots[s];
       const base = slot.loopLen ? slot.loopLen/SAMP_PER_BLK : 0;
       for (let t = 0; t < layout.ntrk; t++){
         if (!slot.present[t]) continue;
         const blocks = slot.trkLen[t] || base;
-        if (!blocks) continue;
-        await download(s, t, blocks, slot.trkContent[t]||0);
-        n++;
+        if (blocks) todo.push({s, t, blocks, content: slot.trkContent[t]||0});
       }
     }
-    log(`Download all: ${n} track${n===1?"":"s"} exported.`, "ok");
-  } finally { btn.disabled = false; }
+    let n = 0;
+    for (const j of todo){
+      bulkTag = `Download all ${++n}/${todo.length} — `;
+      await download(j.s, j.t, j.blocks, j.content);
+    }
+    log(`Download all: ${todo.length} track${todo.length===1?"":"s"} exported.`, "ok");
+  } finally { bulkTag = ""; progress(null); btn.disabled = false; }
 };
 
 function setConnected(on){
@@ -347,9 +423,83 @@ function setConnected(on){
   $("#status").textContent = on ? "Connected to SP-1" : "Not connected";
   $("#connect").style.display = on ? "none" : "";
   $("#done").style.display = on ? "" : "none";
-  $("#dlall").style.display = on ? "" : "none";
-  $("#hint").classList.toggle("gone", on);
+  $("#cards").style.display = on ? "" : "none";
+  $("#hint").style.display = on ? "none" : "";
+  syncAdmin();
 }
+
+/* ---- #admin: unlisted test tools. The URL hash is the switch — a password
+ * would be theater in a page anyone can read the source of; the guard that
+ * matters is the type-to-confirm on the destructive button. ---- */
+function syncAdmin(){
+  $("#admin").style.display = (location.hash === "#admin" && io && meta) ? "" : "none";
+}
+window.addEventListener("hashchange", syncAdmin);
+$("#eraseall").onclick = async () => {
+  if (!io || !meta) return;
+  const ok = prompt('This erases EVERY song from the index and the saved beat grids. ' +
+                    'Audio blocks stay behind but unreachable; device settings survive. ' +
+                    'Type ERASE to confirm.');
+  if (ok !== "ERASE"){ log("Erase cancelled."); return; }
+  stopPreview();
+  await withLock(async () => {
+    try{
+      for (const sl of meta.slots){
+        sl.loopLen = 0; sl.speed = 65536;
+        for (let t=0;t<4;t++){ sl.present[t]=0; sl.trkLen[t]=0; sl.trkStart[t]=0; sl.trkContent[t]=0; }
+      }
+      meta.cur = 0;
+      // per-song chop + mode/mute bytes live in the raw tail right after the
+      // settings word: chop[N][2] then song_mode[N]
+      const chopOff = settingsOff() + 4;
+      for (let i=0;i<layout.numSlots*3;i++) meta.raw[chopOff+i] = 0;
+      const mb = buildMeta(meta);
+      if (layout.numSlots > 8) await writeBlock(1, mb.slice(512, 1024));
+      await writeBlock(0, mb.slice(0, 512));
+      await writeBlock(2, new Uint8Array(512));     // saved beat grids: gone
+      await commitToDevice();
+      log("Erased — all songs and grids cleared, settings kept. Restore with Upload many.", "ok");
+      await refresh();
+    }catch(e){ log("Erase failed: "+e.message, "err"); }
+  });
+};
+
+/* ---- Upload many: multi-select files named in the download format
+ * (sp1_song3_track2.wav) and each one routes itself to its song + track.
+ * The round trip for a reflash: Download all -> flash -> Upload many with
+ * the same files. Names that don't parse are skipped with a log line. ---- */
+$("#upmany").querySelector("input").onchange = async e => {
+  const files = [...e.target.files]; e.target.value = "";
+  if (!files.length || !io || !meta) return;
+  const jobs = [], bad = [];
+  for (const f of files){
+    const m = f.name.match(/sp1[_\- ]?song(\d+)[_\- ]?track(\d+)/i);
+    if (!m){ bad.push(`"${f.name}" — name must look like sp1_song3_track2.wav (the download format)`); continue; }
+    const s = parseInt(m[1],10)-1, t = parseInt(m[2],10)-1;
+    if (s<0 || s>=layout.numSlots){ bad.push(`"${f.name}" — song ${s+1} doesn't exist on this device`); continue; }
+    if (t<0 || t>=layout.ntrk){ bad.push(`"${f.name}" — track ${t+1} doesn't exist`); continue; }
+    jobs.push({s, t, f});
+  }
+  for (const b of bad) log(`Skipped ${b}.`, "err");
+  if (!jobs.length){ log("Nothing to upload — no file names matched.", "err"); return; }
+  jobs.sort((a,b) => a.s-b.s || a.t-b.t);   // lowest track first: on an empty song it sets the beat grid
+  const seen = new Set();
+  for (const j of jobs){
+    const k = j.s+"/"+j.t;
+    if (seen.has(k)) log(`Note: several files target song ${j.s+1} track ${j.t+1} — the last one wins.`);
+    seen.add(k);
+  }
+  log(`Uploading ${jobs.length} file${jobs.length===1?"":"s"}…`);
+  try{
+    let n = 0;
+    for (const j of jobs){
+      bulkTag = `Upload many ${++n}/${jobs.length} — `;
+      log(`— ${j.f.name} -> song ${j.s+1}, track ${j.t+1}`);
+      await upload(j.s, j.t, j.f);
+    }
+  } finally { bulkTag = ""; progress(null); }
+  log(`Upload many: done (${jobs.length} file${jobs.length===1?"":"s"}).`, "ok");
+};
 
 async function refresh(){
   const nMetaBlocks = layout.numSlots > 8 ? 2 : 1;   // 2-block index past 8 songs
@@ -362,6 +512,7 @@ async function refresh(){
   }
   meta = parseMeta(b0);
   syncSettings();
+  syncAdmin();
   if (meta.magic !== layout.magic) log("Note: the index block looks unformatted/empty.", "err");
   render();
 }
@@ -369,6 +520,7 @@ async function refresh(){
 function fmtLen(blocks){ const s = blocks*SAMP_PER_BLK/RATE; return s>=1 ? s.toFixed(1)+" s" : Math.round(s*1000)+" ms"; }
 
 function render(){
+  stopPreview();                       // cells are about to be rebuilt
   const root = $("#songs"); root.innerHTML = "";
   for (let s=0; s<layout.numSlots; s++){
     const slot = meta.slots[s];
@@ -379,19 +531,32 @@ function render(){
     for (let t=0; t<layout.ntrk; t++){
       const present = !!slot.present[t];
       const blocks = present ? (slot.trkLen[t] || base) : 0;
+      // the AUDIO length is trk_content when a fixed-mode take recorded less
+      // than its loop region — showing the region here was the "56.3 s on a
+      // short take" confusion (AWD [POKE])
+      const content = present ? (slot.trkContent[t] || 0) : 0;
+      const audioBlocks = (content && content < blocks) ? content : blocks;
       const mult = (present && base && blocks % base === 0) ? (blocks/base) : 0;
       const cell = document.createElement("div"); cell.className = "cell" + (present?"":" empty");
       cell.innerHTML = `<div class="name">Track ${t+1}</div>
-        <div class="len">${present ? fmtLen(blocks) + (mult>1 ? ` · ${mult}× base` : "") : "empty"}</div>`;
+        <div class="len">${present ? fmtLen(audioBlocks)
+          + (audioBlocks < blocks ? ` · loops at ${fmtLen(blocks)}` : "")
+          + (mult>1 ? ` · ${mult}× base` : "") : "empty"}</div>`;
       const acts = document.createElement("div"); acts.className = "acts";
       if (present){
+        const pl = document.createElement("div"); pl.className="mini dl"; pl.textContent="Play";
+        pl.onclick = () => preview(s, t, blocks, content, pl); acts.appendChild(pl);
         const dl = document.createElement("div"); dl.className="mini dl"; dl.textContent="Download";
-        dl.onclick = () => download(s, t, blocks, slot.trkContent[t]||0); acts.appendChild(dl);
+        dl.onclick = () => download(s, t, blocks, content); acts.appendChild(dl);
       }
       const up = document.createElement("label"); up.className="up"; up.textContent = present? "Replace…" : "Upload…";
       const inp = document.createElement("input"); inp.type="file"; inp.accept=".wav,.mp3,audio/*";
       inp.onchange = e => { if (e.target.files[0]) upload(s, t, e.target.files[0]); };
       up.appendChild(inp); acts.appendChild(up);
+      if (present){
+        const del = document.createElement("div"); del.className="mini del"; del.textContent="Delete";
+        del.onclick = () => deleteTrack(s, t); acts.appendChild(del);
+      }
       cell.appendChild(acts); grid.appendChild(cell);
     }
     song.appendChild(grid); root.appendChild(song);
@@ -411,8 +576,8 @@ async function download(slot, t, blocks, content){
       const readN = (content && content < blocks) ? content : blocks;
       const pcm = new Uint8Array(blocks*512);
       for (let i=0;i<readN;i++){ pcm.set(await readBlock(base+i), i*512);
-        if (i%64===0) $("#status").textContent = `Reading ${Math.round(100*i/readN)}%`; }
-      $("#status").textContent = "Connected to SP-1";
+        if (i%16===0) progress(`Downloading song ${slot+1} track ${t+1}`, i/readN); }
+      progress(null);
       const spd = (meta.slots[slot].speed || 65536) / 65536;   // song tape speed
       const hz  = Math.max(8000, Math.round(RATE * spd));      // heard-rate stamp
       const wav = makeWav(pcm, blocks*SAMP_PER_BLK, hz);
@@ -423,8 +588,102 @@ async function download(slot, t, blocks, content){
           ? `Downloaded — stamped ${hz} Hz to match the song's tape speed (~${Math.round(spd*80)} BPM), so it sounds like the device.`
           : "Downloaded.", "ok");
     }catch(e){ log("Download failed: "+e.message, "err"); }
+    finally{ progress(null); }
   });
 }
+/* ---- preview: read the track's audio -> WebAudio, looping, one at a time.
+ * Reads only trk_content blocks (the real audio), same rule as download;
+ * plays at the song's tape-speed rate so it sounds like the device. ---- */
+let pvCtx = null, pv = { src:null, btn:null }, pvTip = false, pvJob = 0;
+/* The SP-1 is ITSELF a USB sound output, and it's silent while in transfer
+ * mode — so if the computer's output is set to the SP-1, previews render
+ * into a muted device. If Chrome will tell us the output devices, route the
+ * preview to a non-SP-1 one; otherwise say why it might be silent, once. */
+async function routePreviewOutput(){
+  try{
+    if (!pvCtx.setSinkId || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return false;
+    const outs = (await navigator.mediaDevices.enumerateDevices())
+                 .filter(d => d.kind === "audiooutput" && d.label);
+    if (!outs.length) return false;              // labels hidden without a media permission
+    const isSp1 = s => /sp[-_ ]?1|stem/i.test(s);
+    const def = outs.find(d => d.deviceId === "default");
+    if (def && !isSp1(def.label)) return true;   // already on real speakers
+    const alt = outs.find(d => d.deviceId !== "default" && !isSp1(d.label));
+    if (alt){ await pvCtx.setSinkId(alt.deviceId);
+      log(`Preview routed to "${alt.label}" — the SP-1 itself is silent during transfer.`); return true; }
+  }catch(e){}
+  return false;
+}
+function stopPreview(){
+  pvJob++;                                   // cancels any in-flight load
+  if (pv.src){ try{ pv.src.stop(); }catch(e){} }
+  if (pv.btn) pv.btn.textContent = "Play";
+  pv.src = null; pv.btn = null;
+}
+async function preview(slot, t, blocks, content, btn){
+  if (pv.btn === btn){ stopPreview(); return; }   // click while loading OR playing = cancel/stop
+  stopPreview();
+  pv.btn = btn;                                    // claim the button BEFORE the slow part
+  const job = pvJob;
+  await withLock(async () => {
+    try{
+      const readN = (content && content < blocks) ? content : blocks;
+      const base = trkBlk(slot, t);
+      const pcm = new Uint8Array(readN*512);
+      for (let i=0;i<readN;i++){
+        if (pvJob !== job){ progress(null); return; }   // cancelled mid-load
+        pcm.set(await readBlock(base+i), i*512);
+        if (pvJob === job && i%16===0){
+          btn.textContent = `${Math.round(100*i/readN)}%`;
+          progress(`Loading preview — song ${slot+1} track ${t+1}`, i/readN);
+        }
+      }
+      progress(null);
+      if (pvJob !== job) return;
+      const i16 = new Int16Array(pcm.buffer, 0, readN*SAMP_PER_BLK);
+      const spd = (meta.slots[slot].speed || 65536) / 65536;
+      const hz  = Math.max(8000, Math.round(RATE * spd));
+      if (!pvCtx) pvCtx = new (window.AudioContext||window.webkitAudioContext)();
+      if (pvCtx.state === "suspended") await pvCtx.resume();
+      const routed = await routePreviewOutput();
+      if (!routed && !pvTip){ pvTip = true;
+        log("Hear nothing? Your computer's sound output may be set to the SP-1 itself, which is silent during transfer — pick your speakers or headphones in the sound menu.", "err"); }
+      if (pvJob !== job) return;                   // cancelled during the audio setup awaits
+      const buf = pvCtx.createBuffer(1, i16.length, hz);
+      const ch = buf.getChannelData(0);
+      for (let i=0;i<i16.length;i++) ch[i] = i16[i]/32768;
+      const src = pvCtx.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      src.connect(pvCtx.destination); src.start();
+      pv.src = src; btn.textContent = "Stop";
+    }catch(e){ log("Preview failed: "+e.message, "err");
+      if (pvJob === job) btn.textContent = "Play"; }
+    finally{ progress(null); }
+  });
+}
+
+/* ---- delete: index-only, like the device's own double-tap delete — the
+ * audio blocks are left in place but unreachable (present=0). If the song
+ * empties out, its loop length clears too, so the next upload sets a fresh
+ * beat grid. Magic-last write order, then flush. ---- */
+async function deleteTrack(slot, t){
+  if (!confirm(`Delete song ${slot+1}, track ${t+1} from the device?`)) return;
+  stopPreview();
+  await withLock(async () => {
+    try{
+      const sl = meta.slots[slot];
+      sl.present[t] = 0; sl.trkLen[t] = 0; sl.trkStart[t] = 0; sl.trkContent[t] = 0;
+      if (!sl.present.some(p => p)) sl.loopLen = 0;
+      const mb = buildMeta(meta);
+      if (layout.numSlots > 8) await writeBlock(1, mb.slice(512, 1024));
+      await writeBlock(0, mb.slice(0, 512));
+      await commitToDevice();
+      log(`Deleted song ${slot+1} track ${t+1}.`, "ok");
+      render();
+    }catch(e){ log("Delete failed: "+e.message, "err"); }
+  });
+}
+
 function makeWav(pcmBytes, nSamples, hz){
   const hdr = new ArrayBuffer(44), v = new DataView(hdr);
   const dataLen = nSamples*2;
@@ -481,8 +740,7 @@ async function upload(slot, t, file){
       log(`Writing ${blocks} blocks (${fmtLen(blocks)})…`);
       const dst = trkBlk(slot, t);
       for (let i=0;i<blocks;i++){ await writeBlock(dst+i, bytes.subarray(i*512,(i+1)*512));
-        if (i%64===0) $("#status").textContent = `Writing ${Math.round(100*i/blocks)}%`; }
-      $("#status").textContent = "Connected to SP-1";
+        if (i%16===0) progress(`Uploading song ${slot+1} track ${t+1}`, i/blocks); }
 
       // update the index block, preserving every other song/track
       sl.present[t] = 1; sl.trkLen[t] = blocks; sl.trkStart[t] = 0;
@@ -495,13 +753,14 @@ async function upload(slot, t, file){
         // leave a torn half-new index; the old one stays authoritative.
         if (layout.numSlots > 8) await writeBlock(1, mb.slice(512, 1024));
         await writeBlock(0, mb.slice(0, 512)); }
-      $("#status").textContent = "Saving to device…";
+      progress(`Saving song ${slot+1} track ${t+1} to the device`, 1);
       await commitToDevice();                            // flush to NAND so it survives unplug
-      $("#status").textContent = "Connected to SP-1";
+      progress(null);
       log("Uploaded and saved to the device.", "ok");
       render();
     });
   }catch(e){ log("Upload failed: "+e.message, "err"); }
+  finally{ progress(null); }
 }
 
 window.addEventListener("beforeunload", () => { if (io) exit(); });
