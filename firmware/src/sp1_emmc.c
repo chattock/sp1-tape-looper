@@ -1048,7 +1048,7 @@ bool emmc_pon_power_off_short(void)
 }
 
 
-bool emmc_read_blocks(uint32_t block_addr, uint8_t *buf, uint32_t count)
+static bool emmc_read_blocks_raw(uint32_t block_addr, uint8_t *buf, uint32_t count)
 {
 	if (!s_ready) {
 		return false;
@@ -1091,6 +1091,37 @@ bool emmc_read_blocks(uint32_t block_addr, uint8_t *buf, uint32_t count)
 	}
 	(void)send_command_retry(12, 0, r1, 3);
 	return true;
+}
+/* M46d: duty-cycled streamer priority boost — the TL-3/M46 dropout fix.
+ * When a play ring runs low (g_emmc_sprint, set by the audio thread),
+ * the streamer lifts itself to prio 1 so USB-era interrupt load can't
+ * stretch its reads past the ring margin. Bursts are capped at 150 ms
+ * with a forced 15 ms breather at normal priority: main keeps feeding
+ * the bootloader-armed 5 s watchdog and the controls stay live.
+ * Bench lineage + numbers: SP1-M40-PRE-BENCH-AUDIT.md 6b-6i. */
+bool emmc_read_blocks(uint32_t block_addr, uint8_t *buf, uint32_t count)
+{
+	extern volatile uint8_t g_emmc_sprint, g_pb_on;
+	extern struct k_thread *g_str_tid; extern int g_pb_orig;
+	extern volatile uint32_t g_pb_t0;
+
+	if (g_str_tid && k_current_get() == g_str_tid) {
+		uint32_t _now = k_cycle_get_32();
+		if (g_pb_on && (_now - g_pb_t0) > k_us_to_cyc_ceil32(150000u)) {
+			k_thread_priority_set(k_current_get(), g_pb_orig);
+			g_pb_on = 0;
+			k_msleep(15);            /* the WDT/controls breather */
+			_now = k_cycle_get_32();
+		}
+		if (g_emmc_sprint && !g_pb_on) {
+			k_thread_priority_set(k_current_get(), 1);
+			g_pb_on = 1; g_pb_t0 = _now;
+		} else if (!g_emmc_sprint && g_pb_on) {
+			k_thread_priority_set(k_current_get(), g_pb_orig);
+			g_pb_on = 0;
+		}
+	}
+	return emmc_read_blocks_raw(block_addr, buf, count);
 }
 
 bool emmc_write_blocks(uint32_t block_addr, const uint8_t *buf, uint32_t count)

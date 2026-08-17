@@ -1178,6 +1178,17 @@ static volatile uint8_t  g_done_pending;  /* a take is still flushing: ring is B
 static volatile uint8_t  g_instant_rec = 1;
 static volatile uint32_t g_rec_overruns;         /* diag: rec ring overflow events */
 static volatile uint32_t g_starve_cnt[NTRK];     /* diag: per-track play-ring underrun episodes */
+/* ---- M46d: duty-cycled streamer priority boost (the TL-3 dropout fix).
+ * USB interrupt load dilates the CPU-paced eMMC reads ~2x (measured:
+ * cmd 455->857 us, data 474->847 us per 512 B block). When a playing
+ * ring runs low the streamer briefly outranks everything but audio so
+ * reads finish on time; a governor keeps main feeding the bootloader's
+ * 5 s watchdog. Constants measured on hardware 2026-08-16. ---- */
+volatile uint8_t g_emmc_sprint;      /* audio -> streamer: ring is low */
+struct k_thread *g_str_tid;          /* the streamer, for the wrapper */
+int g_pb_orig = 12345;               /* streamer's normal priority */
+volatile uint8_t g_pb_on;            /* boost currently applied */
+volatile uint32_t g_pb_t0;           /* boost burst start (cycles) */
 static volatile uint32_t g_stored_glitch_cnt;    /* diag: wfail advance-anyway commits — a STORED glitch
                                                   * replays at the same loop spot every pass (vs a live
                                                   * underrun, which is one-shot). Separating the two is
@@ -1687,6 +1698,17 @@ static void looper_audio_block(int16_t *s)
 {
 	static int16_t tmp[BLK_FRAMES * 2];
 	if (g_xfer_mode) { memset(s, 0, BLK_BYTES); return; }   /* USB transfer: silence out */
+	{ /* M46d: sprint flag with hysteresis — ON under 4096 smp (~85 ms),
+	   * OFF at 4800 smp (~100 ms); steady-state fill is ~110 ms. */
+	  uint32_t _sp_c = g_consume_pos; int _sp_low = 0;
+	  for (int _sp_i = 0; _sp_i < NTRK; _sp_i++)
+	    if (trk[_sp_i].state == TS_PLAY &&
+	        (int32_t)(trk[_sp_i].p_w - _sp_c) <
+	            (g_emmc_sprint ? (int32_t)4800 : (int32_t)4096)) {
+	      _sp_low = 1; break;
+	    }
+	  g_emmc_sprint = (uint8_t)_sp_low;
+	}
 	/* PREBUFFER: do not start draining a freshly-(re)enabled stream until the
 	 * ring holds FB_SETPOINT frames — the feedback regulator over-delivers to
 	 * fill it in ~20 ms. Without this gate the consumer races the empty ring and
@@ -3676,6 +3698,10 @@ static void streamer_thread(void *a, void *b, void *c)
 	g_meta_loaded = 1;
 
 	while (1) {
+		{ /* M46d: identify the streamer for the read wrapper's boost */
+		  if (!g_str_tid) { g_str_tid = k_current_get();
+		    g_pb_orig = k_thread_priority_get(k_current_get()); }
+		}
 #if SP1_XFER_ENABLE
 		/* Website loop transfer: scan for the connect-magic / run one command
 		 * per pass. While a transfer is active the transport is paused and
