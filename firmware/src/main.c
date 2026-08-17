@@ -1256,6 +1256,7 @@ static volatile uint8_t  g_chop_defer;             /* M24: a CONTINUOUS window g
                                                     * progress — accumulate the edits and pay
                                                     * for them ONCE when the finger lifts. See
                                                     * the FUNCTION-release hook. */
+static volatile int64_t  g_defer_t;                /* r3: last deferred edit (ms) — gates the release settle */
 /* M13 HEADS MODE (prototype, session-only): FN+PLAY TRIPLE-tap toggles it.
  * Tracks 2-4 stop playing their own loops and become three extra TAPE HEADS
  * on track 1's loop, offset by quarters of its audible cycle (Count-to-Five
@@ -6710,6 +6711,7 @@ int main(void)
 							g_meta_save_req = 1;  /* writer coalesces */
 						}
 						g_chop_defer = 1;   /* M24: glide is continuous */
+						g_defer_t = k_uptime_get();   /* r3 */
 						cp_rep_at = cp_cnt + cp_rep_iv;
 						if (cp_rep_iv > 5) cp_rep_iv--;   /* floor ~125 ms */
 					} else if (cp_cnt > 3 && cp_rep_at && cp_cnt >= cp_rep_at &&
@@ -6739,6 +6741,7 @@ int main(void)
 								g_meta_save_req = 1;
 							}
 							g_chop_defer = 1;   /* M24 */
+							g_defer_t = k_uptime_get();   /* r3 */
 						}
 						cp_rep_at = cp_cnt + 15;   /* steady ~375 ms */
 					}
@@ -6890,6 +6893,7 @@ int main(void)
 					 * so the ring converges on the new window all by
 					 * itself. Defer, and settle up on release. */
 					g_chop_defer = 1;
+					g_defer_t = k_uptime_get();   /* r3 */
 				}
 			}
 			if (combo_seen) {
@@ -7162,8 +7166,15 @@ int main(void)
 			 * because chop is a rhythmic gesture and immediacy is the
 			 * whole point of it. */
 			g_chop_defer = 0;
-			g_chop_req = 1;
-			g_dip_req = 1;
+			if (k_uptime_get() - g_defer_t < 150) {
+				/* released mid-motion: the last edit's splice may still be
+				 * in flight — settle as before (snap + one covering dip). */
+				g_chop_req = 1;
+				g_dip_req = 1;
+			}
+			/* r3: released after settling — the rings converged on the final
+			 * window rounds ago (see the M24 comment above); snapping and
+			 * dipping here was the audible FN-release silence. Skip both. */
 		}
 		if (fnp_pend_snap) {   /* M15-r3: released mid-window — still a double */
 			fnp_pend_snap = 0;
