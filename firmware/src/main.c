@@ -4033,6 +4033,7 @@ static void streamer_thread(void *a, void *b, void *c)
 					 * block belongs to the lap. */
 					bool _plain = (_cdiv == 1u && !g_win_free &&
 						       !g_win_rev &&
+						       !(heads_engaged() && g_head_rev[i]) &&   /* M50a: a reversed heads SOURCE must not take the express lane */
 						       !head_active(i) && t->len_samps &&
 						       _win == _wper && _wper == _gb);
 #else
@@ -4264,7 +4265,8 @@ static void streamer_thread(void *a, void *b, void *c)
 					 * path's room/content/race discipline exactly. */
 					if (cdiv == 1u && !g_win_free && !head_active(i) &&
 					    t->len_samps && win == wper && wper == gb &&
-					    !g_win_rev) {
+					    !g_win_rev &&
+					    !(heads_engaged() && g_head_rev[i])) {   /* M50a: reversed source -> head path */
 						uint32_t Ls  = t->len_samps;
 						uint32_t lp  = ((pw % Ls) + Ls -
 						              (t->start_samps % Ls)) % Ls;
