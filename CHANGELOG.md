@@ -5,6 +5,22 @@ Versions 1.0.0-1.2.4 below were the 2.0 development line (developed as a
 fork by marc, never announced) — kept for the honest record. The classic
 4-song firmware lives on the `v1` branch. Base: 1.x at commit c60941c.
 
+## [2.7.2] - the dropout fix
+
+- **USB streaming: no more dropouts at normal speeds.** USB traffic
+  made each storage read take twice as long. Now the tape streamer
+  gets priority when a loop runs low. It steps back when the loop
+  recovers. Buttons stay responsive.
+- **Max speed while streaming: much better.** Dropouts
+  are rare now. Max speed without streaming is clean.
+- **Heads mode: double-tap reverses the source track.** Before, the
+  other heads reversed and the source did not. Bug since v2.3.0.
+- **No more short silence when you let go of FUNCTION after a window
+  change.** Releasing FUNCTION after you move the window (or glide the
+  chop) always caused a short gain dip. Now the dip happens only if
+  you release while still moving a fader.
+
+
 ## [2.7.1] - instant record
 
 No format change: songs, grids and settings survive when flashed.

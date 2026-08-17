@@ -87,7 +87,7 @@ in the [upstream repo](https://github.com/chattock/sp1-tape-looper)):
 - Fixed and variable loop-length modes, switchable live.
 - Tape-style tempo/pitch rocker: 1 BPM per click, double-click for an exact
   semitone.
-- Aliasing-free recording at any tape speed, on a deeply hardened
+- Recording at any tape speed, on a deeply hardened
   audio/storage engine (four tracks plus an overdub at 1.5× with zero
   dropouts).
 - Works on Windows, macOS, iOS and Linux (the USB Audio 2.0 host quirk is

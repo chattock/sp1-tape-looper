@@ -1,7 +1,7 @@
 <svg viewBox="0 0 2360 1455" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
 <rect width="2360" height="1455" fill="#faf8f3"/>
 <text x="70" y="100" font-size="58" font-weight="700" fill="#1c1a17" letter-spacing="1">SP-1 TAPE LOOPER</text>
-<g transform="translate(690,58) rotate(-5)"><rect x="0" y="0" width="150" height="54" rx="10" fill="none" stroke="#e0503a" stroke-width="4"/><text x="75" y="38" font-size="30" font-weight="700" fill="#e0503a" text-anchor="middle">v2.7.1</text></g>
+<g transform="translate(690,58) rotate(-5)"><rect x="0" y="0" width="150" height="54" rx="10" fill="none" stroke="#e0503a" stroke-width="4"/><text x="75" y="38" font-size="30" font-weight="700" fill="#e0503a" text-anchor="middle">v2.7.2</text></g>
 <text x="2290" y="80" font-size="24" fill="#e0503a" text-anchor="end" font-weight="600">chattock.github.io/sp1-tape-looper</text>
 <text x="2290" y="112" font-size="20" fill="#77726a" text-anchor="end">flash: hold track 1 + track 4, plug in USB &#8594; solderless.engineering</text>
 <g transform="translate(655.5,154.8) scale(0.85)">
