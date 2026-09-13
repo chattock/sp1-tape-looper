@@ -11,6 +11,26 @@ headphones. The rocker changes playback speed and pitch together, like tape.
 Everything — loops, tempo/pitch, chop, placement, loop mode — persists per song
 on the SP-1's internal flash, surviving power-off and re-flashing.
 
+## What's new in 3.1.1
+
+Hold PLAY and click the rocker: the beat you just heard repeats. UP starts from
+the last beat, DOWN from the last two, and more clicks halve or double it. Let
+go and each track stays where the repeat left it, rounded to the nearest bar —
+release PLAY and FN together if you want the tape running underneath instead.
+It stays inside a chop, and on a chop shorter than a beat it takes a quarter of
+it rather than doing nothing.
+
+FN and the four faders are one window: 1 and 2 are its edges, 3 is its position,
+4 is its size. They start from whatever you are already hearing, and the
+rocker's chop now divides *inside* the window you set instead of replacing it.
+FN + PLAY + VOL− puts everything back — whole loop, forwards.
+
+Timing got stricter: the beat grid is derived from the tape, so a gridded song
+no longer drifts against its own metronome and MIDI clock; chopped tracks stay
+locked to each other at every depth; and a deep chop rounds to the musical
+division instead of truncating onto the storage grid. The reverb has its own
+delay line, so echo and reverb run together, and the pops are gone.
+
 ## What's new in 3.0
 
 3.0 is stereo. Takes record and play in stereo (mono per take if you want the
@@ -64,8 +84,9 @@ Three things people miss:
   it controls. No jumps, ever.
 - **FN + T1 + T4** resets every effect (on page 6 it centres placement, on
   page 7 it resets timing).
-- **Echo before reverb.** The two share one delay line; with the echo on, the
-  reverb is silent. Turn the echo off to hear the reverb.
+- **The beat repeat holds the tape.** Hold PLAY, click the rocker, then let go:
+  each track stays where the repeat left it, rounded to the nearest bar.
+  Release PLAY and FN together to let the tape run underneath instead.
 
 ## Loop transfer tool
 
@@ -122,9 +143,9 @@ sp1-tape-looper/
   chosen per take on page 8. Output is 48 kHz stereo.
 - Every playing track is a separate stream read off the flash in real time,
   while the track you are recording is written back. Four stereo tracks at
-  1.5× with USB audio in is the engine's edge; heavy effect stacks there
-  (all four EQ bands plus the reverb, or a bounce) can drop out. At 1× it is
-  clean.
+  1.5× with USB audio in and echo + reverb at max runs clean for minutes at a
+  time; heavier stacks on top of that, or a bounce at that corner, can still
+  drop out. At 1× it is clean.
 - Up to 8 minutes per track at 1×, on all 16 songs.
 
 ## The status line
