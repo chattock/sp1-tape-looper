@@ -5,6 +5,36 @@ Versions 1.0.0-1.2.4 below were the 2.0 development line (developed as a
 fork by marc, never announced) — kept for the honest record. The classic
 4-song firmware lives on the `v1` branch. Base: 1.x at commit c60941c.
 
+## [3.1.0] - the beat repeat, the pops, and headroom
+
+**No format change.** Songs recorded on 3.0 play as they are.
+
+### The beat repeat
+- **Hold PLAY, click the rocker.** UP = the last beat; UP again or hold = shorter. DOWN = the last two beats; DOWN again or hold = longer. Lift PLAY: it releases, in time.
+- **While it is live:** VOL− / VOL+ = the window earlier / later. FN + rocker = octave. FN + faders 1 / 2 / 3 = start / end / shift.
+- **It survives a bounce.** Hold PLAY, size the repeat, press a track: the stutter prints.
+
+### Bounce
+- **The rocker is free during a bounce.** Every block bakes at the speed you hear.
+- **In a held bounce:** lift PLAY, rocker = tempo. Keep PLAY down, rocker = the repeat.
+
+### Playing
+- **Monitor mute = PLAY + both VOL.** Anywhere, any page.
+- **Delete = tap, then press and hold** within 600 ms.
+
+### Sound
+- **Echo and reverb together.**
+- **The pops are gone:** the reverb rail pop, the dropout ticks, the rare hard click at max speed.
+- **Headroom.** Four stereo tracks at 1.5× with USB in and echo + reverb at max: six minutes, zero dropouts. Heavy stacks on top of that can still drop out.
+
+### Timing
+- **The grid comes from the tape.** Beats per loop and the 1 are derived from the loops and saved with the song. No drift.
+- **The loop seam** no longer dips at the join.
+
+### Removed
+- FN + both VOL on a page. The mute is PLAY + both VOL, everywhere.
+
+
 ## [3.0.0] - stereo, fx, and much more
 
 **Back up first. 3.0 changes the storage format.** Use *Download all* on the

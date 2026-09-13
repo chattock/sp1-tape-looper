@@ -47,11 +47,11 @@ SP-1 custom firmware) — no soldering or opening the device required:
 The pocket guide is the place to start. Print it double-sided, short-edge
 flip, fold in three.
 
-[![Pocket guide](docs/sp1-3.0-pocket-guide.png)](docs/sp1-3.0-pocket-guide.pdf)
+[![Pocket guide](docs/sp1-3.1-pocket-guide.png)](docs/sp1-3.1-pocket-guide.pdf)
 
 The four reference sheets cover every gesture and every page:
 
-[![Reference sheets](docs/sp1-3.0-reference.png)](docs/sp1-3.0-reference.pdf)
+[![Reference sheets](docs/sp1-3.1-reference.png)](docs/sp1-3.1-reference.pdf)
 
 Names: FN = the FUNCTION button (also the power button). TN = a track button.
 Tap = press and release. Hold = keep it down. Pages open with FN + a track
