@@ -3645,7 +3645,7 @@ static uint32_t tempo_median_ioi(void)
 static uint32_t tempo_refine(uint32_t bs)
 {
 	/* PAD-594 / PADHOST-715 (W287): the mixer's 32-byte line; the build sets the count. */
-	__asm__ volatile(".rept 12\n\tnop\n\t.endr");
+	__asm__ volatile(".rept 4\n\tnop\n\t.endr");
 	if (!bs || g_tempo.n < 4u) return 0u;
 	if (!g_tempo.first_onset || g_tempo.last_onset <= g_tempo.first_onset)
 		return 0u;
@@ -8942,24 +8942,33 @@ static void __attribute__((noinline)) chop_tile(uint32_t gb, uint32_t spb,
 	uint32_t cyc, win, wbase, wper;
 	if (g_fixed_len && base && gb >= base && (gb % base) == 0u) {
 		wper = base;
-		win = wper / cdiv; if (win == 0u) win = 1u;
-		wbase = (coff * wper) / cdiv;
+		win = (wper + cdiv / 2u) / cdiv; if (win == 0u) win = 1u;   /* CHOPROUND-811: a musical division, rounded -- not truncated onto the storage grid (W348) */
+		if (win > wper) win = wper;
+		wbase = (coff * wper + cdiv / 2u) / cdiv;   /* CHOPROUND-811: each offset lands on the NEAREST block to its musical position */
 		if (wbase + win > wper) wbase = wper - win;
 		cyc = (gb / wper) * win;
 	} else {
 		wper = gb;
-		win = gb / cdiv; if (win == 0u) win = 1u;
-		wbase = (coff * gb) / cdiv;
+		win = (gb + cdiv / 2u) / cdiv; if (win == 0u) win = 1u;   /* CHOPROUND-811 (W348) */
+		if (win > gb) win = gb;
+		wbase = (coff * gb + cdiv / 2u) / cdiv;   /* CHOPROUND-811 */
 		if (wbase + win > gb) wbase = gb - win;
 		cyc = win;
 	}
-	if (g_win_free) {   /* M16: the free window overrides the stepped div/off; read the pair defensively (torn store) */
+	if (g_win_free) {   /* CHOPNEST-813: the free window is the REGION; the rocker's chop SUBDIVIDES it.
+	                     * Read the pair defensively (torn store). With cdiv == 1 / coff == 0 this reduces
+	                     * exactly to M16's old override, so a region with no chop is unchanged. */
 		uint32_t ws = g_win_s8, we = g_win_e8;
 		if (we < ws) { uint32_t t2 = ws; ws = we; we = t2; }
-		win = ((we - ws + 1u) * wper) >> 8;
-		if (win == 0u) win = 1u;
-		wbase = (ws * wper) >> 8;
-		if (wbase + win > wper) wbase = wper - win;
+		uint32_t rbase = (ws * wper) >> 8;
+		uint32_t rlen  = ((we - ws + 1u) * wper) >> 8;
+		if (rlen == 0u) rlen = 1u;
+		if (rbase >= wper) rbase = wper - 1u;
+		if (rbase + rlen > wper) rlen = wper - rbase;
+		win = (rlen + cdiv / 2u) / cdiv; if (win == 0u) win = 1u;   /* CHOPROUND-811's law, on the region */
+		if (win > rlen) win = rlen;
+		wbase = rbase + (coff * rlen + cdiv / 2u) / cdiv;
+		if (wbase + win > rbase + rlen) wbase = rbase + rlen - win;
 		cyc = (gb / wper) * win;
 	}
 	*pwper = wper ? wper : 1u; *pwin = win ? win : 1u;
@@ -11315,7 +11324,7 @@ static void controls_diag(void)
 
 		printk("BTN,lat=%u,max=%u\n",
 		       (unsigned)g_stop_lat_ms, (unsigned)g_stop_lat_max);
-		printk("MT,b=807,mute=%u,tog=%u,rel=%u,tap=%u,rst=%u,sp=%u,last=%u,play=%u,cmb=%u,tr=%u,br=%u,brd=%u\n",   /* MTDIAG-742 / MUTEFIX4-743 / BEATREP-749: the PLAY-release trap, the chord-release mutes, the sagged PLAY reading, the repeat's engages + live div */
+		printk("MT,b=815,mute=%u,tog=%u,rel=%u,tap=%u,rst=%u,sp=%u,last=%u,play=%u,cmb=%u,tr=%u,br=%u,brd=%u\n",   /* MTDIAG-742 / MUTEFIX4-743 / BEATREP-749: the PLAY-release trap, the chord-release mutes, the sagged PLAY reading, the repeat's engages + live div */
 		       (unsigned)g_mon_mute, (unsigned)g_mt_tog, (unsigned)g_mt_rel, (unsigned)g_mt_tap, (unsigned)g_mt_rst, (unsigned)g_mt_sp, (unsigned)g_mt_last, (unsigned)g_playing, (unsigned)g_mt_cmb, (unsigned)g_mt_tr, (unsigned)g_br_n, (unsigned)(g_br_on ? g_chop_div : 0u));
 
 
@@ -13681,7 +13690,20 @@ int main(void)
 							g_chop_req = 1; g_dip_req = 1;
 						} else if (fvb == VOL_UP || fvb == VOL_DOWN) {
 							uint32_t d = (fvb == VOL_DOWN) ? 1u : g_chop_div;   /* VOL-: reset, whole loop; VOL+: home, size kept */
-							g_win_free = 0;   /* the buttons reclaim the SHAPE; g_win_rev stays (M23-r11) */
+							g_win_free = 0;
+							/* WINRESET-815 (marc): VOL- is the RESET, so it returns the window to the whole loop
+							 * PLAYING FORWARD -- it clears everything the FN faders set, direction included.
+							 * This reverses M23-r11 (nervouskidz), which kept the direction on the reasoning that
+							 * crossing the faders is a physical statement the buttons may not overrule. The reasoning
+							 * is right; the premise was never implemented. g_win_rev is written ONLY when a fader
+							 * moves under FN, and that same write also sets g_win_free = 1 -- so after a reset the
+							 * direction was stranded, with the only control that could clear it handing back a window
+							 * you then had to reset again. The crossing still speaks: it re-asserts the moment a
+							 * crossed fader is actually MOVED under FN, which is the statement being made rather than
+							 * one made minutes ago. PER-TRACK reverse (g_head_rev[], REV2-641) is NOT touched -- it is
+							 * a different gesture with its own control (marc: "dont touch the per-track reverse").
+							 * VOL+ is "home, size kept" and is not a reset, so it leaves the direction alone. */
+							if (fvb == VOL_DOWN) g_win_rev = 0;
 							g_chop_off = 0u;
 							g_chop_div = d;
 							if (g_slot < NUM_SLOTS) {
@@ -13721,15 +13743,21 @@ int main(void)
 				}
 				if (g_br_on && g_loop_len) {   /* BRFN2-766: FN + faders 1-3 on the repeat's window (the chord branch owns the pass, so the free-window code below never runs) */
 					static int64_t bf_press = -1;
-					static int16_t bf_snap[3], bf_s, bf_e; static uint8_t bf_eng[3];   /* 13 B: the floor is 3,500 */
+					static int16_t bf_snap[4], bf_s, bf_e, bf_z = 255; static uint8_t bf_eng[4];   /* 18 B: the floor is 3,500.
+					 * BRFADER4-814: four faders, not three -- bf_z is fader 4's SIZE trim, the wf_* handler's law verbatim. */
+					static int16_t bf_as = -1, bf_ae = -1;   /* COARSEWIN-815: the wf_* handler's retention, same law, same reason */
 					if (bf_press != combo_start) {
 						bf_press = combo_start;
-						for (int k = 0; k < 3; k++) { bf_snap[k] = -1; bf_eng[k] = 0; }
-						bf_s = (int16_t)g_br_s8;   /* BRCHOP-800: already Q8 of the audible cycle */
-						bf_e = (int16_t)(bf_s + (int)g_br_len8); if (bf_e > 255) bf_e = 255;
+						for (int k = 0; k < 4; k++) { bf_snap[k] = -1; bf_eng[k] = 0; }
+						bf_z = 255;   /* BRFADER4-814: a hold starts untrimmed, exactly as the wf_* handler does */
+						{   /* COARSEWIN-815: keep the COARSE parent if the repeat's window is still exactly what we applied */
+							int _bs = (int)g_br_s8, _be = _bs + (int)g_br_len8;
+							if (_be > 255) _be = 255;
+							if (!(_bs == (int)bf_as && _be == (int)bf_ae)) { bf_s = (int16_t)_bs; bf_e = (int16_t)_be; }
+						}
 					}
 					int bf_pend = 0;
-					for (int k = 0; k < 3; k++) {
+					for (int k = 0; k < 4; k++) {   /* BRFADER4-814: fader 4 joins the chord gesture */
 						int fv = ladder_read(&adc_ladder[LAD_FADER0 + k]);
 						if (fv < 0) continue;
 						int q = (int)((uint32_t)fv * 256u / 3700u); if (q > 255) q = 255;
@@ -13742,16 +13770,27 @@ int main(void)
 						}
 						if (k == 0)      { if (q != bf_s) { bf_s = (int16_t)q; bf_pend = 1; } }
 						else if (k == 1) { if (q != bf_e) { bf_e = (int16_t)q; bf_pend = 1; } }
-						else {
+						else if (k == 2) {   /* POSITION: the window slides, width and order preserved */
 							int w = (bf_s <= bf_e) ? bf_e - bf_s : bf_s - bf_e;
 							int base = (q * (255 - w)) >> 8;
 							bf_s = (int16_t)base; bf_e = (int16_t)(base + w); bf_pend = 1;
 						}
+						else { if (q != bf_z) { bf_z = (int16_t)q; bf_pend = 1; } }   /* BRFADER4-814: SIZE */
 					}
 					if (bf_pend) {
 						int ws = bf_s, we = bf_e;
 						if (ws > we) { int t2 = ws; ws = we; we = t2; }
+						if (bf_z < 255) {   /* BRFADER4-814: tighten about the CENTRE -- the wf_* handler's zoom, verbatim */
+							int _c2 = ws + we, _w = we - ws;
+							int _wz = (_w * bf_z) >> 8;
+							if (_wz < 2) _wz = 2;
+							ws = (_c2 - _wz) >> 1;
+							if (ws < 0) ws = 0;
+							we = ws + _wz;
+							if (we > 255) { we = 255; ws = we - _wz; if (ws < 0) ws = 0; }
+						}
 						if (we - ws < 2) { we = ws + 2; if (we > 255) { we = 255; ws = 253; } }
+						bf_as = (int16_t)ws; bf_ae = (int16_t)we;   /* COARSEWIN-815 */
 						br_setwin((uint32_t)ws, (uint32_t)(we - ws));   /* BRFIX-806: Q8 of the audible cycle -- 800 converted the other three sites and missed this copy, so FN + faders 1/2 saturated to the whole cycle */
 					}
 				}
@@ -13999,7 +14038,8 @@ int main(void)
 						 * because every consumer read the direction as
 						 * (g_win_free && g_win_rev) — see below, they
 						 * now read g_win_rev on its own. */
-						g_win_free = 0;
+						/* CHOPNEST-813: the rocker NO LONGER discards the region -- it subdivides it.
+						 * FN + PLAY + VOL- (the chop reset) and a track delete still clear it. */
 						uint32_t d = g_chop_div, o = g_chop_off;
 						if (vb == VOL_TEMPO_UP || vb == VOL_TEMPO_DOWN) {
 							if (vb == VOL_TEMPO_UP) {
@@ -14146,10 +14186,39 @@ int main(void)
 				static int wf_q3 = -1;
 				static int wf_pend;
 				static int64_t wf_at;
+				static int wf_z = 255;   /* FADER4ZOOM-812: FN + fader 4, Q8. 255 = the coarse window as set, 0 = tightest */
+				/* COARSEWIN-815: what this handler last APPLIED, as the seed below will read it back.
+				 * If the audible window still matches, nothing outside has touched it and the COARSE
+				 * pair in wf_s/wf_e is still the true parent -- so fader 4 zooms from the same window
+				 * it zoomed from last time, instead of from its own output. wf_ab: 0 = the free window,
+				 * 1 = the repeat's window, -1 = nothing applied yet (never matches). */
+				static int16_t wf_as = -1, wf_ae = -1; static int8_t wf_ab = -1;
 				if (wf_press != press_start) {
 					wf_press = press_start;
 					for (int wf = 0; wf < 4; wf++) {
 						wf_eng[wf] = 0; wf_snap[wf] = -1;
+					}
+					{   /* FNSEED-812: the four FN faders edit ONE window, and it starts from WHAT IS AUDIBLE --
+					     * not from the whole loop. Without this, touching any of them while a chop is live threw
+					     * the window out to the take's full length before the fader did anything. */
+						const uint32_t _cd = g_chop_div ? g_chop_div : 1u;
+						int _s, _e, _bi;
+						if (g_br_on && g_br_len8) {            /* the repeat's window, Q8 of the audible cycle */
+							_bi = 1; _s = (int)g_br_s8; _e = _s + (int)g_br_len8 - 1;
+						} else if (g_win_free) {               /* the free window already in force */
+							_bi = 0; _s = (int)g_win_s8; _e = (int)g_win_e8;
+						} else {                               /* the stepped chop, as Q8 of the loop */
+							_bi = 2;
+							_s = (int)((g_chop_off * 256u) / _cd);
+							_e = _s + (int)(256u / _cd) - 1;
+						}
+						/* COARSEWIN-815: compare BEFORE the clamps -- this is the raw pair the apply recorded. */
+						int _mine = (_bi == (int)wf_ab && _s == (int)wf_as && _e == (int)wf_ae);
+						if (_s < 0) _s = 0; if (_s > 253) _s = 253;
+						if (_e > 255) _e = 255;
+						if (_e < _s + 2) _e = _s + 2;
+						if (!_mine) { wf_s = _s; wf_e = _e; }   /* somebody else set it: adopt it as the new parent */
+						wf_q3 = -1; wf_z = 255;                 /* and a hold always begins at 'no zoom' */
 					}
 				}
 				int64_t wnow = k_uptime_get();
@@ -14174,10 +14243,15 @@ int main(void)
 						g_fh_lastq[wf] = -1;
 					}
 					if (wf == 3) {
-						/* M17: fader 4 = the DJ filter, applied
-						 * directly (no chop_req, no dip — the
-						 * coefficient ramp IS the declick) */
-						g_flt_pos = (uint8_t)q;
+						/* FADER4ZOOM-812 (row 144): fader 4 = the window ZOOM -- it
+						 * tightens the window faders 1/2/3 set, about its centre.
+						 * It no longer drives the DJ filter: that was a SECOND handle
+						 * on g_flt_pos (page 1 fader 1 writes the same state and keeps
+						 * it), and its drift under a chop-hold is what once stripped
+						 * the low end from all four loops. */
+						int d = (wf_z < 0) ? 99 : q - wf_z;
+						if (d < 0) d = -d;
+						if (d >= 2) { wf_z = q; wf_pend = 1; }
 					} else if (wf == 0) {
 						int d = q - wf_s; if (d < 0) d = -d;
 						if (d >= 2) { wf_s = q; wf_pend = 1; }
@@ -14204,6 +14278,15 @@ int main(void)
 					wf_at = wnow; wf_pend = 0;
 					int ws = wf_s, we = wf_e, rv = 0;
 					if (ws > we) { int t2 = ws; ws = we; we = t2; rv = 1; }
+					if (wf_z < 255) {   /* FADER4ZOOM-812: tighten about the CENTRE, coarse window preserved */
+						int _c2 = ws + we, _w = we - ws;
+						int _wz = (_w * wf_z) >> 8;
+						if (_wz < 2) _wz = 2;
+						ws = (_c2 - _wz) >> 1;
+						if (ws < 0) ws = 0;
+						we = ws + _wz;
+						if (we > 255) { we = 255; ws = we - _wz; if (ws < 0) ws = 0; }
+					}
 					if (we - ws < 2) {          /* floor ~1/128 sliver */
 						we = ws + 2;
 						if (we > 255) { we = 255; ws = 253; }
@@ -14211,11 +14294,13 @@ int main(void)
 					if (g_br_on) {   /* BRFN-765: faders 1/2 = the repeat window's start / end, fader 3 = its shift; not the chop's free window */
 						br_setwin((uint32_t)ws, (uint32_t)(we - ws));   /* BRCHOP-800: Q8 of the audible cycle */
 						(void)rv;
+						wf_as = (int16_t)ws; wf_ae = (int16_t)(we - 1); wf_ab = 1;   /* COARSEWIN-815: br_setwin stores a LENGTH, and the seed reads it back as s + len - 1 */
 					} else {
 					g_win_s8 = (uint8_t)ws;
 					g_win_e8 = (uint8_t)we;
 					g_win_rev = (uint8_t)rv;
 					g_win_free = 1;
+					wf_as = (int16_t)ws; wf_ae = (int16_t)we; wf_ab = 0;   /* COARSEWIN-815: the free window stores the END, read back as-is */
 					/* M24 (geraasmasjien + luuuciano): this used to
 					 * snap the rings and dip the master EVERY 60 ms
 					 * for the whole sweep. The dip slams gain to 0
