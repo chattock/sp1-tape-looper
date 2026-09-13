@@ -1728,12 +1728,32 @@ static void chop_meta_encode(uint8_t *c, uint32_t d, uint32_t o)
 /* Largest useful div: the window can't be finer than one block, so stop
  * doubling once the grid (or, gridless, the longest track) is exhausted.
  * Never below the old 64 so nothing that worked before is refused. */
+/* GRIDLAP-806 (W351): the stored loop was written in the GRID's sample domain and is generally not a whole
+ * number of blocks, but the streamer serves whole blocks -- so re-derive it from the lap that WILL be served.
+ * The shortest present take is the base (every take is a whole multiple of it), measured in THAT take's own
+ * blocks: the old line rounded with a hard-coded 280, which is 1.77x wrong for a mono song. Nothing is written
+ * back to the card -- an existing song simply stops drifting against its own metronome and MIDI clock.
+ * Its own function because the caller is the slot-switch service, which lives inside the mixer (W291). */
+static void __attribute__((noinline)) gridlap_load(void)
+{
+	uint32_t _lb = 0u, _sp = 0u;
+	for (int _k = 0; _k < NTRK; _k++)   /* the BASE take's format: the shortest present one */
+		if (trk[_k].state == TS_PLAY && trk[_k].len_blocks &&
+		    (!_lb || trk[_k].len_blocks < _lb)) { _lb = trk[_k].len_blocks; _sp = TSPBI(_k); }
+	if (!_sp) _sp = SAMP_PER_BLK;
+	if (g_loop_len) {   /* snap the STORED loop -- never the take's own length: if the base track was deleted
+	                     * the shortest survivor is a 2x or 3x multiple, and taking ITS length would double the song */
+		g_loop_blocks = (g_loop_len + _sp / 2u) / _sp;
+		g_loop_len    = g_loop_blocks * _sp;
+	}
+}
 static uint32_t chop_div_cap(void)
 {
-	uint32_t ref = g_loop_blocks;
-	if (!ref)
-		for (int i = 0; i < NTRK; i++)
-			if (trk[i].len_blocks > ref) ref = trk[i].len_blocks;
+	uint32_t ref = 0u;   /* CAPREF-806: the real takes first -- g_loop_blocks rounds with a literal 280 whatever
+	                      * the takes are, so on a mono song the cap was measured against a 1.77x wrong length */
+	for (int i = 0; i < NTRK; i++)
+		if (trk[i].len_blocks > ref) ref = trk[i].len_blocks;
+	if (!ref) ref = g_loop_blocks;
 	uint32_t cap = 64u;
 	while (cap < CHOP_DIV_MAX && (cap << 1) <= ref) cap <<= 1;
 	return cap;
@@ -1995,12 +2015,13 @@ static volatile uint8_t  g_mt_flash;                  /* MUTEANY-738 / MUTEFIX-7
 static uint8_t           g_mt_tog, g_mt_rel, g_mt_tap, g_mt_rst, g_mt_sp, g_mt_last;   /* MTDIAG-742: the PLAY-release trap */
 static uint8_t           g_mt_cmb;                    /* MUTEFIX4-743: chord-release mute events */
 static uint16_t          g_mt_tr;                     /* MUTEFIX4-743: the last track-ladder reading while the VOL pair was held (the sag, measured) */
-static uint8_t           g_br_on, g_br_n, g_br_free0, g_br_m0[2];   /* BEATREP-749: the beat repeat is live; engages; the saved free-window flag; the saved chop bytes */
-static uint32_t          g_br_div0, g_br_off0;         /* BEATREP-749: the chop pair to restore at the release */
+static uint8_t           g_br_on, g_br_n;             /* BEATREP-749: the beat repeat is live; engages. BRCHOP-800: the chop is never touched by the repeat (no save / restore) */
+static uint32_t          g_br_div;                    /* BRCHOP-800: the repeat's division of the loop (the rocker halves / doubles it) */
 static volatile uint8_t  g_br_live;                   /* BRWIN-754: the streamer maps through g_br_w/g_br_b */
-static volatile uint32_t g_br_w[NTRK], g_br_b[NTRK];   /* BRWIN-754: per track, in its own blocks: the window and its storage base (w = 0: not repeated) */
+static volatile uint32_t g_br_w[NTRK], g_br_b[NTRK];   /* BRWIN-754 / BRCHOP-800: per track, in its own blocks: the window (<= the audible cycle) and its offset INSIDE THE AUDIBLE CYCLE (w = 0: not repeated) */
 static volatile uint32_t g_br_a[NTRK];                /* BRSTICK-763: the window's phase anchor (0 at the engage; the playhead at a resize) */
-static uint32_t          g_br_s, g_br_len;            /* BRFN-765: the captured window in LOOP samples: start (mod L) and length */
+static uint16_t          g_br_s8, g_br_len8;          /* BRFN-765 / BRCHOP-800: the window as Q8 fractions of the AUDIBLE cycle: start (0..255) and length (1..256) */
+static volatile uint32_t g_br_shift;                  /* LOOPHOLD-804: the tape held by the repeat, in LOOP SAMPLES (mod the loop); session only, cleared on a song switch */
 static uint8_t           g_vol_pair;                  /* MUTEFIX3-741: the VOL pair was consumed under PLAY and has not been released (mirrors _rt_swallow for the track-ladder code) */
 static uint32_t          g_mt_tick;
 #define INW_N 768u                                    /* delay line, frames: > WOB_BASE_SAMP + peaks (672) */
@@ -3624,7 +3645,7 @@ static uint32_t tempo_median_ioi(void)
 static uint32_t tempo_refine(uint32_t bs)
 {
 	/* PAD-594 / PADHOST-715 (W287): the mixer's 32-byte line; the build sets the count. */
-	__asm__ volatile(".rept 2\n\tnop\n\t.endr");
+	__asm__ volatile(".rept 12\n\tnop\n\t.endr");
 	if (!bs || g_tempo.n < 4u) return 0u;
 	if (!g_tempo.first_onset || g_tempo.last_onset <= g_tempo.first_onset)
 		return 0u;
@@ -5895,8 +5916,13 @@ static void __attribute__((optimize("O2"), noinline)) looper_audio_block(int16_t
 					 * 60-200 that could not show it). Blocks stay what
 					 * the flash reads; samples are what the loop IS. */
 					if (glen && gbeats && g_gridrec_beat_samps) {
-						g_loop_len = gbeats * g_gridrec_beat_samps;
-						grid_adopt_loop(gbeats, trk[i].start_samps, g_grid_punch_k);   /* GRIDCORE-733 */
+						/* GRIDLAP-806 (W351): the song's loop is the lap the STREAMER SERVES -- whole blocks --
+						 * not the sample-exact beat product, which is generally not a block multiple. The two
+						 * differed by up to half a block on every gridded song (80 samples on marc's), and the
+						 * metronome, the MIDI clock, the bar quantiser and every beat line used the wrong one.
+						 * GRIDCORE-733: the tape is the clock. The gridded branch now ends as the ungridded does. */
+						g_loop_len = base * TSPBI(i);
+						grid_adopt_loop(gbeats, trk[i].start_samps, g_grid_punch_k);   /* GRIDCORE-733: adopts against the corrected L */
 					} else {
 						g_loop_len = base * TSPBI(i);
 						if (g_slot < NUM_SLOTS) { g_grid_n[g_slot] = 0u; g_grid_o[g_slot] = 0u; }   /* GRIDCORE-733: an ungridded loop */
@@ -6293,6 +6319,7 @@ static void __attribute__((optimize("O2"), noinline)) looper_audio_block(int16_t
 			}
 			if (pres) any = 1;
 		}
+		gridlap_load();   /* GRIDLAP-806: the loop becomes the lap the streamer will serve */
 		g_loop_active = any && (g_loop_len > 0);
 	}
 
@@ -7174,6 +7201,7 @@ static void xfer_service(void)
 		if (k_uptime_get() - last > 15000) {
 			xfer_commit();                         /* don't strand an upload in cache */
 			g_slot_switch_req = 1;                 /* reload tracks for the active song */
+			g_br_shift = 0;                        /* LOOPHOLD-804: a transfer reloads the takes under the hold */
 			g_xfer_mode = 0;
 		}
 		return;
@@ -7217,6 +7245,7 @@ static void xfer_service(void)
 	} else if (cmd == 'X') {                               /* commit, then exit transfer mode */
 		xfer_commit();
 		g_slot_switch_req = 1;                         /* reload tracks for the active song */
+		g_br_shift = 0;                                /* LOOPHOLD-804: a transfer reloads the takes under the hold */
 		g_xfer_mode = 0;
 		uint8_t h = 'x';
 		cdc_tx(&h, 1);
@@ -8886,16 +8915,66 @@ static void nudge_set(int t, uint8_t v)
  * is the caller's start % mod; `div` = 1 for the sample-exact paths, TSPB for the block paths. */
 static uint32_t __attribute__((noinline)) nudge_anchor(int i, uint32_t start_mod, uint32_t mod, uint32_t div)
 {
-	if (i < 0 || i >= NTRK || g_slot >= NUM_SLOTS || !mod || !div) return start_mod;
+	uint32_t base = start_mod;
+	if (g_br_shift && mod && div) base = (base + (g_br_shift / div)) % mod;   /* LOOPHOLD-804: the held tape, in this reader's units */
+	if (i < 0 || i >= NTRK || g_slot >= NUM_SLOTS || !mod || !div) return base;
 	const uint32_t nq = g_trk_nudge[g_slot][i];
-	if (!nq || nq == 128u) return start_mod;
+	if (!nq || nq == 128u) return base;
 	const struct looptrk *t = &trk[i];
 	const uint32_t beat = (g_grid_active && g_grid_beat_frames)
 	                    ? (uint32_t)(((uint64_t)g_grid_beat_frames * g_cur_speed_q16) >> 16)
 	                    : ((t->len_samps ? t->len_samps : 1u) / 8u);
 	const uint32_t q = (nq > 128u) ? (nq - 128u) : (128u - nq);
 	uint32_t m = (uint32_t)((((uint64_t)q * beat) >> 8) / div) % mod;
-	return (nq > 128u) ? (start_mod + m) % mod : (start_mod + mod - m) % mod;
+	return (nq > 128u) ? (base + m) % mod : (base + mod - m) % mod;   /* LOOPHOLD-804: on top of the held tape */
+}
+/* CHOPCORE-805: THE single definition of the chop's geometry, and of a track's position inside it. Five sites used to
+ * carry a copy of the phase and four a copy of the tile (PASS 2, the prime fill, br_geom, br_release, the LED pulse);
+ * they drifted, and a fix applied to one of them is a bug in the other four (W350). Everything calls these now.
+ * The tile math is 804's, verbatim. `base` is the song's loop in THIS TRACK's blocks (TLOOPB), so fixed mode takes the
+ * same branch in every caller -- PASS 2 used to measure it in 280-sample blocks, which is wrong for a mono take. */
+static void __attribute__((noinline)) chop_tile(uint32_t gb, uint32_t spb,
+                                                uint32_t *pwper, uint32_t *pwin, uint32_t *pwbase, uint32_t *pcyc)
+{
+	const uint32_t cdiv = g_chop_div ? g_chop_div : 1u, coff = g_chop_off;
+	const uint32_t _ll = g_loop_len;
+	const uint32_t base = (_ll && spb) ? ((_ll + spb / 2u) / spb) : 0u;   /* TLOOPB, from the track's own geometry */
+	uint32_t cyc, win, wbase, wper;
+	if (g_fixed_len && base && gb >= base && (gb % base) == 0u) {
+		wper = base;
+		win = wper / cdiv; if (win == 0u) win = 1u;
+		wbase = (coff * wper) / cdiv;
+		if (wbase + win > wper) wbase = wper - win;
+		cyc = (gb / wper) * win;
+	} else {
+		wper = gb;
+		win = gb / cdiv; if (win == 0u) win = 1u;
+		wbase = (coff * gb) / cdiv;
+		if (wbase + win > gb) wbase = gb - win;
+		cyc = win;
+	}
+	if (g_win_free) {   /* M16: the free window overrides the stepped div/off; read the pair defensively (torn store) */
+		uint32_t ws = g_win_s8, we = g_win_e8;
+		if (we < ws) { uint32_t t2 = ws; ws = we; we = t2; }
+		win = ((we - ws + 1u) * wper) >> 8;
+		if (win == 0u) win = 1u;
+		wbase = (ws * wper) >> 8;
+		if (wbase + win > wper) wbase = wper - win;
+		cyc = (gb / wper) * win;
+	}
+	*pwper = wper ? wper : 1u; *pwin = win ? win : 1u;
+	*pwbase = wbase; *pcyc = cyc ? cyc : 1u;
+}
+/* CHOPANCHOR-805: a track's phase in the audible chop cycle. THE LOOP POSITION FIRST, then the window: `start_blk` is
+ * a TRANSPORT block (where this take punched in), and `start_blk % cyc` reduced it by a musical window -- unrelated
+ * quantities, so every take got an arbitrary phase the moment cyc != gb. `(start_blk % gb) % cyc` is the take's own
+ * loop position reduced to the window, which is what the anchor always meant. When cyc == gb the two are the same
+ * expression, so un-chopped playback is unchanged; `mod` stays cyc, so the nudge and LOOPHOLD-804's shift are too. */
+static inline __attribute__((always_inline)) uint32_t chop_phase(int ni, uint32_t start_blk, uint32_t blk,
+                                                                 uint32_t gb, uint32_t cyc, uint32_t spb)
+{
+	if (!gb) gb = 1u; if (!cyc) cyc = 1u;
+	return ((blk % cyc) + cyc - nudge_anchor(ni, (start_blk % gb) % cyc, cyc, spb)) % cyc;
 }
 static void __attribute__((aligned(2048))) streamer_thread(void *a, void *b, void *c)
 {
@@ -9456,31 +9535,8 @@ static void __attribute__((aligned(2048))) streamer_thread(void *a, void *b, voi
 					uint32_t _pw   = (g_consume_pos / TSPB(t)) * TSPB(t);
 					uint32_t _gb   = t->len_blocks ? t->len_blocks
 					               : (TLOOPB(i) ? TLOOPB(i) : 1u);
-					uint32_t _cdiv = g_chop_div, _coff = g_chop_off;
-					uint32_t _cyc, _win, _wb, _wper;
-					if (g_fixed_len && TLOOPB(i) && _gb >= TLOOPB(i) &&
-					    (_gb % TLOOPB(i)) == 0u) {
-						_wper = TLOOPB(i);
-						_win = _wper / _cdiv; if (_win == 0u) _win = 1u;
-						_wb = (_coff * _wper) / _cdiv;
-						if (_wb + _win > _wper) _wb = _wper - _win;
-						_cyc = (_gb / _wper) * _win;
-					} else {
-						_wper = _gb;
-						_win = _gb / _cdiv; if (_win == 0u) _win = 1u;
-						_wb = (_coff * _gb) / _cdiv;
-						if (_wb + _win > _gb) _wb = _gb - _win;
-						_cyc = _win;
-					}
-					if (g_win_free) {   /* M16: prime from the free window */
-						uint32_t _ws = g_win_s8, _we = g_win_e8;
-						if (_we < _ws) { uint32_t _t = _ws; _ws = _we; _we = _t; }
-						_win = ((_we - _ws + 1u) * _wper) >> 8;
-						if (_win == 0u) _win = 1u;
-						_wb = (_ws * _wper) >> 8;
-						if (_wb + _win > _wper) _wb = _wper - _win;
-						_cyc = (_gb / _wper) * _win;
-					}
+					uint32_t _cyc, _win, _wb, _wper;   /* CHOPCORE-805: the prime fills from the SAME tile PASS 2 serves */
+					chop_tile(_gb, TSPB(t), &_wper, &_win, &_wb, &_cyc);
 					uint32_t _want = (RING_SAMPLES / 2u) + 16u * TSPB(t);
 					if (_want > RING_SAMPLES) _want = (RING_SAMPLES - WOB_RING_RSV) - TSPB(t);
 					if (g_win_rev)
@@ -9549,8 +9605,7 @@ static void __attribute__((aligned(2048))) streamer_thread(void *a, void *b, voi
 						}
 #endif
 						uint32_t _pwb = _pw / TSPB(t);
-						uint32_t _c   = ((_pwb % _cyc) + _cyc -
-								 nudge_anchor(i, t->start_blk % _cyc, _cyc, TSPB(t))) % _cyc;   /* NUDGE-717 */
+						uint32_t _c   = chop_phase(i, t->start_blk, _pwb, _gb, _cyc, TSPB(t));   /* NUDGE-717 / CHOPANCHOR-805 */
 						uint32_t _lb  = (_c / _win) * _wper + _wb + (_c % _win);
 						uint32_t _n   = 32u;
 						if (_n > (RING_SAMPLES / TSPB(t)) - 1u) _n = (RING_SAMPLES / TSPB(t)) - 1u;
@@ -9735,36 +9790,8 @@ static void __attribute__((aligned(2048))) streamer_thread(void *a, void *b, voi
 				 * layer plays the same base/div slice OF EACH OF ITS
 				 * BARS, uniform and phase-locked, multi-bar variation
 				 * preserved. div=1 reduces to the original math. */
-				uint32_t cdiv = g_chop_div, coff = g_chop_off;
-				uint32_t cyc, win, wbase, wper;
-				if (g_fixed_len && g_loop_blocks && gb >= g_loop_blocks &&
-				    (gb % g_loop_blocks) == 0u) {
-					wper = g_loop_blocks;
-					win = wper / cdiv; if (win == 0u) win = 1u;
-					wbase = (coff * wper) / cdiv;
-					if (wbase + win > wper) wbase = wper - win;
-					cyc = (gb / wper) * win;
-				} else {
-					wper = gb;
-					win = gb / cdiv; if (win == 0u) win = 1u;
-					wbase = (coff * gb) / cdiv;
-					if (wbase + win > gb) wbase = gb - win;
-					cyc = win;
-				}
-				if (g_win_free) {
-					/* M16 FREE WINDOW overrides the stepped div/off.
-					 * The pair is stored ordered, but read the two
-					 * volatiles defensively: a torn read between the
-					 * control thread's stores may see them crossed
-					 * for one round. */
-					uint32_t ws = g_win_s8, we = g_win_e8;
-					if (we < ws) { uint32_t t2 = ws; ws = we; we = t2; }
-					win = ((we - ws + 1u) * wper) >> 8;
-					if (win == 0u) win = 1u;
-					wbase = (ws * wper) >> 8;
-					if (wbase + win > wper) wbase = wper - win;
-					cyc = (gb / wper) * win;
-				}
+				uint32_t cyc, win, wbase, wper;   /* CHOPCORE-805: ONE tile definition, shared with the prime, br_tile and the LEDs */
+				chop_tile(gb, TSPB(hsrc), &wper, &win, &wbase, &cyc);
 				/* BOUNDARY BUDGET: a chunk clipped by the loop wrap or the
 				 * content/silence boundary used to consume this track's
 				 * WHOLE turn in the round — so the only track with a
@@ -9852,8 +9879,8 @@ static void __attribute__((aligned(2048))) streamer_thread(void *a, void *b, voi
 					 * wper=gb, cyc=win -> identical to M5). */
 					uint32_t hoff = heads_engaged()
 						      ? (((uint32_t)g_head_pos[i] * cyc) >> 8) : 0u;
-					uint32_t c = ((pwb % cyc) + cyc -
-						      nudge_anchor(head_active(i) ? (int)g_head_src : i, hsrc->start_blk % cyc, cyc, TSPB(hsrc)) + hoff) % cyc;   /* NUDGE-717: the source's */
+					uint32_t c = (chop_phase(head_active(i) ? (int)g_head_src : i, hsrc->start_blk,
+								 pwb, gb, cyc, TSPB(hsrc)) + hoff) % cyc;   /* NUDGE-717 / CHOPANCHOR-805: the source's */
 					/* M15 REVERSE: mirror the phase — consecutive ring
 					 * blocks then walk the source BACKWARD, and each
 					 * block's samples are flipped after decode below:
@@ -9862,10 +9889,12 @@ static void __attribute__((aligned(2048))) streamer_thread(void *a, void *b, voi
 						    (bool)g_win_rev;
 					if (hrev) c = (cyc - 1u) - c;
 					uint32_t loop_blk = (c / win) * wper + wbase + (c % win);
-					if (g_br_live && !hrev && !head_active(i) && g_br_w[i]) {   /* BRWIN-754: the beat repeat's window, per track, storage-relative, wrapping */
-						win = g_br_w[i]; cyc = win; wper = gb; wbase = g_br_b[i];
-						c = (pwb + win - (g_br_a[i] % win)) % win;   /* BRSTICK-763: the phase anchor (0 at the engage) */
-						loop_blk = (wbase + c) % gb;
+					uint32_t brph = 0u, brw = 0u;
+					if (g_br_live && !hrev && !head_active(i) && g_br_w[i]) {   /* BRWIN-754 / BRCHOP-800: the beat repeat = a window INSIDE the audible cycle; the chop's tile stays */
+						brw = g_br_w[i];   /* BRCLAMP-804: ONE read -- a resize between two reads underflowed the clamp below */
+						brph = (pwb + brw - (g_br_a[i] % brw)) % brw;   /* BRSTICK-763: the phase anchor (0 at the engage) */
+						c = (g_br_b[i] + brph) % cyc;
+						loop_blk = (c / win) * wper + wbase + (c % win);
 					}
 					uint32_t n = budget;
 					if (n > (RING_SAMPLES / _spb) - 1u) n = (RING_SAMPLES / _spb) - 1u;
@@ -9891,7 +9920,7 @@ static void __attribute__((aligned(2048))) streamer_thread(void *a, void *b, voi
 								n = loop_blk - wstart + 1u;
 						}
 					}
-					if (g_br_live && !hrev && !head_active(i) && g_br_w[i] && n > win - c) n = win - c;   /* BRWIN-754: the run ends at the window's edge, wrap-safe */
+					if (brw && n > brw - brph) n = brw - brph;   /* BRWIN-754 / BRCHOP-800 / BRCLAMP-804: the repeat's edge, from the SAME read (the tile edge is clipped above) */
 					/* SILENCE PAD: the loop length can exceed the recorded
 					 * content (fixed mode). [content, gb) was never written
 					 * to flash — read it as synthesised zeros instead of
@@ -11286,10 +11315,14 @@ static void controls_diag(void)
 
 		printk("BTN,lat=%u,max=%u\n",
 		       (unsigned)g_stop_lat_ms, (unsigned)g_stop_lat_max);
-		printk("MT,b=792,mute=%u,tog=%u,rel=%u,tap=%u,rst=%u,sp=%u,last=%u,play=%u,cmb=%u,tr=%u,br=%u,brd=%u\n",   /* MTDIAG-742 / MUTEFIX4-743 / BEATREP-749: the PLAY-release trap, the chord-release mutes, the sagged PLAY reading, the repeat's engages + live div */
+		printk("MT,b=807,mute=%u,tog=%u,rel=%u,tap=%u,rst=%u,sp=%u,last=%u,play=%u,cmb=%u,tr=%u,br=%u,brd=%u\n",   /* MTDIAG-742 / MUTEFIX4-743 / BEATREP-749: the PLAY-release trap, the chord-release mutes, the sagged PLAY reading, the repeat's engages + live div */
 		       (unsigned)g_mon_mute, (unsigned)g_mt_tog, (unsigned)g_mt_rel, (unsigned)g_mt_tap, (unsigned)g_mt_rst, (unsigned)g_mt_sp, (unsigned)g_mt_last, (unsigned)g_playing, (unsigned)g_mt_cmb, (unsigned)g_mt_tr, (unsigned)g_br_n, (unsigned)(g_br_on ? g_chop_div : 0u));
 
 
+		printk("BR,sh=%u,on=%u,cd=%u,co=%u,fw=%u,w=%u/%u/%u/%u,b=%u/%u/%u/%u\n",   /* BRDIAG-804 */
+		       (unsigned)g_br_shift, (unsigned)g_br_on, (unsigned)g_chop_div, (unsigned)g_chop_off, (unsigned)g_win_free,
+		       (unsigned)g_br_w[0], (unsigned)g_br_w[1], (unsigned)g_br_w[2], (unsigned)g_br_w[3],
+		       (unsigned)g_br_b[0], (unsigned)g_br_b[1], (unsigned)g_br_b[2], (unsigned)g_br_b[3]);
 		printk("W4P,pk=%u,pb=%u,sq=%u,tq=%u\n",
 		       (unsigned)g_w4_pk, (unsigned)g_w4_pb,
 		       (unsigned)g_w4_sq, (unsigned)g_w4_tq);
@@ -11586,9 +11619,29 @@ static enum trk_btn decode_tracks(int v)
 	return TRK_PLAY;                /* ~1823 */
 }
 
-/* BEATREP-749: the beat repeat = the chop window pointed at one beat. Controls thread only. */
-/* BRWIN-754: the per-track geometry of a window `div` of the loop, ONE back from the playhead. */
-static void __attribute__((noinline)) br_geom(uint32_t div)
+/* BEATREP-749: the beat repeat = a window pointed at one beat. Controls thread only.
+ * BRCHOP-800: the window lives INSIDE THE AUDIBLE CYCLE (the chop's tile), never in storage: the streamer keeps its
+ * ordinary chop mapping and only narrows the phase to [C0, C0 + W). br_tile() mirrors the streamer's tile math. */
+static void __attribute__((noinline)) br_tile(const struct looptrk *t, uint32_t gb, uint32_t *pwin, uint32_t *pcyc)
+{
+	uint32_t wper, wbase;   /* CHOPCORE-805: the beat repeat reads the streamer's tile, not a copy of it */
+	chop_tile(gb, TSPB(t), &wper, pwin, &wbase, pcyc);
+}
+/* BRCHOP-800: publish the FN layer's Q8 view from the first repeated track. */
+static void br_publish8(void)
+{
+	for (int i = 0; i < NTRK; i++) {
+		if (!g_br_w[i]) continue;
+		uint32_t win, cyc; br_tile(&trk[i], trk[i].len_blocks, &win, &cyc);
+		uint32_t l8 = (uint32_t)(((uint64_t)g_br_w[i] * 256u) / cyc); if (l8 < 1u) l8 = 1u; if (l8 > 256u) l8 = 256u;
+		g_br_s8 = (uint16_t)((((uint64_t)g_br_b[i] * 256u) / cyc) & 255u); g_br_len8 = (uint16_t)l8;
+		return;
+	}
+}
+/* BRWIN-754: the per-track geometry of a window `div` of the loop, ONE back from the playhead's last beat line. */
+/* BRSUB-807: `den` is what the ROCKER asked for when the musical window does not fit inside the chop --
+ * 4 (UP, short) or 2 (DOWN, long). It is ignored whenever the window fits, which is every un-chopped song. */
+static void __attribute__((noinline)) br_geom(uint32_t div, uint32_t den)
 {
 	g_br_live = 0;
 	for (int i = 0; i < NTRK; i++) {
@@ -11596,9 +11649,15 @@ static void __attribute__((noinline)) br_geom(uint32_t div)
 		g_br_w[i] = 0u;
 		if (t->state != TS_PLAY || head_active(i) || !t->len_blocks || !div) continue;
 		const uint32_t spb = TSPB(t), gb = t->len_blocks;
+		uint32_t win, cyc; br_tile(t, gb, &win, &cyc);
 		uint32_t w = (gb + div / 2u) / div; if (w < 1u) w = 1u;   /* BRGRID-764: rounded, not truncated (87.875 -> 88, not 87) */
+		{	/* BRSUB-807: a window INSIDE what is audible is never wider than HALF of it. 800 clamped to the whole
+			 * cycle, which made the repeat a NO-OP on a chop shorter than a beat. This only fires when the musical
+			 * window does not fit -- un-chopped, one beat of an n-beat loop is already <= half the loop. */
+			if (w >= cyc) { w = (den >= 4u) ? (cyc / 4u) : (cyc / 2u); if (w < 1u) w = 1u; }
+		}
 		const uint32_t P = g_consume_pos, pwbc = P / spb;
-		uint32_t line_blk;   /* the last window boundary at or before the playhead, in this track's blocks */
+		uint32_t line_blk;   /* the last window boundary at or before the playhead, in this track's blocks (free-running) */
 		{	/* BRGRID-764: on a gridded song the boundaries are the BEAT LINES (GRIDCORE: O + k * L / n), subdivided by the
 			 * window; ungridded: multiples of the window in the free-running count, as before. */
 			const uint32_t n = (g_slot < NUM_SLOTS) ? (uint32_t)g_grid_n[g_slot] : 0u;
@@ -11610,47 +11669,57 @@ static void __attribute__((noinline)) br_geom(uint32_t div)
 				line_blk = pwbc - (pwbc % w);
 			}
 		}
-		int64_t b = ((int64_t)line_blk - (int64_t)w - (int64_t)(t->start_blk % gb)) % (int64_t)gb;
-		if (b < 0) b += (int64_t)gb;
-		g_br_b[i] = (uint32_t)b; g_br_w[i] = w; g_br_a[i] = line_blk % w;   /* BRSTICK-763 / BRGRID-764: phase-continuous, one window back from the line */
-		if (g_loop_len) {   /* BRFN-765: the same window in loop samples, for the FN layer */
-			const uint32_t len = (g_loop_len + div / 2u) / div;
-			g_br_len = len ? len : 1u;
-			g_br_s = (uint32_t)(((uint64_t)(line_blk * spb) + g_loop_len - (g_br_len % g_loop_len)) % g_loop_len);
-		}
+		/* BRCHOP-800: the line's phase in the AUDIBLE cycle, exactly as the streamer computes it (the nudge included) */
+		const uint32_t c_line = chop_phase(i, t->start_blk, line_blk, gb, cyc, spb);   /* CHOPANCHOR-805: the streamer's own law */
+		g_br_b[i] = (c_line + cyc - w) % cyc; g_br_w[i] = w; g_br_a[i] = line_blk % w;   /* BRSTICK-763 / BRGRID-764: phase-continuous, one window back from the line */
 	}
+	br_publish8();
 	g_br_live = 1;
 }
-/* BRFN-765: set the repeat's window to [s, s + len) in LOOP samples, per track, keeping each track's phase
- * inside the window (no retrigger). Used by the resize, the FN shift and the FN faders. */
-static void __attribute__((noinline)) br_setwin(uint32_t s_loop, uint32_t len)
+/* BRFN-765 / BRCHOP-800: set the repeat's window to [s8, s8 + len8) as Q8 fractions of the AUDIBLE cycle, per track,
+ * keeping each track's phase inside the window (no retrigger). Used by the FN shift and the FN faders. */
+static void __attribute__((noinline)) br_setwin(uint32_t s8, uint32_t len8)
 {
-	if (!g_loop_len) return;
-	if (len < 1u) len = 1u; if (len > g_loop_len) len = g_loop_len;
-	s_loop %= g_loop_len;
+	if (len8 < 1u) len8 = 1u; if (len8 > 256u) len8 = 256u;
+	s8 &= 255u;
 	g_br_live = 0;
 	const uint32_t P = g_consume_pos;
-	const uint32_t S_free = P - ((P + g_loop_len - s_loop) % g_loop_len);   /* the most recent occurrence of loop position s */
 	for (int i = 0; i < NTRK; i++) {
 		struct looptrk *t = &trk[i];
 		if (!g_br_w[i] || t->state != TS_PLAY || head_active(i) || !t->len_blocks) { g_br_w[i] = 0u; continue; }
 		const uint32_t spb = TSPB(t), gb = t->len_blocks;
-		uint32_t w = (len + spb / 2u) / spb; if (w < 1u) w = 1u; if (w > gb) w = gb;
+		uint32_t win, cyc; br_tile(t, gb, &win, &cyc);
+		uint32_t w = (uint32_t)(((uint64_t)len8 * cyc) >> 8); if (w < 1u) w = 1u;
+		if (w >= cyc) { w = cyc / 2u; if (w < 1u) w = 1u; }   /* BRSUB-807: the FN faders stop short of the whole cycle -- the whole cycle IS the chop */
 		const uint32_t pwbc = P / spb, w0 = g_br_w[i];
 		const uint32_t phi = (pwbc + w0 - (g_br_a[i] % w0)) % w0;      /* the phase inside the old window now */
-		int64_t b = ((int64_t)(S_free / spb) - (int64_t)(t->start_blk % gb)) % (int64_t)gb;
-		if (b < 0) b += (int64_t)gb;
-		g_br_b[i] = (uint32_t)b; g_br_w[i] = w;
+		g_br_b[i] = (uint32_t)(((uint64_t)s8 * cyc) >> 8) % cyc; g_br_w[i] = w;
 		g_br_a[i] = ((pwbc % w) + w - (phi % w)) % w;                  /* keep the phase */
 	}
-	g_br_s = s_loop; g_br_len = len;
+	g_br_s8 = (uint16_t)s8; g_br_len8 = (uint16_t)len8;
 	g_br_live = 1;
 }
-/* BRSTICK-763 / BRFN-765: a resize keeps the CAPTURED start and changes only the length (the phase kept). */
+/* BRSTICK-763 / BRCHOP-800: a resize keeps the CAPTURED start and changes only the length (the phase kept), per track
+ * from the division exactly (no Q8 round trip), clamped to the audible cycle. */
 static void __attribute__((noinline)) br_resize(uint32_t div)
 {
-	if (!div || !g_loop_len) return;
-	br_setwin(g_br_s, (g_loop_len + div / 2u) / div);
+	if (!div) return;
+	g_br_live = 0;
+	const uint32_t P = g_consume_pos;
+	for (int i = 0; i < NTRK; i++) {
+		struct looptrk *t = &trk[i];
+		if (!g_br_w[i] || t->state != TS_PLAY || head_active(i) || !t->len_blocks) { g_br_w[i] = 0u; continue; }
+		const uint32_t spb = TSPB(t), gb = t->len_blocks;
+		uint32_t win, cyc; br_tile(t, gb, &win, &cyc);
+		uint32_t w = (gb + div / 2u) / div; if (w < 1u) w = 1u;
+		if (w >= cyc) { w = cyc / 2u; if (w < 1u) w = 1u; }   /* BRSUB-807: a resize can never climb back into the no-op */
+		const uint32_t pwbc = P / spb, w0 = g_br_w[i];
+		const uint32_t phi = (pwbc + w0 - (g_br_a[i] % w0)) % w0;
+		g_br_w[i] = w;
+		g_br_a[i] = ((pwbc % w) + w - (phi % w)) % w;
+	}
+	br_publish8();
+	g_br_live = 1;
 }
 static void __attribute__((noinline)) br_click(int down)   /* BRDIR-757: `down` = SHRINK = the rocker UP (the chop's convention) */
 {
@@ -11658,34 +11727,46 @@ static void __attribute__((noinline)) br_click(int down)   /* BRDIR-757: `down` 
 		if (!g_playing || (g_rec_track >= 0 && !g_bnc_on) || !g_loop_active || !g_loop_len) return;   /* BRBNC-758: a repeat may start during a bounce (not during a plain take) */
 		uint32_t n = (g_slot < NUM_SLOTS) ? (uint32_t)g_grid_n[g_slot] : 0u;
 		if (n == 0u || n > CHOP_DIV_MAX / 2u) n = 8u;   /* ungridded: eighths of the loop */
-		g_br_div0 = g_chop_div; g_br_off0 = g_chop_off; g_br_free0 = g_win_free;
-		if (g_slot < NUM_SLOTS) { g_br_m0[0] = g_meta.chop[g_slot][0]; g_br_m0[1] = g_meta.chop[g_slot][1]; }
 		if (!down && n > 1u && (n & 1u) == 0u) n /= 2u;   /* BRBEAT-755 / BRDIR-757: UP first = ONE beat; DOWN first = TWO beats */
-		uint32_t k = (uint32_t)(((uint64_t)(g_consume_pos % g_loop_len) * n) / g_loop_len);   /* the window playing now */
-		g_win_free = 0;
-		g_chop_off = (k + n - 1u) % n; g_chop_div = n;   /* BRPREV-753: the window BEFORE the one playing (the LED display; the streamer maps through br_geom) */
-		br_geom(n);   /* BRWIN-754 */
+		g_br_div = n;
+		br_geom(n, down ? 4u : 2u);   /* BRWIN-754 / BRCHOP-800: inside the chop, the chop untouched. BRSUB-807: UP (down) asks SHORT -> a quarter of the chop, DOWN asks LONG -> half */
 		g_br_on = 1; g_br_n++;
 	} else {
-		uint32_t d = g_chop_div, o = g_chop_off;
-		if (down) { if (d * 2u <= CHOP_DIV_MAX) { d *= 2u; o *= 2u; } }          /* half the window */
-		else      { if (d > 1u && (d & 1u) == 0u) { d /= 2u; o /= 2u; } }         /* double it */
-		g_chop_off = (d > 1u) ? (o % d) : 0u; g_chop_div = d;
+		uint32_t d = g_br_div;
+		if (down) { if (d * 2u <= CHOP_DIV_MAX) d *= 2u; }          /* half the window */
+		else      { if (d > 1u && (d & 1u) == 0u) d /= 2u; }         /* double it (clamped to the audible cycle per track) */
+		g_br_div = d;
 		br_resize(d);   /* BRSTICK-763: the same captured clip, resized from its start */
 	}
 	g_chop_req = 1; g_dip_req = 1;
 }
-static void __attribute__((noinline)) br_release(void)
+/* LOOPHOLD-804: `roll` = land where the tape would be (792's behaviour, now the FN variant). The default HOLDS the
+ * tape: each track lands where the repeat left off, the shift rounded to a bar so the downbeats stay on the grid. */
+static void __attribute__((noinline)) br_release(int roll)
 {
 	if (!g_br_on) return;
+	if (!roll && !g_bnc_on && g_loop_len && g_slot < NUM_SLOTS && g_grid_n[g_slot]) {
+		for (int i = 0; i < NTRK; i++) {   /* one reference track: the hold is one musical amount for the whole tape */
+			struct looptrk *t = &trk[i];
+			if (!g_br_w[i] || t->state != TS_PLAY || head_active(i) || !t->len_blocks) continue;
+			const uint32_t spb = TSPB(t), gb = t->len_blocks;
+			uint32_t win, cyc; br_tile(t, gb, &win, &cyc);
+			const uint32_t W = g_br_w[i], pwbc = g_consume_pos / spb;
+			const uint32_t brph = (pwbc + W - (g_br_a[i] % W)) % W;
+			const uint32_t c_rep = (g_br_b[i] + brph) % cyc;                    /* where the repeat is */
+			const uint32_t c_rol = chop_phase(i, t->start_blk, pwbc, gb, cyc, spb);   /* where the tape is (CHOPANCHOR-805) */
+			uint32_t raw = ((c_rol + cyc - c_rep) % cyc) * spb;                 /* the hold, in loop samples */
+			const uint32_t n = (uint32_t)g_grid_n[g_slot];
+			const uint32_t u = (n % 4u == 0u) ? 4u : (n % 3u == 0u) ? 3u : (n % 2u == 0u) ? 2u : 1u;   /* a bar, in beats */
+			const uint32_t unit = (uint32_t)(((uint64_t)g_loop_len * u) / n);
+			if (unit) raw = ((raw + unit / 2u) / unit) * unit;   /* NEAREST bar: a short stutter rounds to 0 and lands in time */
+			if (raw) g_br_shift = (uint32_t)(((uint64_t)g_br_shift + raw) % g_loop_len);
+			break;
+		}
+	}
 	g_br_live = 0;   /* BRWIN-754: the streamer's ordinary mapping is back before the chop request */
 	g_br_on = 0;
-	g_chop_div = g_br_div0; g_chop_off = g_br_off0; g_win_free = g_br_free0;
-	if (g_slot < NUM_SLOTS && (g_meta.chop[g_slot][0] != g_br_m0[0] || g_meta.chop[g_slot][1] != g_br_m0[1])) {
-		g_meta.chop[g_slot][0] = g_br_m0[0]; g_meta.chop[g_slot][1] = g_br_m0[1];   /* an FN edit during the repeat is undone */
-		g_meta_save_req = 1;
-	}
-	g_chop_req = 1; g_dip_req = 1;
+	g_chop_req = 1; g_dip_req = 1;   /* BRCHOP-800: nothing to restore -- the chop was never touched */
 }
 
 static enum vol_btn decode_vol(int v)
@@ -12468,16 +12549,13 @@ static void led_service(void)
 					                                     : &trk[i];
 					uint32_t gb2 = hs2->len_blocks ? hs2->len_blocks
 						     : (g_loop_blocks ? g_loop_blocks : 1u);
-					uint32_t dv2 = g_chop_div ? g_chop_div : 1u;
-					uint32_t cyc2 = g_win_free
-						      ? ((gb2 * ((uint32_t)(g_win_e8 - g_win_s8) + 1u)) >> 8)
-						      : gb2 / dv2;
-					if (cyc2 == 0u) cyc2 = 1u;
+					uint32_t wper2, win2, wb2, cyc2;   /* CHOPCORE-805: the light marks the AUDIBLE wrap -- the real tile, */
+					chop_tile(gb2, TSPB(hs2), &wper2, &win2, &wb2, &cyc2);   /* fixed mode included, which the old ad-hoc cyc ignored */
 					uint32_t ho2 = heads_engaged()
 					             ? (((uint32_t)g_head_pos[i] * cyc2) >> 8) : 0u;
-					uint32_t pwb2 = (uint32_t)(g_consume_pos / SAMP_PER_BLK);
-					uint32_t c2 = ((pwb2 % cyc2) + cyc2 -
-						       nudge_anchor(head_active(i) ? (int)g_head_src : i, hs2->start_blk % cyc2, cyc2, TSPB(hs2)) + ho2) % cyc2;   /* NUDGE-717 */
+					uint32_t pwb2 = (uint32_t)(g_consume_pos / TSPB(hs2));   /* CHOPCORE-805: the track's own blocks, not a fixed 280 */
+					uint32_t c2 = (chop_phase(head_active(i) ? (int)g_head_src : i, hs2->start_blk,
+								  pwb2, gb2, cyc2, TSPB(hs2)) + ho2) % cyc2;   /* NUDGE-717 / CHOPANCHOR-805 */
 					{
 						int rv2 = g_win_rev ? 1 : 0;
 						if (g_head_rev[i]) rv2 ^= 1;   /* REV2-641 */
@@ -12949,6 +13027,7 @@ static void jump_to_slot(uint32_t ns)
 	g_grid_base_beats = 0; g_grid_base_blocks = 0;   /* M20 F7 */
 	g_gridrec_beat_samps = 0;   /* LOCKLOAD-725: the stored beat belongs to the song that punched it */
 	g_win_free = 0;     /* M16: the free window is session performance state */
+	g_br_shift = 0;     /* LOOPHOLD-804: so is the tape the repeat held -- per song, session only */
 	g_win_rev = 0;
 	for (int _r = 0; _r < NTRK; _r++) g_head_rev[_r] = 0;   /* REV2-641: so are the directions */
 	g_heads_mode = 0;   /* M13: heads are per-song doctrine like speed/mutes/
@@ -13598,7 +13677,7 @@ int main(void)
 					if (fv_cnt == 2) {   /* the committed press edge */
 						combo_fired = 1; fnp_pend_snap = 0; combo_seen = 1;
 						if (g_br_on && (fvb == VOL_UP || fvb == VOL_DOWN)) {   /* BRFN-765: the repeat's FN layer -- VOL-/+ = the window one earlier / later; BROCT-771: the rocker falls through to the OCTAVE (bare PLAY + rocker is shorter / longer) */
-							if (g_loop_len && g_br_len) br_setwin((fvb == VOL_UP) ? (g_br_s + g_br_len) : (g_br_s + g_loop_len - (g_br_len % g_loop_len)), g_br_len);
+							if (g_br_len8) br_setwin((fvb == VOL_UP) ? (g_br_s8 + g_br_len8) : (g_br_s8 + 256u - g_br_len8), g_br_len8);   /* BRCHOP-800: Q8 of the audible cycle */
 							g_chop_req = 1; g_dip_req = 1;
 						} else if (fvb == VOL_UP || fvb == VOL_DOWN) {
 							uint32_t d = (fvb == VOL_DOWN) ? 1u : g_chop_div;   /* VOL-: reset, whole loop; VOL+: home, size kept */
@@ -13646,8 +13725,8 @@ int main(void)
 					if (bf_press != combo_start) {
 						bf_press = combo_start;
 						for (int k = 0; k < 3; k++) { bf_snap[k] = -1; bf_eng[k] = 0; }
-						bf_s = (int16_t)(((uint64_t)g_br_s * 256u) / g_loop_len);
-						bf_e = (int16_t)(bf_s + (int)(((uint64_t)g_br_len * 256u) / g_loop_len)); if (bf_e > 255) bf_e = 255;
+						bf_s = (int16_t)g_br_s8;   /* BRCHOP-800: already Q8 of the audible cycle */
+						bf_e = (int16_t)(bf_s + (int)g_br_len8); if (bf_e > 255) bf_e = 255;
 					}
 					int bf_pend = 0;
 					for (int k = 0; k < 3; k++) {
@@ -13673,7 +13752,7 @@ int main(void)
 						int ws = bf_s, we = bf_e;
 						if (ws > we) { int t2 = ws; ws = we; we = t2; }
 						if (we - ws < 2) { we = ws + 2; if (we > 255) { we = 255; ws = 253; } }
-						br_setwin((uint32_t)(((uint64_t)ws * g_loop_len) >> 8), (uint32_t)(((uint64_t)(we - ws) * g_loop_len) >> 8));
+						br_setwin((uint32_t)ws, (uint32_t)(we - ws));   /* BRFIX-806: Q8 of the audible cycle -- 800 converted the other three sites and missed this copy, so FN + faders 1/2 saturated to the whole cycle */
 					}
 				}
 				k_msleep(25);
@@ -14130,7 +14209,7 @@ int main(void)
 						if (we > 255) { we = 255; ws = 253; }
 					}
 					if (g_br_on) {   /* BRFN-765: faders 1/2 = the repeat window's start / end, fader 3 = its shift; not the chop's free window */
-						if (g_loop_len) br_setwin((uint32_t)(((uint64_t)ws * g_loop_len) >> 8), (uint32_t)(((uint64_t)(we - ws) * g_loop_len) >> 8));
+						br_setwin((uint32_t)ws, (uint32_t)(we - ws));   /* BRCHOP-800: Q8 of the audible cycle */
 						(void)rv;
 					} else {
 					g_win_s8 = (uint8_t)ws;
@@ -15633,7 +15712,7 @@ int main(void)
 			if (_rt_pend != VOL_NONE && (committed != TRK_PLAY || k_uptime_get() - _rt_pend_t >= 100)) {
 				/* the window closed without the pair (or PLAY lifted): the route fires as before */
 				if (g_br_on) {   /* BRVOL-770: a repeat is live under PLAY -- VOL-/+ = the window one earlier / later (BRFN-765's FN layer, no FN) */
-					if (g_loop_len && g_br_len) br_setwin((_rt_pend == VOL_UP) ? (g_br_s + g_br_len) : (g_br_s + g_loop_len - (g_br_len % g_loop_len)), g_br_len);
+					if (g_br_len8) br_setwin((_rt_pend == VOL_UP) ? (g_br_s8 + g_br_len8) : (g_br_s8 + 256u - g_br_len8), g_br_len8);   /* BRCHOP-800: Q8 of the audible cycle */
 					g_chop_req = 1; g_dip_req = 1;
 					_rt_last_t = 0;
 				} else {
@@ -15647,7 +15726,7 @@ int main(void)
 				_rt_pend = VOL_NONE;
 			}
 			if (committed != TRK_PLAY) _rt_last_t = 0;   /* PLAY lifted: the next press starts fresh (MUTEFIX2-740: the swallow clears on VOL_NONE only) */
-			if (g_br_on && ((committed != TRK_PLAY && ladder_read(&adc_ladder[LAD_TRACKS]) < 110) || !g_playing || g_slot_switch_req)) br_release();   /* BEATREP-749 / BRBNC-758 / BRBNC2-761: the ladder IDLE (PLAY lifted, no chord in flight) or the song stopped / switched = release; the bounce chord (PLAY + track reads as one value) and a recording do NOT end it */
+			if (g_br_on && ((committed != TRK_PLAY && ladder_read(&adc_ladder[LAD_TRACKS]) < 110) || !g_playing || g_slot_switch_req)) br_release(g_fn_held && !combo_fired);   /* LOOPHOLD-804: an UNSPENT FN held at the lift = roll; bare = the tape was held */   /* BEATREP-749 / BRBNC-758 / BRBNC2-761: the ladder IDLE (PLAY lifted, no chord in flight) or the song stopped / switched = release; the bounce chord (PLAY + track reads as one value) and a recording do NOT end it */
 			if (vcommit == VOL_NONE) _rt_swallow = 0;
 			g_vol_pair = _rt_swallow;   /* MUTEFIX3-741 */
 			{
