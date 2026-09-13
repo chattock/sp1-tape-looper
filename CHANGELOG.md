@@ -5,6 +5,55 @@ Versions 1.0.0-1.2.4 below were the 2.0 development line (developed as a
 fork by marc, never announced) — kept for the honest record. The classic
 4-song firmware lives on the `v1` branch. Base: 1.x at commit c60941c.
 
+## [3.1.1] - the beat repeat, the chop, and the pops
+
+**No format change.** Songs recorded on 3.0 play as they are. Flash and play.
+
+### The beat repeat
+- **Hold PLAY, click the rocker.** UP = the last beat; UP again or hold = shorter. DOWN = the last two beats; DOWN again or hold = longer. Lift PLAY: it releases, in time.
+- **While it is live:** VOL− / VOL+ = the window earlier / later. FN + rocker = octave. FN + the four faders shape the repeat's window.
+- **It stays inside a chop.** A chop live, and the repeat played audio from outside the chopped slice. It is a window inside what you hear now.
+- **It always does something.** On a chop shorter than a beat the repeat did nothing. UP gives a quarter of the chop, DOWN a half.
+- **It holds the tape.** Let go and each track stays where the repeat left it, rounded to the nearest bar. To let the tape run underneath instead, release PLAY and FN together.
+- **It survives a bounce,** and can start during one. A page-7 nudge moves the repeat with the track.
+
+### The window — FN + the four faders
+- **One window, four handles.** Faders 1 and 2 are its edges, 3 is its position, 4 is its size. The rocker does position and size in musical steps.
+- **They start from what you are hearing.** Grab any of them while a chop or a repeat is live and they continue from that window, instead of jumping out to the whole loop.
+- **The rocker chops inside the window you set.** Set a region with FN + faders 1/2, then work the rocker: it divides and steps *within* that region instead of throwing it away.
+- **Fader 4 zooms, and zooms back out.** It tightens the window about its centre and returns it exactly. Take it back to the top and you have the window you set.
+- **Slide fader 1 past fader 2** and the loop plays backwards.
+- **FN + PLAY + VOL− is the reset:** the whole loop, forwards, no chop. FN + PLAY + VOL+ moves the window home and keeps its size. A track you reversed with FN + track + PLAY stays reversed — that is its own control.
+
+### Bounce
+- **The rocker is free during a bounce.** Every block bakes at the speed you hear.
+- **In a held bounce:** lift PLAY, rocker = tempo. Keep PLAY down, rocker = the repeat.
+
+### Playing
+- **Monitor mute = PLAY + both VOL.** Anywhere, any page.
+- **Delete = tap, then press and hold** within 600 ms.
+
+### Sound
+- **Echo and reverb together.**
+- **The pops are gone:** the reverb rail pop, the dropout ticks, the rare hard click at max speed.
+- **Headroom.** Four stereo tracks at 1.5× with USB in and echo + reverb at max: six minutes, zero dropouts. Heavy stacks on top of that can still drop out.
+
+### Timing
+- **The grid comes from the tape.** Beats per loop and the 1 are derived from the loops and saved with the song. No drift.
+- **A gridded song no longer drifts against its own metronome and MIDI clock.** The song's loop is the length the tape plays. Old songs are corrected when they load. Nothing is written to your card unless you record.
+- **Chopped tracks stay locked.** Tracks recorded at different points in the loop walked apart from each other the deeper you chopped. They hold at every depth now.
+- **A deep chop keeps time.** The chop window rounds to the musical division instead of truncating to whole blocks. A held /16 chop slid about 88 ms a lap against the grid; it is under 6 ms now. The end of the take is reachable at every depth.
+- **The chop depth limit is correct on mono songs.**
+- **The loop seam** no longer dips at the join.
+
+### Not fixed
+- A chop window is still a whole number of blocks, so it can sit up to 3 ms from the exact division.
+
+### Removed
+- FN + both VOL on a page. The mute is PLAY + both VOL, everywhere.
+- FN + fader 4 no longer duplicates the page 1 filter. The filter keeps its page fader and its track-tap bypass.
+
+
 ## [3.1.0] - the beat repeat, the pops, and headroom
 
 **No format change.** Songs recorded on 3.0 play as they are.
