@@ -11,26 +11,6 @@ headphones. The rocker changes playback speed and pitch together, like tape.
 Everything — loops, tempo/pitch, chop, placement, loop mode — persists per song
 on the SP-1's internal flash, surviving power-off and re-flashing.
 
-## What's new in 3.1.1
-
-Hold PLAY and click the rocker: the beat you just heard repeats. UP starts from
-the last beat, DOWN from the last two, and more clicks halve or double it. Let
-go and each track stays where the repeat left it, rounded to the nearest bar —
-release PLAY and FN together if you want the tape running underneath instead.
-It stays inside a chop, and on a chop shorter than a beat it takes a quarter of
-it rather than doing nothing.
-
-FN and the four faders are one window: 1 and 2 are its edges, 3 is its position,
-4 is its size. They start from whatever you are already hearing, and the
-rocker's chop now divides *inside* the window you set instead of replacing it.
-FN + PLAY + VOL− puts everything back — whole loop, forwards.
-
-Timing got stricter: the beat grid is derived from the tape, so a gridded song
-no longer drifts against its own metronome and MIDI clock; chopped tracks stay
-locked to each other at every depth; and a deep chop rounds to the musical
-division instead of truncating onto the storage grid. The reverb has its own
-delay line, so echo and reverb run together, and the pops are gone.
-
 ## What's new in 3.0
 
 3.0 is stereo. Takes record and play in stereo (mono per take if you want the
