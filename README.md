@@ -32,6 +32,8 @@ later 3.x flashes.
 
 ## Flashing it onto the SP-1
 
+**[⬇ Download the latest firmware — `sp1_looper.bin`](https://github.com/chattock/sp1-tape-looper/releases/latest)**
+
 The SP-1 is flashed with the Solderless updater (the same tool used for any
 SP-1 custom firmware) — no soldering or opening the device required:
 
@@ -44,14 +46,45 @@ SP-1 custom firmware) — no soldering or opening the device required:
 
 ## Controls
 
-The pocket guide is the place to start. Print it double-sided, short-edge
-flip, fold in three.
+### The interactive 3D guide
 
-[![Pocket guide](docs/sp1-3.1-pocket-guide.png)](docs/sp1-3.1-pocket-guide.pdf)
+Every gesture, on a device you can turn around and press.
+**[sp1-tape-looper.vercel.app](https://sp1-tape-looper.vercel.app/)**
 
-The four reference sheets cover every gesture and every page:
+[![SP-1 Tape Looper interactive guide](https://sp1-tape-looper.vercel.app/assets/sp1-social-preview.jpg)](https://sp1-tape-looper.vercel.app/)
 
-[![Reference sheets](docs/sp1-3.1-reference.png)](docs/sp1-3.1-reference.pdf)
+### The pocket guide
+
+The place to start. Print it double-sided, short-edge flip, fold in three —
+[PDF](docs/sp1-3.1-pocket-guide.pdf).
+
+![Pocket guide, outside](docs/sp1-3.1-pocket-1.png)
+
+![Pocket guide, inside](docs/sp1-3.1-pocket-2.png)
+
+### The five reference sheets
+
+Every gesture and every page — [all five as one PDF](docs/sp1-3.1-reference.pdf).
+
+**1 · Make your first loop** — the track buttons, the faders, recording and muting
+
+![Reference sheet 1 — make your first loop](docs/sp1-3.1-reference-1.png)
+
+**2 · Play the tape** — speed, windows and resampling
+
+![Reference sheet 2 — play the tape](docs/sp1-3.1-reference-2.png)
+
+**3 · Find your effects** — the pages, four controls each
+
+![Reference sheet 3 — find your effects](docs/sp1-3.1-reference-3.png)
+
+**4 · Place it. Time it.** — stereo placement, timing, next-take format
+
+![Reference sheet 4 — place it, time it](docs/sp1-3.1-reference-4.png)
+
+**5 · Catch a beat. Bend it.** — the beat repeat
+
+![Reference sheet 5 — catch a beat, bend it](docs/sp1-3.1-reference-5.png)
 
 Names: FN = the FUNCTION button (also the power button). TN = a track button.
 Tap = press and release. Hold = keep it down. Pages open with FN + a track
