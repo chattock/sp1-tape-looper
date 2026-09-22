@@ -48,58 +48,29 @@ SP-1 custom firmware) — no soldering or opening the device required:
 
 ### The interactive 3D guide
 
-Every gesture, on a device you can turn around and press.
 **[sp1-tape-looper.vercel.app](https://sp1-tape-looper.vercel.app/)**
 
 [![SP-1 Tape Looper interactive guide](https://sp1-tape-looper.vercel.app/assets/sp1-social-preview.jpg)](https://sp1-tape-looper.vercel.app/)
 
 ### The pocket guide
 
-The place to start. Print it double-sided, short-edge flip, fold in three —
 [PDF](docs/sp1-3.1-pocket-guide.pdf).
 
 ![Pocket guide, outside](docs/sp1-3.1-pocket-1.png)
 
 ![Pocket guide, inside](docs/sp1-3.1-pocket-2.png)
 
-### The five reference sheets
-
-Every gesture and every page — [all five as one PDF](docs/sp1-3.1-reference.pdf).
-
-**1 · Make your first loop** — the track buttons, the faders, recording and muting
+### The full reference guide
 
 ![Reference sheet 1 — make your first loop](docs/sp1-3.1-reference-1.png)
 
-**2 · Play the tape** — speed, windows and resampling
-
 ![Reference sheet 2 — play the tape](docs/sp1-3.1-reference-2.png)
-
-**3 · Find your effects** — the pages, four controls each
 
 ![Reference sheet 3 — find your effects](docs/sp1-3.1-reference-3.png)
 
-**4 · Place it. Time it.** — stereo placement, timing, next-take format
-
 ![Reference sheet 4 — place it, time it](docs/sp1-3.1-reference-4.png)
 
-**5 · Catch a beat. Bend it.** — the beat repeat
-
 ![Reference sheet 5 — catch a beat, bend it](docs/sp1-3.1-reference-5.png)
-
-Names: FN = the FUNCTION button (also the power button). TN = a track button.
-Tap = press and release. Hold = keep it down. Pages open with FN + a track
-button held ~0.4 s; tap FN to close. On a page the track buttons belong to
-the page.
-
-Three things people miss:
-
-- **Faders pick up.** A fader does nothing until it sweeps through the value
-  it controls. No jumps, ever.
-- **FN + T1 + T4** resets every effect (on page 6 it centres placement, on
-  page 7 it resets timing).
-- **The beat repeat holds the tape.** Hold PLAY, click the rocker, then let go:
-  each track stays where the repeat left it, rounded to the nearest bar.
-  Release PLAY and FN together to let the tape run underneath instead.
 
 ## Loop transfer tool
 
