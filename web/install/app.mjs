@@ -267,7 +267,7 @@ function render(){$('reviewReturn').hidden=stage!=='radio-review'||mode==='runti
  switch(stage){
  case 'flash':case 'flash-instructions':case 'firmware-needed':{
  const firmware=release?.variants?.keepRecordings;
- const links=firmware?'<p><a class="firmware-download button" download href="'+esc(firmware.url)+'">Download v4</a></p><p>Keeps existing storage. Setup prepares the filesystem and Bluetooth.</p><p>Flash with <a href="https://solderless.engineering/" target="_blank" rel="noopener noreferrer">Solderless</a>, then reconnect here.</p>':'<p>The firmware download is unavailable.</p>';
+ const links=firmware?'<p><a class="firmware-download button" download href="'+esc(firmware.url)+'">Download v4</a></p><p>Flashing won’t erase your recordings. Reconnect afterward to finish setup.</p><p>Flash with <a href="https://solderless.engineering/" target="_blank" rel="noopener noreferrer">Solderless</a>, then reconnect here.</p>':'<p>The firmware download is unavailable.</p>';
  card('Get compatible firmware.','Download and flash v4.','Reconnect & check',async()=>{verifiedMaintenance469=false;await connect()},'Keep any existing recovery folders.',links);break;}
  case 'connect':case 'verify':{
   const reconnect=stage==='verify'||connectionState==='waiting';
