@@ -1,11 +1,11 @@
-# SP-1 Tape Looper 4.0 Beta
+# SP-1 Tape Looper 4.0
 
 A hands-on tape looper for the Teenage Engineering SP-1. Four tracks, sixteen songs, multiple takes, Bluetooth recording and eight rocker modes for shaping your loops.
 
 Record from USB or Bluetooth, layer tracks, add effects and manipulate playback like tape. Save recordings on the device and manage them through Finder or the browser Library.
 
 **[3D Interactive Guide](https://sp1-tape-looper.vercel.app/#guide) · [Live Companion](https://sp1-tape-looper.vercel.app/#live) · [Library](https://sp1-tape-looper.vercel.app/#transfer) · [Setup v4](https://sp1-tape-looper.vercel.app/#setup)**
-**[Download firmware](https://github.com/chattock/sp1-tape-looper/releases/tag/v4.0.0-beta.1) · [Changelog](CHANGELOG.md)**
+**[Download firmware](https://github.com/chattock/sp1-tape-looper/releases/tag/v4.0.0-official) · [Changelog](CHANGELOG.md)**
 
 ## What's new in v4
 
@@ -22,7 +22,7 @@ See the [changelog](CHANGELOG.md) for the full changes since 3.1.1.
 
 ## Install
 
-1. Download the latest Tape Looper BIN from [Releases](https://github.com/chattock/sp1-tape-looper/releases/tag/v4.0.0-beta.1).
+1. Download the latest Tape Looper BIN from [Releases](https://github.com/chattock/sp1-tape-looper/releases/tag/v4.0.0-official).
 2. Flash it using [Solderless](https://solderless.engineering).
 3. Open [Setup v4](https://sp1-tape-looper.vercel.app/#setup), connect your SP-1 and follow the steps.
 
