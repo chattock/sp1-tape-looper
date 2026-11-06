@@ -9,7 +9,7 @@ import {prepareSource} from './modules/capacity422/preflight.mjs';
 import {recoverySink} from './modules/capacity422/packs.mjs';
 import {applyCapacity,recoverCapacity,validateCapacity} from './modules/capacity422/migration-journal.mjs';
 import {BackupSerial} from './serial.mjs?v=607.5';
-import {Runtime,modeOf,FILTERS,radioMode} from './device.mjs?v=615';
+import {Runtime,modeOf,FILTERS,radioMode} from './device.mjs?v=616';
 import {inspect422 as inspect} from './modules/capacity422/filesystem.mjs';
 import {prepare,apply,recover,consent,validate,finishVerification} from './plan.mjs?v=563';
 import {sink,journal,json} from './files.mjs';
@@ -59,7 +59,7 @@ async function run(fn,phase=({'workspace-review':'apply',review:'apply','radio-i
   evidence.reviews=[...(evidence.reviews||[]),{kind:'radio-compatibility',at:new Date().toISOString(),noWrites:true,backupSaved:evidence.radioBackupSaved,folder:evidence.radioFolder}];
   error=null;delete evidence.error;delete evidence.stoppedAt;activeRadioOperation=null;stage='radio-review';clearActivity();
   note(evidence.radioBackupSaved?'Bluetooth backup saved. No radio changes were made.':'Bluetooth check complete. No radio changes were made.');render();await close();return;
- }if(e.code==='RADIO_SOURCE_REVIEW'){radioPending=!!e.cleanRecoveryPending;radioResult={compatibility:e.report};evidence.radioReview=e.report;}if(e.code==='RADIO_RECOVERY_REQUIRED')radioPending=true;error=e.message;evidence.error=e.message;if(device?.statusRows?.length)evidence.runtimeReport={identity,at:new Date().toISOString(),rows:[...device.statusRows]};evidence.stoppedAt={operation:phase,phase:meter.phase||null,bytes:meter.last,at:new Date().toISOString()};evidence.failures=[...(evidence.failures||[]),{...evidence.stoppedAt,message:e.message,command:device?.lastRequest||null,transportPhase:device?.phase||null,code:e.code||null,deviceReply:e.deviceReply||null,radioFolder:evidence.radioFolder||null}].slice(-12);
+ }if(e.code==='RADIO_SOURCE_REVIEW'){radioPending=!!e.cleanRecoveryPending;radioResult={compatibility:e.report};evidence.radioReview=e.report;}if(e.code==='RADIO_RECOVERY_REQUIRED')radioPending=true;error=e.message;evidence.error=e.message;if(device?.statusRows?.length)evidence.runtimeReport={identity,at:new Date().toISOString(),rows:[...device.statusRows]};evidence.stoppedAt={operation:phase,phase:meter.phase||null,bytes:meter.last,at:new Date().toISOString()};evidence.failures=[...(evidence.failures||[]),{...evidence.stoppedAt,message:e.message,command:e.command||device?.lastRequest||null,transportPhase:e.transportPhase||device?.phase||null,code:e.code||null,deviceReply:e.deviceReply||null,radioFolder:evidence.radioFolder||null}].slice(-12);
  if(e.code==='SETUP_BUSY'&&mode==='runtime'&&device&&!unexpectedDisconnect){
   note(e.message);
   return;

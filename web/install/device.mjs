@@ -13,7 +13,13 @@ export class Runtime extends BackupSerial{
 }if(s.startsWith('BTID')&&s.includes('RUNTIME')&&!/^BTID(?:444|422) /.test(s))throw Object.assign(Error('Get the current Tape Looper BIN from GitHub, flash through Solderless, then reconnect.'),{code:'FIRMWARE_REQUIRED'});seen.push(s);if(seen.length>12)seen.shift()}throw Error('Runtime response missing; flash the supplied firmware')}
  async identify(){return this.transact(async()=>{
  let legacy;try{legacy=await this.response('A403HELLO?',/^BTID(?:444|422) RUNTIME identity=[a-f0-9]{16} takes=[01]$/)}catch(e){if(e.code==='USB_READ_TIMEOUT'||/USB disconnected|USB Library session|Stop recording|Different|identity changed/.test(e.message))throw e;throw Object.assign(Error('Compatible firmware could not be verified. Get the current Tape Looper BIN from GitHub, flash through Solderless, then reconnect.'),{code:'FIRMWARE_REQUIRED'})}
- let exact;try{exact=await this.response('A468HELLO?',/^ROCKER468 HELLO mode=runtime identity=[a-f0-9]{16}$/)}catch(e){if(e.code==='USB_READ_TIMEOUT'||/USB disconnected|USB Library session|Stop recording|Different|identity changed/.test(e.message))throw e;throw Object.assign(Error('Compatible firmware could not be verified. Get the current Tape Looper BIN from GitHub, flash through Solderless, then reconnect.'),{code:'FIRMWARE_REQUIRED'})}
+ let exact;try{exact=await this.response('A468HELLO?',/^ROCKER468 HELLO mode=runtime identity=[a-f0-9]{16}$/)}catch(e){
+ // Older Tape Looper builds answer A403 but silently ignore newer queries.
+ // Do not retry on a timed-out reader or enter maintenance with unverified firmware.
+ if(e.code==='USB_READ_TIMEOUT')throw Object.assign(Error('Tape Looper responded, but the required setup capability could not be verified. Flash the current preserving v4 BIN, then reconnect. No installation changes were made.'),{code:'FIRMWARE_REQUIRED',deviceReply:legacy,command:'A468HELLO?',transportPhase:'runtime capability check',cause:e});
+ if(/USB disconnected|USB Library session|Stop recording|Different|identity changed/.test(e.message))throw e;
+ throw Object.assign(Error('Compatible firmware could not be verified. Get the current Tape Looper BIN from GitHub, flash through Solderless, then reconnect.'),{code:'FIRMWARE_REQUIRED',deviceReply:legacy})}
+
  this.basicAllowed=legacy.endsWith('takes=0');if(this.basicAllowed)await this.response('A523MODE?',/^BASIC523 CAPS legacy=1 takes=0 drive=0$/);
  const identity=/identity=([a-f0-9]{16})/.exec(legacy)[1];if(!exact.endsWith('identity='+identity))throw Error('Runtime identity changed during verification');
  return {identity,firmware:444,build:468};
