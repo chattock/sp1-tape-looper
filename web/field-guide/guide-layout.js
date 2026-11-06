@@ -46,6 +46,6 @@ export function introduction(playIcon){
 }
 
 export function whatsNew(playIcon,cards,markup,rockers,effects){
- const ids=['takes-v4','bluetooth-v4','track-trim-v4','track-slide-v4'];
+ const ids=['takes-v4','bluetooth-v4','track-trim-v4','track-slide-v4','beats-per-bar-v4'];
  return `<section class="guide-intro whats-new" id="whats-new" data-section="-1" aria-labelledby="new-title"><h1 id="new-title">What’s New</h1><div class="tile-grid new-walkthroughs">${ids.map(id=>markup(cards.find(c=>c.id===id),false,'new-')).join('')}</div>${rockers(playIcon,cards,'new-')}</section>`;
 }

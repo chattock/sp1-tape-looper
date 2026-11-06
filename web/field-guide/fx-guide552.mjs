@@ -60,6 +60,7 @@ export function finishGuideAudit(cards){
  stopPage.steps[0].detail='With Page 2 open and Track 2 recording the copy, keep PLAY held.';
  const placement=cards.find(c=>c.id==='center-placement');
  placement.note='The all-track shortcut also resets FX.';
+ cards.push({id:'beats-per-bar-v4',category:4,group:'Page 7 / Take & timing',title:'Choose beats per bar',gesture:'Page 7 · F3 = 3 / 4 / 5 / 7',body:'Hold FN + T4, then release. Press VOL+ three times for Page 7. Move F3 through its saved position, then select 3, 4, 5 or 7 beats per bar, bottom to top. Tap FN to close.',note:'Saved per song. The default is 4 beats per bar.',steps:[]});
  const length=cards.find(c=>c.id==='take-length');
  length.body='On Page 7, F2 selects the take length. F3 selects 3, 4, 5 or 7 beats per bar, from bottom to top. Move through the saved value to take control.';
  length.note='Beats per bar is saved per song; the default is 4. Variable mode counts bars and needs a grid. Fixed mode counts base loops and needs a first take.';
