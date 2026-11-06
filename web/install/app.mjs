@@ -9,7 +9,7 @@ import {prepareSource} from './modules/capacity422/preflight.mjs';
 import {recoverySink} from './modules/capacity422/packs.mjs';
 import {applyCapacity,recoverCapacity,validateCapacity} from './modules/capacity422/migration-journal.mjs';
 import {BackupSerial} from './serial.mjs?v=607.5';
-import {Runtime,modeOf,FILTERS,radioMode} from './device.mjs?v=617';
+import {Runtime,modeOf,FILTERS,radioMode} from './device.mjs?v=619';
 import {inspect422 as inspect} from './modules/capacity422/filesystem.mjs';
 import {prepare,apply,recover,consent,validate,finishVerification} from './plan.mjs?v=563';
 import {sink,journal,json} from './files.mjs';
@@ -97,7 +97,7 @@ async function connect(selectedPort=null){await window.parent.sp1Workspace?.prep
   if((radioPending||reminder?.phase==='radio-verified')&&!savedRecovery&&!quickStorageUnavailable&&!reminder?.forward){const completed=await completedUpdate(identity,reminder?.folder||null);if(!completed){const idle=await idleFailure(identity,reminder?.folder);if(idle){await markNoWrite(idle.dir,identity);radioPending=false;evidence.unarmedFailureArchived=idle.name;}}if(completed){radioPending=false;radioChecked=true;radioSkipped=false;radioResult={summary:completed.summary,compatibility:completed.compatibility};evidence.completedRadioAfterCrash=completed;evidence.radio={summary:completed.summary,compatibility:completed.compatibility};}}
   if(reminder?.forward&&!savedRecovery){radioPending=false;radioClean=true;}
   evidence.radioRecoveryLookup={pending:radioPending,browserRecoveryFound:!!savedRecovery,browserStorageUnavailable:quickStorageUnavailable,reminderPhase:reminder?.phase||null,forwardReminder:!!reminder?.forward};
-  if(radioPending){const saved=savedRecovery;if(saved){radioOriginal=saved.original;quickOriginalDir=saved.dir;radioQuick=true;next('radio-resume');}else next('radio-recovery-folder');return;}
+  if(radioPending){const saved=savedRecovery;if(saved){radioOriginal=saved.original;quickOriginalDir=saved.dir;radioQuick=true;next('radio-resume');}else if(device.directRadio){evidence.radioRecoveryLookup.action='check-device-status';radioOneStep=false;radioReenter=false;await device.enterRadio();device=null;next('connect');connection('restarting');await reattach535('radio');}else next('radio-recovery-folder');return;}
   if(device.libraryBackend==='legacy'){
    basicRuntimeVerified=true;libraryVerified=false;verifiedRuntime=true;layout='legacy';evidence.libraryMode='basic';evidence.runtimeCapabilityBuild=523;
    next('basic-ready');return;
@@ -124,6 +124,7 @@ async function connect(selectedPort=null){await window.parent.sp1Workspace?.prep
   const completed=await completedUpdate(identity,reminder?.folder||null);
   if(completed){radioPending=false;radioChecked=true;radioSkipped=false;radioResult={summary:completed.summary,compatibility:completed.compatibility};evidence.completedRadioAfterCrash=completed;evidence.radio={summary:completed.summary,compatibility:completed.compatibility};next('radio-done');return;}
   const idle=await idleFailure(identity,reminder?.folder);if(idle){await markNoWrite(idle.dir,identity);radioPending=false;evidence.unarmedFailureArchived=idle.name;}
+  if(radioPending&&id.recoveryStatusKnown){radioPending=false;evidence.staleRadioReminder={cleared:true,reason:'Device explicitly reports no pending radio recovery',at:new Date().toISOString()};}
  }
  if(id.recoveryRequired){radioPending=true;if(!radioOriginal){radioReenter=false;next('radio-recovery-folder');return;}}
  if(!verifiedMaintenance469&&!radioPending&&!radioOneStep){next('radio-check-library');return;}
