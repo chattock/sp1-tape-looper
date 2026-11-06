@@ -1,189 +1,182 @@
-# SP-1 Tape Looper
+# SP-1 Tape Looper 4.0
 
-A tape-machine-style looper for the Teenage Engineering SP-1: four loop
-tracks per song, sixteen remembered songs in four banks.
+A hands-on tape looper for the Teenage Engineering SP-1. Four tracks, sixteen songs, multiple takes, Bluetooth recording and eight rocker modes for shaping your loops.
 
-This is custom firmware that turns the SP-1 stem player into a hands-on tool
-for building layered loops. You feed audio in over USB-C (the SP-1 appears on
-your computer or phone as a USB sound card / speaker), record loops with the
-four track buttons, and they play back layered together through the speaker or
-headphones. The rocker changes playback speed and pitch together, like tape.
-Everything — loops, tempo/pitch, chop, placement, loop mode — persists per song
-on the SP-1's internal flash, surviving power-off and re-flashing.
+Record from USB or Bluetooth, layer tracks, add effects and manipulate playback like tape. Save recordings on the device and manage them through Finder or the browser Library.
 
-## What's new in 3.0
+**[3D Interactive Guide](https://sp1-tape-looper.vercel.app/#guide) · [Live Companion](https://sp1-tape-looper.vercel.app/#live) · [Library](https://sp1-tape-looper.vercel.app/#transfer) · [Setup v4](https://sp1-tape-looper.vercel.app/#setup)**
+**[Download firmware](https://github.com/chattock/sp1-tape-looper/releases/latest) · [Changelog](CHANGELOG.md)**
 
-3.0 is stereo. Takes record and play in stereo (mono per take if you want the
-storage bandwidth). On top of that: eight effect pages on the faders (filter,
-chorus, distortion, gate, bitcrush, ring mod, wah, echo, phaser, sweep,
-tremolo, reverb, tape drive / tone / hiss / wobble, a 4-band EQ, stereo
-placement, take timing), effects on the input or the tracks or both, bounce
-(tape copy and sampler print), reverse and isolate per track, octave jumps,
-a speed range of 0.25×–1.5×, and a beat grid that stays locked to the loops.
-The dropouts at max speed with USB audio in are gone.
+## What's new in v4
 
-Everything is listed per release in [CHANGELOG.md](CHANGELOG.md). The classic
-4-song 1.x line lives on the `v1` branch; 2.x is tagged `v2.7.2-official`.
+- **Multiple takes per track.** Keep earlier recordings and switch between takes without replacing them.
+- **Bluetooth recording.** Stream audio from your phone or computer. USB and Bluetooth inputs can be mixed.
+- **USB Library.** Add, replace, delete and download loops through Finder or the browser. Batch imports, automatic audio conversion and a waveform clip picker for long files.
+- **Eight rocker modes.** Pitch, Wind, Bender, Battery, Sandpaper, Magnet, Scissors/glue and Manual tape head.
+- **More effects and tape color.** Flanger, Slow gear, Lo-fi, Radio, Reverb Freeze, compression, expanded noise types and separate Wow/Flutter choices.
+- **More timing control.** Playback up to **2×**, per-track trim and slide, and **3 / 4 / 5 / 7 beats per bar**.
+- **More responsive controls.** Improved recording and take switching, safer overdub gestures, clearer LED feedback and recovery gestures for stuck controls.
+- **Updated website.** Interactive 3D walkthroughs, live device feedback, guided setup and printable v4 guides.
 
-**Updating from 2.x is a format break.** Back up first: open the transfer
-page, *Download all*. Flash. The first boot formats the card and every song on
-it is gone. Then *Upload many* to restore. Songs recorded on 3.0 survive
-later 3.x flashes.
+See the [changelog](CHANGELOG.md) for the full changes since 3.1.1.
 
-## Flashing it onto the SP-1
+## Install
 
-**[⬇ Download the latest firmware — `sp1_looper.bin`](https://github.com/chattock/sp1-tape-looper/releases/latest)**
+1. Download the latest Tape Looper BIN from [Releases](https://github.com/chattock/sp1-tape-looper/releases/latest).
+2. Flash it using [Solderless](https://solderless.engineering).
+3. Open [Setup v4](https://sp1-tape-looper.vercel.app/#setup), connect your SP-1 and follow the steps.
 
-The SP-1 is flashed with the Solderless updater (the same tool used for any
-SP-1 custom firmware) — no soldering or opening the device required:
+The SP-1 starts automatically after flashing. Setup checks the filesystem and Bluetooth firmware, skipping work that is already complete.
 
-1. Open the Solderless SP-1 update tool: <https://solderless.engineering>
-2. Connect the SP-1 to your computer with a USB-C cable.
-3. Put the SP-1 into firmware-loading mode: hold **Track 1 + Track 4** for
-   **3 seconds** while the firmware runs, or hold them while you plug in
-   USB. The four track lights come on solid.
-4. Select `sp1_looper.bin`, flash, then unplug and replug.
+Use desktop Chrome or Edge for Setup. Keep USB connected while an operation is running. If your computer switches its audio output to SP-1, select your usual speakers or headphones during setup.
 
-## Controls
+### Existing recordings
 
-### The interactive 3D guide
+The regular BIN preserves existing storage. Setup offers a preserving upgrade for supported Tape Looper libraries, including 3.1.1.
 
-**[sp1-tape-looper.vercel.app](https://sp1-tape-looper.vercel.app/)**
+Recognized compatible shared filesystems can keep other firmware's files alongside Tape Looper's library. Unsupported layouts need separate handling; Setup checks before proceeding.
 
-[![SP-1 Tape Looper interactive guide](https://sp1-tape-looper.vercel.app/assets/sp1-social-preview.jpg)](https://sp1-tape-looper.vercel.app/)
+**Start empty erases existing music, settings and other firmware's stored files.** Back up anything you want to keep before choosing it.
 
-### The pocket guide
+## Learn the controls
 
-[PDF](docs/sp1-3.1-pocket-guide.pdf).
+The [3D Interactive Guide](https://sp1-tape-looper.vercel.app/#guide) demonstrates the gestures on an animated SP-1. The [Live Companion](https://sp1-tape-looper.vercel.app/#live) shows your connected device's tracks, takes, effects and timing.
 
-![Pocket guide, outside](docs/sp1-3.1-pocket-1.png)
+Printable guides:
 
-![Pocket guide, inside](docs/sp1-3.1-pocket-2.png)
+- [Full guide](docs/sp1-4.0-reference.pdf)
+- [Pocket guide](docs/sp1-4.0-pocket-guide.pdf)
 
-### The full reference guide
+Print the pocket guide double-sided, flip on the short edge and fold in three.
 
-![Reference sheet 1 — make your first loop](docs/sp1-3.1-reference-1.png)
+**FN** means FUNCTION. **T1–T4** are the track buttons; **F1–F4** are their faders.
 
-![Reference sheet 2 — play the tape](docs/sp1-3.1-reference-2.png)
+### Start here
 
-![Reference sheet 3 — find your effects](docs/sp1-3.1-reference-3.png)
+- **Record:** tap an empty track's button. Tap it again to finish.
+- **Play / pause:** press PLAY. If a recording is waiting to start, PLAY cancels the arm and pauses.
+- **Switch takes:** hold TRACK and click **ROCKER DOWN**.
+- **New take:** hold TRACK and click **ROCKER UP**, then record.
+- **Overdub:** hold a loaded TRACK, release, then tap to arm. The earlier take stays saved.
+- **Effects:** hold FN + a track button to open a control page. Release both; use VOL− / VOL+ to move between pages. Tap FN to close.
+- **Beats per bar:** on Page 7, F3 selects **3 / 4 / 5 / 7**, from bottom to top. This is saved per song; the default is 4.
 
-![Reference sheet 4 — place it, time it](docs/sp1-3.1-reference-4.png)
+Faders use pickup: move through a control's saved value before changing it.
 
-![Reference sheet 5 — catch a beat, bend it](docs/sp1-3.1-reference-5.png)
+## Bluetooth
 
-## Loop transfer tool
+Tap FN twice, then hold the third press for about one second. All four track LEDs slowly fade together while pairing.
 
-Move loops between your computer and the SP-1 as WAV or MP3:
+Choose the SP-1 in your phone or computer's Bluetooth audio settings, then record normally.
 
-### → https://chattock.github.io/sp1-tape-looper/
+After restarting the SP-1, enable Bluetooth again and select it on your source device to reconnect. Bluetooth audio pairing and the [Live Companion](https://sp1-tape-looper.vercel.app/#live)'s Bluetooth connection are separate.
 
-Open it in Chrome or Edge with the SP-1 plugged in and powered on **normally**
-(no button combo — not the bootloader mode), click Connect, and pick the
-`SP-1 Audio` port. The looper switches itself into transfer mode while the page
-is connected (playback pauses, the four track lights blink together) and
-returns to normal when you disconnect. Download any track as a stereo WAV, or
-upload a WAV/MP3 into a chosen song and track — clips are resampled to the
-device's rate, and every track keeps its own length, exactly like recording on
-the device. *Download all* / *Upload many* back up and restore a whole card.
-The page reads 2.x and 3.0 cards; it detects the format.
+This release supports **Bluetooth audio input**. Sending audio to Bluetooth headphones or speakers is not included.
 
-### Connecting to phones
+> **Bluetooth development note**
+> An SP-1 Bluetooth SDK and accompanying agent skill are currently in development to share integration code, protocol documentation, build instructions and tested examples.
+>
+> Bluetooth support uses Infineon/Cypress components with separate license terms. Vendor SDK files and programming/radio payloads are not included in the public source package. The release BIN and browser Setup use compiled Bluetooth components; the public source package is not a self-contained build of every release component.
 
-- **USB-C iPhone / iPad / Android:** a normal USB-C to USB-C cable works — the
-  SP-1 shows up as an audio output (and the browser transfer tool works from
-  Android Chrome).
-- **Lightning iPhone / iPad:** a plain USB-C-to-Lightning cable does **not**
-  work — Lightning only speaks USB *host* through Apple's own adapter. Use the
-  Apple **Lightning to USB 3 Camera Adapter** (or "Camera Connection Kit"),
-  then any USB-A/USB-C cable to the SP-1. Third-party adapters must be
-  MFi-certified; most cheap ones aren't, and won't pass audio.
+## Transfer loops
 
-## What's in this folder
+Stop playback and let saving finish. Hold **T2 + T3 for three seconds**, then release.
 
-```
-sp1-tape-looper/
-├── README.md               you are here
-├── CHANGELOG.md            what each release adds/fixes
-├── sp1_looper.bin          the firmware — flash this one
-├── boards/                 the SP-1 board definition (makes the repo buildable)
-├── zephyr-patches/         patch for the Zephyr tree (Windows USB fix)
-├── docs/                   the transfer page (GitHub Pages) + the control sheets
-└── firmware/               full source code (for reading / rebuilding)
-    ├── src/
-    │   ├── main.c          the whole looper: audio engine, controls, power, USB
-    │   ├── sp1_emmc.c      the flash-memory driver (stores/loads the loops)
-    │   └── sp1_emmc.h
-    ├── zephyr-uac2-backport/  the USB Audio 2.0 class files this build uses
-    ├── app.overlay         hardware pin map (ADC channels for buttons/faders)
-    ├── prj.conf            Zephyr build configuration
-    ├── CMakeLists.txt
-    └── Kconfig
-```
+The **SP1 MUSIC** drive appears on your computer.
+
+- **Finder / File Explorer:** open the drive and manage the song, track and take folders.
+- **[Browser Library](https://sp1-tape-looper.vercel.app/#transfer):** select the **SP1 MUSIC drive itself** in the folder picker.
+
+The Library prepares supported audio automatically. Recognized song/track filenames can be placed automatically; other files let you choose their destinations. Long files can be clipped before importing.
+
+Use **Download all** to export your library.
+
+When finished, eject **SP1 MUSIC** in Finder or File Explorer. Keep the SP-1 powered and USB-connected while it finishes importing. Tape Looper returns automatically; larger batches take longer.
+
+## FX
+
+Eight control pages cover effects, tape color and recording controls:
+
+| Page | Controls |
+|---|---|
+| **1 · Color** | Filter, Chorus / Flanger, Distortion, Gate / Slow gear |
+| **2 · Texture** | Crush / Lo-fi / Radio, Ring mod, Auto-wah, Echo |
+| **3 · Motion & space** | Phaser, Sweep, Tremolo, Reverb / Freeze |
+| **4 · Tape** | Drive, Tone / Compression, Noise, Wobble |
+| **5 · EQ** | Four-band equalizer |
+| **6 · Placement** | Per-track stereo placement |
+| **7 · Timing** | Grid offset, take length, beats per bar and track timing |
+| **8 · Next take** | Mono / stereo recording |
+
+Hold **FN + TRACK** to open a page. Release both, then use **VOL− / VOL+** to navigate. Tap **FN** to close.
+
+Faders adjust amounts; track buttons cycle the available types or divisions. On Page 4, tap **T2** to select Tone or Compression, then adjust **F2**. Both settings remain applied.
+
+Effects stay set when you leave a page. The [3D Interactive Guide](https://sp1-tape-looper.vercel.app/#guide) covers each control and its secondary gestures; the [Live Companion](https://sp1-tape-looper.vercel.app/#live) shows your current settings.
+
+## Rocker modes
+
+| Mode | What it does |
+|---|---|
+| **Pitch** | Changes playback speed and pitch together, up to 2×. |
+| **Wind** | Winds forward or backward, with momentary or latched speed choices. |
+| **Bender** | Drags or surges the tape. |
+| **Battery** | Adds sag and stalls. |
+| **Sandpaper** | Adds tape wear. |
+| **Magnet** | Makes undoable gaps without shortening the loop. |
+| **Scissors / glue** | Cuts sections out and joins the remaining tape. |
+| **Manual tape head** | Plays the tape through momentary contact and fader-controlled heads. |
+
+Magnet and Scissors can affect the loaded tracks together, or one track using TRACK + rocker while the rocker page is open.
+
+**Hold FN and double-tap PLAY** to restore the tape, including Magnet gaps and Scissors cuts, while keeping effects.
+
+See the [3D Interactive Guide](https://sp1-tape-looper.vercel.app/#guide) for each mode's gestures.
 
 ## Audio
 
-- Takes are 24 kHz stereo (14-bit, block-scaled) or 24 kHz mono (16-bit),
-  chosen per take on page 8. Output is 48 kHz stereo.
-- Every playing track is a separate stream read off the flash in real time,
-  while the track you are recording is written back. Four stereo tracks at
-  1.5× with USB audio in and echo + reverb at max runs clean for minutes at a
-  time; heavier stacks on top of that, or a bounce at that corner, can still
-  drop out. At 1× it is clean.
-- Up to 8 minutes per track at 1×, on all 16 songs.
+- Mono or stereo recording, selected per take.
+- Internal recording rate: 24 kHz; output: 48 kHz stereo.
+- Approximately eight minutes maximum per take at normal speed.
+- Four tracks per song, sixteen songs across four banks.
+- Recordings remain on the device after power-off.
 
-## The status line
+Imported audio is converted to the device's recording format where needed.
 
-Open the SP-1's USB-serial port (115200 baud) for a repeating status report.
-Healthy signs: `ovr=0` (no record-buffer overflow), `rerr=0 werr=0` (clean
-flash bus), `flt=ffffffff@0` (no crash recorded). After any unexpected reboot
-the `flt=` and `rr=` fields carry the crash details — including them makes a
-bug report immediately actionable.
+## If controls seem stuck
 
-## Building from source
+Hold **FN + T1 + T2 for two seconds** to reset performance controls without deleting recordings.
 
-Zephyr v4.3.1 + SDK 0.17.4. Copy `firmware/zephyr-uac2-backport/` over
-`subsys/usb/device_next/class/` in your Zephyr tree (it carries the
-`USBD_UAC2_FS_WINDOWS_WORKAROUND` option that `prj.conf` turns on), then
+This clears control latches, effects, timing offsets, trims and mutes. A waiting recording arm is cancelled; an active recording is finalized.
 
-```
-west build -p -b stem_player firmware -- -DBOARD_ROOT=$(pwd)
-```
+To return to firmware-loading mode, hold **T1 + T4 for three seconds**. If normal controls are unresponsive, follow the recovery procedure in [Solderless](https://solderless.engineering).
 
-and flash `build/zephyr/zephyr.bin`.
+Avoid interrupting storage or Bluetooth updates. If Setup reports a problem, keep its recovery data and use **Help & diagnostics** to save a report.
 
-The most important rule when modifying the firmware: the SP-1 has no hardware
-reset, so the firmware must always feed the watchdog and must always offer a
-path back to the bootloader (here: hold FUNCTION to power off, or the
-Track 1 + Track 4 recovery combo, held 3 s). Do not remove those.
+## Reporting an issue
 
-## If it ever locks up
+Include:
 
-Hold Track 1 and Track 4 together for 3 s to return to firmware-loading mode,
-so you can always re-flash. If the firmware does not respond, hold Track 1 +
-Track 4 while you plug in USB power — that path is part of the bootloader and
-always works. It must be those two alone.
+- Firmware version.
+- Computer OS and browser.
+- What you were doing immediately before the problem.
+- The LED pattern.
+- Diagnostics from Setup or the Library activity log.
+
+Mention whether you were using USB audio, Bluetooth, the Companion or drive mode. Don't include recordings or private backups unless you intend to share them.
+
+## Source and licenses
+
+Tape Looper's original code is released under the MIT License. Third-party components retain their own licenses and notices in [LICENSES](LICENSES).
+
+[Build instructions](BUILDING.md) identify the source layout and external inputs. The public source package does not include proprietary vendor inputs or private device data. Browser audio-decoder notices and matching source accompany the [website](https://sp1-tape-looper.vercel.app/licenses/) and release downloads.
+
+## Credits
+
+Built on chattock's Tape Looper and the SP-1 hardware research and board support documented by Tim Knapen's [SP-1-dev](https://github.com/timknapen/SP-1-dev).
+
+Thanks to [Solderless](https://solderless.engineering), [Zephyr](https://www.zephyrproject.org/), and everyone in the SP-1 community who tested builds, shared findings and helped improve the release.
 
 ## Disclaimer
 
-This is unofficial, community-made firmware, not affiliated with or endorsed by
-Teenage Engineering. Flashing custom firmware is at your own risk. It has been
-tested and works well, but no warranty is implied. If in doubt, make sure you
-understand the [Solderless](https://solderless.engineering) update process and
-the recovery options above before flashing.
-
-## Credits and licence
-
-- Built on the SP-1 hardware reverse-engineering and board support documented
-  in Tim Knapen's [SP-1-dev](https://github.com/timknapen/SP-1-dev) project —
-  the pin map, the codec and clock notes, and the eMMC protocol all came from
-  there.
-- chattock's original looper is the foundation; 3.0 was developed by marc
-  (marcabisamra). Thanks to everyone on the SP-1 Discord who tested the
-  3.0 builds and reported back.
-- Flashing is made possible by the [Solderless](https://solderless.engineering)
-  SP-1 updater.
-- Runs on the [Zephyr RTOS](https://www.zephyrproject.org/).
-
-Released under the MIT License (see `LICENSE`). Contributions and forks
-welcome.
+Unofficial community firmware, not affiliated with or endorsed by Teenage Engineering. Use at your own risk and back up recordings you need.

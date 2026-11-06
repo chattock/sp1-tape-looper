@@ -1,0 +1,36 @@
+{
+  "toolchain": "Zephyr SDK 0.17.4 / GNU 12.2.0",
+  "modules": [
+    {
+      "name": "zephyr",
+      "commit": "75f67d766726351b30199f9a2bf55803d717a3be",
+      "url": "https://github.com/zephyrproject-rtos/zephyr",
+      "local_patch": "patches/zephyr-uac2.patch"
+    },
+    {
+      "name": "cmsis",
+      "commit": "512cc7e895e8491696b61f7ba8066b4a182569b8",
+      "url": "https://github.com/zephyrproject-rtos/cmsis",
+      "local_patch": null
+    },
+    {
+      "name": "cmsis_6",
+      "commit": "30a859f44ef8ab4dc8f84b03ed586fd16ccf9d74",
+      "url": "https://github.com/zephyrproject-rtos/CMSIS_6",
+      "local_patch": null
+    },
+    {
+      "name": "hal_nordic",
+      "commit": "7858281d843468fe53c829995fb63f45a227387a",
+      "url": "https://github.com/zephyrproject-rtos/hal_nordic",
+      "local_patch": null
+    }
+  ],
+  "local_rebuild_matches_beta612": true,
+  "clean_machine_build_verified": false,
+  "private_inputs": [
+    "tools/clean608/radio/admission.h",
+    "tools/clean608/radio/generated/ram_image.h"
+  ],
+  "private_input_note": "Excluded from this source review. Required by the exact original build; see BUILD-REVIEW.md."
+}

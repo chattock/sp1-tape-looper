@@ -1,0 +1,170 @@
+[
+  {
+    "repo": "ffmpegwasm/ffmpeg.wasm",
+    "declared_ref": "71aa99d37c02a7b4c435275ca9ef50e612f6efa1",
+    "ref_kind": "commit",
+    "resolved_commit": "71aa99d37c02a7b4c435275ca9ef50e612f6efa1",
+    "resolution_cutoff": null,
+    "origin": "release-commit",
+    "url": "https://codeload.github.com/ffmpegwasm/ffmpeg.wasm/tar.gz/71aa99d37c02a7b4c435275ca9ef50e612f6efa1",
+    "archive": "ffmpegwasm--ffmpeg.wasm-71aa99d37c02.tar.gz",
+    "bytes": 1329368,
+    "sha256": "53c5842f160cece0e39345876f9483b56aa84b966637ff6f624353a0fa884219",
+    "license_files": [
+      {
+        "path": "LICENSE",
+        "sha256": "3e123e29517d76504ffce77b3f8e2ccffd4712493f27694b0aba3e376676459f"
+      }
+    ],
+    "gitmodules": [
+      "[submodule \"testdata\"]\n\tpath = testdata\n\turl = https://github.com/ffmpegwasm/testdata\n"
+    ],
+    "prebuilt_correspondence_verified": false
+  },
+  {
+    "repo": "FFmpeg/FFmpeg",
+    "declared_ref": "n5.1.4",
+    "ref_kind": "tag",
+    "resolved_commit": "4729204c17f756e186d622060088371d10b34f7e",
+    "resolution_cutoff": null,
+    "origin": "upstream-docker-ref",
+    "url": "https://codeload.github.com/FFmpeg/FFmpeg/tar.gz/4729204c17f756e186d622060088371d10b34f7e",
+    "archive": "FFmpeg--FFmpeg-4729204c17f7.tar.gz",
+    "bytes": 14428595,
+    "sha256": "0d7ad57d4dd851d577fc6c19e5cec5b6e5faaeb2dbd52ab76127e3c3763fec6d",
+    "license_files": [
+      {
+        "path": "COPYING.GPLv2",
+        "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+      },
+      {
+        "path": "COPYING.GPLv3",
+        "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+      },
+      {
+        "path": "COPYING.LGPLv2.1",
+        "sha256": "b634ab5640e258563c536e658cad87080553df6f34f62269a21d554844e58bfe"
+      },
+      {
+        "path": "COPYING.LGPLv3",
+        "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+      },
+      {
+        "path": "LICENSE.md",
+        "sha256": "cb48bf09a11f5fb576cddb0431c8f5ed0a60157a9ec942adffc13907cbe083f2"
+      }
+    ],
+    "gitmodules": [],
+    "prebuilt_correspondence_verified": false
+  },
+  {
+    "repo": "emscripten-core/emscripten",
+    "declared_ref": "5c27e79dd0a9c4e27ef2326841698cdd4f6b5784",
+    "ref_kind": "commit",
+    "resolved_commit": "5c27e79dd0a9c4e27ef2326841698cdd4f6b5784",
+    "resolution_cutoff": null,
+    "origin": "binary-reported-toolchain",
+    "url": "https://codeload.github.com/emscripten-core/emscripten/tar.gz/5c27e79dd0a9c4e27ef2326841698cdd4f6b5784",
+    "archive": "emscripten-core--emscripten-5c27e79dd0a9.tar.gz",
+    "bytes": 28785427,
+    "sha256": "3eb9ea2d69052a491296eb466dbcda5fbc1c0fed4e475c58545a83558fb47d10",
+    "license_files": [
+      {
+        "path": "LICENSE",
+        "sha256": "620a78084fc7ca97c0b5dea9abf891f3ffcadfdbf305276f099c9c4e12fc1d86"
+      },
+      {
+        "path": "system/include/SDL/COPYING",
+        "sha256": "c0340bf02391530fb13cf4170c31253ecd09868fa483553652699584eb4db6ae"
+      },
+      {
+        "path": "system/lib/compiler-rt/LICENSE.TXT",
+        "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
+      },
+      {
+        "path": "system/lib/libcxx/LICENSE.TXT",
+        "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
+      },
+      {
+        "path": "system/lib/libcxxabi/LICENSE.TXT",
+        "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
+      },
+      {
+        "path": "system/lib/libunwind/LICENSE.TXT",
+        "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d"
+      },
+      {
+        "path": "test/sounds/LICENSE.txt",
+        "sha256": "dabb2ee881522112ee70539aec179f3a639b8fc58e6a7ca06df2791fabd51537"
+      },
+      {
+        "path": "test/third_party/box2d/License.txt",
+        "sha256": "829f4dd7e3da440ed11d34ac954afc3ea90dc481a5ec6775397edf59ab41d1e5"
+      },
+      {
+        "path": "test/third_party/box2d/freeglut/COPYING",
+        "sha256": "b6593d5ec4c113a274abb85b10e8615895cb0ddb89f7912af5fe5aa8df38a275"
+      },
+      {
+        "path": "test/third_party/bullet/COPYING",
+        "sha256": "231f7edcc7352d7734a96eef0b8030f77982678c516876fcb81e25b32d68564c"
+      },
+      {
+        "path": "test/third_party/bullet/LICENSE",
+        "sha256": "2a37da52f3f9134d50e5320f68854cfe2dea8708ff98336d08c60146d582eeb3"
+      },
+      {
+        "path": "test/third_party/coremark/LICENSE.md",
+        "sha256": "9577b9c846f61fd69a0d8ac965998c6450c7d8969f71f0bb4a931b91aebad28a"
+      },
+      {
+        "path": "test/third_party/enet/LICENSE",
+        "sha256": "f7295dd0e55e7df4048d0bc08e3f57af92ea03ee9e8c2d236885c29e4fcaa105"
+      },
+      {
+        "path": "test/third_party/enet/docs/license.dox",
+        "sha256": "9529d38e816787221d52d7fa0638d5be19390095eb1b32c0e53e979d6e4f281b"
+      },
+      {
+        "path": "test/third_party/freealut/COPYING",
+        "sha256": "db6a1ddf751a4eb743d640550717fe15bb5483f5238b97aa4a0145d46dc22075"
+      },
+      {
+        "path": "test/third_party/freetype/docs/LICENSE.TXT",
+        "sha256": "f35d115efd18ec624503129dbbcc8cd14c74140e2ecb85a3411b92e7a3901a11"
+      },
+      {
+        "path": "test/third_party/notofont/LICENSE_OFL.txt",
+        "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"
+      },
+      {
+        "path": "test/third_party/openjpeg/LICENSE",
+        "sha256": "db41603bdbc1a8aad4b6e51affa4357209d0e5bbafc2557ac050c62590cc800b"
+      },
+      {
+        "path": "test/third_party/poppler/COPYING",
+        "sha256": "ab15fd526bd8dd18a9e77ebc139656bf4d33e97fc7238cd11bf60e2b9b8666c6"
+      },
+      {
+        "path": "test/third_party/poppler/cmake/modules/COPYING-CMAKE-SCRIPTS",
+        "sha256": "46cde7dc11e64c78d650b4851b88f6704b4665ff60f22a1caf68ceb15e217e5b"
+      },
+      {
+        "path": "third_party/closure-compiler/node-externs/LICENSE",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      },
+      {
+        "path": "third_party/leb128/LICENSE",
+        "sha256": "6d21d47a22d95b919ddeaf8b49a4697909b47310472cb7fe3ad14cf6810d3208"
+      },
+      {
+        "path": "third_party/terser/LICENSE",
+        "sha256": "68335488ef8f917c0feb901ace385f8c919bc81b0b60448a92928a3769fcec8f"
+      }
+    ],
+    "gitmodules": [
+      "[submodule \"test/third_party/posixtestsuite\"]\n\tpath = test/third_party/posixtestsuite\n\turl = https://github.com/emscripten-core/posixtestsuite\n[submodule \"test/third_party/googletest\"]\n\tpath = test/third_party/googletest\n\turl = https://github.com/google/googletest\n[submodule \"test/third_party/wasi-test-suite\"]\n  path = test/third_party/wasi-test-suite\n  url = https://github.com/khronosproject/wasi-test-suite\n"
+    ],
+    "prebuilt_correspondence_verified": false
+  }
+]

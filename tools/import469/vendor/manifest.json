@@ -1,0 +1,26 @@
+{
+  "repo": "mackron/dr_libs",
+  "commit": "35b5c392cc15456736c440a68dbe073178bbffe0",
+  "files": {
+    "dr_mp3.h": {
+      "bytes": 198998,
+      "sha256": "f5c8020eeebb79877184432efdd2651f24869f5bb8f379d45450fd0aed1ee915"
+    },
+    "dr_flac.h": {
+      "bytes": 549189,
+      "sha256": "b8078eeb5d523502eb7964508cd7ec8450bc79d383bec90aa17fd9e2fefd9c24"
+    },
+    "LICENSE": {
+      "bytes": 2598,
+      "sha256": "dd1c647e6f767f8ff4b2dfae0fed314726600a01e0cf1ef556afddd5fa96ff15"
+    }
+  },
+  "local_patches": [
+    {
+      "file": "dr_flac.h",
+      "change": "fixed LPC coefficient table marked const; never mutated by upstream reader",
+      "sha256": "f03c28fab48603804a1a8c1a1fb114f571ce1b200ffb27f165ed0b9a193d614d"
+    }
+  ],
+  "selected_license": "MIT No Attribution (upstream alternative2)"
+}

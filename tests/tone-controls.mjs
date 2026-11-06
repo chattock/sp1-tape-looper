@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {Simulator} from '../web/field-guide/simulator.js';
+import {cards} from '../web/field-guide/content.js';
+import {effectInfo} from '../web/fx-state.mjs';
+import {decode} from '../web/protocol.mjs';
+let s=new Simulator();s.page=4;s.fx[3][1]=.8;s.secondary[3][1]=.2;s.faders[1]=.8;s.rearm();s.pageTap(1);assert.equal(s.cycles['4:2'],1);assert.equal(s.pickup[1],.2);s.fader(1,.7);assert.equal(s.secondary[3][1],.2);s.fader(1,.1);s.fader(1,.6);assert.equal(s.secondary[3][1],.6);assert.equal(s.fx[3][1],.8);s.pageTap(1);assert.equal(s.pickup[1],.8);assert.equal(s.secondary[3][1],.6);
+s.button('FN',true);s.button('T1',true);s.button('T4',true);assert.equal(s.cycles['4:2'],0);assert.equal(s.secondary[3][1],0);assert.equal(s.fx[3][1],.5);
+const card=cards.find(c=>c.id==='fx-4-2');for(let i=0;i<card.steps.length;i++){s.seed(card,card.steps[i]);assert.equal(s.cycles['4:2'],i>=2?1:0);}assert(!cards.some(c=>c.id==='tone-compression-v4'));
+const p=new Uint8Array(448);p.set([17,1,0,1,0,10]);p[48]=1;p.set([86,65,76,13],56);p[146]=4;p[382]=3;for(let i=0;i<8;i++)p[440+i]=(2*i)|((2*i+1)<<4);p[125]=1;
+let d=decode(p).details;assert.equal(d.toneMode,1);assert.equal(effectInfo(13,d).name,'Compression');p[382]=1;d=decode(p).details;assert.equal(d.toneMode,null);assert.equal(effectInfo(13,d).tap,'flat + compression off');p[382]=3;p[125]=2;assert.throws(()=>decode(p),/tone selector/);
+console.log('PASS pickup, independent values, reset, walkthrough selection, new and old telemetry, malformed selector rejection');

@@ -1,0 +1,28 @@
+:root{color-scheme:light;--ink:#202732;--soft:#627080;--line:#dde4e9;--blue:#225dce}*{box-sizing:border-box}body{margin:0;background:#f3f5f4;color:var(--ink);font:17px/1.6 system-ui,-apple-system,sans-serif}header{max-width:1120px;margin:auto;padding:28px 38px;display:flex;justify-content:space-between;gap:15px;align-items:center}header a{text-decoration:none;font-weight:800;color:var(--ink);letter-spacing:.03em}header span:not(.tag){font-size:11px;letter-spacing:.14em;margin-left:8px}.tag{font-size:12px;color:var(--soft);border:1px solid var(--line);border-radius:99px;padding:4px 12px}main{max-width:740px;margin:58px auto;padding:0 24px 40px}.eyebrow{font-size:11px;letter-spacing:.15em;font-weight:750;color:var(--soft);margin:0 0 20px}.card{background:white;border:1px solid var(--line);border-radius:24px;padding:38px;box-shadow:0 12px 50px #12233306}h1{font-size:clamp(30px,5vw,42px);letter-spacing:-.045em;line-height:1.13;margin:0 0 22px}p{margin:0 0 18px}button,.button{font:inherit;font-size:15px;font-weight:650;border:0;border-radius:99px;background:var(--blue);color:white;padding:13px 22px;cursor:pointer;text-decoration:none;display:inline-block}button:disabled{opacity:.4;cursor:default}.secondary{background:#edf2f8;color:#24446b}.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}.hint,.foot{font-size:13px;color:var(--soft);line-height:1.65}.hint{margin:20px 0 0}.foot{margin-top:26px}.hint:empty{display:none}input[type=text],select{font:inherit;width:100%;padding:12px;border:1px solid #b8c6d6;border-radius:10px}label{display:block;margin:18px 0}label input[type=checkbox]{margin-right:10px;width:18px;height:18px}#activity{margin-top:20px;padding:20px;border-radius:16px;background:#e8eef5;font-size:14px}#activity p{margin:0}progress{width:100%;margin-top:15px;accent-color:var(--blue)}details{margin-top:22px;font-size:13px;color:var(--soft)}summary{cursor:pointer}details button{margin:8px 6px 0 0;font-size:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;max-height:250px;overflow:auto}.danger{background:#fff0e8;padding:14px;border-radius:12px;font-size:14px}.choice{font-weight:650}[hidden]{display:none!important}@media(max-width:560px){header{padding:20px}.tag{font-size:10px}main{margin:25px auto}.card{padding:25px}.actions{display:grid}button{width:100%}}
+
+/* Two independent setup tasks; neither is a primary/secondary decision. */
+.setup-tasks .actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:28px}
+.setup-tasks .actions button{display:flex;align-items:center;justify-content:space-between;gap:20px;width:100%;min-height:96px;padding:24px;text-align:left;border-radius:18px;border:1px solid #cbd7e6;background:linear-gradient(145deg,#ffffffd9,#edf3fba8);color:#263f60;box-shadow:inset 0 1px 0 #ffffff,0 2px 8px #18345006;font-size:19px;font-weight:650;line-height:1.3}
+.setup-tasks .actions button::after{content:'→';font-size:24px;font-weight:400;color:#627d9e}
+.setup-tasks .actions button:hover:not(:disabled){background:#e8f0fc;border-color:#91add4;box-shadow:0 4px 14px #1834500c}
+@media(max-width:600px){.setup-tasks .actions{grid-template-columns:1fr;gap:12px;margin-top:24px}.setup-tasks .actions button{min-height:80px;padding:20px;font-size:17px}}
+
+.setup-checklist{list-style:none;margin:24px 0;padding:0;border-top:1px solid var(--line)}
+.setup-checklist li{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--line);font-size:16px}
+.check-state{width:22px;text-align:center;color:var(--soft)}.check-state.done{color:#247755}.check-status{margin-left:auto;color:var(--soft);font-size:13px;text-align:right}
+
+.quiet-action{background:transparent;color:var(--soft);padding:0;font-size:13px;text-decoration:underline;border-radius:0}
+
+.radio-options{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:stretch;gap:18px;margin-top:28px}
+.radio-options button{width:100%;height:100%;min-height:86px;padding:20px;border:1px solid #cbd7e6;border-radius:18px;background:linear-gradient(145deg,#ffffffd9,#edf3fba8);color:#263f60;box-shadow:inset 0 1px 0 #ffffff;font-size:16px;line-height:1.4}
+.radio-options button:hover:not(:disabled){background:#e8f0fc;border-color:#91add4}
+.radio-or{align-self:center;color:var(--soft);font-size:13px}
+@media(max-width:600px){.radio-options{grid-template-columns:1fr;gap:10px}.radio-or{text-align:center}.radio-options button{min-height:70px}}
+
+.connection-status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--soft);margin:0 0 14px}
+.connection-status::before{content:'';width:7px;height:7px;border-radius:50%;background:#8a95a5}
+.connection-status[data-state=connected]::before{background:#2b8b6c}
+.connection-status[data-state=connecting]::before,.connection-status[data-state=restarting]::before,.connection-status[data-state=waiting]::before{background:#b78632}
+#radioBackupInfo{font-size:13px;margin-top:12px;color:var(--soft)}
+
+.firmware-download{font-weight:650;text-decoration:none}

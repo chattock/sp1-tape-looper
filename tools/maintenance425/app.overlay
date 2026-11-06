@@ -1,0 +1,8 @@
+&uart0 { status = "disabled"; };
+&uac2_speaker { status = "disabled"; };
+&adc { status = "okay"; };
+&i2s0 { status = "disabled"; };
+
+/ { converter469: converter@b4000 { compatible = "zephyr,memory-region"; reg = <0xb4000 0x1a000>; zephyr,memory-region = "CONVERTER469"; }; };
+
+/ { fresh529: initializer@ce000 { compatible = "zephyr,memory-region"; reg = <0xce000 0xe000>; zephyr,memory-region = "FRESH529"; }; };

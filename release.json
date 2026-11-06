@@ -1,0 +1,29 @@
+{
+  "bytes": 774068,
+  "sha256": "e73e3786c1a2b33cf92685f92533404f5eec78f4f9384607725bf7c2140badbf",
+  "matches_release": true,
+  "preserving": true,
+  "historical_bins_used": false,
+  "parts": {
+    "runtime": {
+      "ram": 262044,
+      "main_bytes": 376356,
+      "main_sha256": "6c0c8d982451bd34eafb9fe52627829d119d27f49ac5abc2cbc3be33e3a285bb"
+    },
+    "maintenance": {
+      "ram": 255300,
+      "main_bytes": 130892,
+      "main_sha256": "8bc5b1aa027689683a991f1889f981e190acc8fa202e6f56963d22d289a08893"
+    },
+    "radio": {
+      "ram": 56768,
+      "main_bytes": 80364,
+      "main_sha256": "9cf1f8679c52ab00c60de4567ba5c219d885eb769f9ab67b42a2f418ceb7113c"
+    }
+  },
+  "version": "4.0.0",
+  "audio_callback_unchanged_from_beta612": true,
+  "radio_and_storage_payloads_unchanged_from_beta612": true,
+  "hardware_control_test": "User confirmed Tone/Compression candidate working",
+  "full_build_requires_external_inputs": true
+}

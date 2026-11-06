@@ -1,0 +1,19 @@
+{
+  "package": "tape-looper-audio-decoder",
+  "version": "ffmpeg-5.1.4-audio612",
+  "files": {
+    "core-package.json": {
+      "bytes": 476,
+      "sha256": "e932e25e1debb00cf35dcfc3b69908389473af452a521def0e0fdb36003c1e97"
+    },
+    "ffmpeg-core.js": {
+      "bytes": 85370,
+      "sha256": "4d55a69a348033e65b868233027cf9ee8c555f1b770c7ee45bca72cc5caf4970"
+    },
+    "ffmpeg-core.wasm": {
+      "bytes": 2321920,
+      "sha256": "98ea17c34867a8e85d94f414a2403c1da257eea2e770ee91debd105ac82cac57"
+    }
+  },
+  "source": "../../licenses/audio-decoder-source.tar.gz"
+}

@@ -1,0 +1,18 @@
+# SP-1 marisko firmware application Kconfig.
+#
+# Pulls in the common USB sample options (CONFIG_SAMPLE_USBD_VID/PID/PRODUCT/...)
+# consumed by the vendored sample_usbd_init.c device_next bring-up helper, then
+# the standard Zephyr Kconfig tree.
+
+source "samples/subsys/usb/common/Kconfig.sample_usbd"
+
+config SP1_BT_ID_PROBE
+	bool "Experimental one-shot radio identity probe"
+	default n
+
+config SP1_LINK_CALIBRATION
+	bool "Stopped-device linked audio calibration experiment"
+	depends on SP1_BT_ID_PROBE
+	default n
+
+source "Kconfig.zephyr"

@@ -1,0 +1,9 @@
+import {BackupSerial} from './serial.mjs';
+import {Runtime} from './runtime.mjs';
+const $=id=>document.getElementById(id),report={candidate:409,events:[]};
+$('check').onclick=async()=>{let d;$('check').disabled=true;try{
+ const p=await navigator.serial.requestPort({filters:[{usbVendorId:0x2fe3,usbProductId:0x5210},{usbVendorId:0x2fe3,usbProductId:0x5217}]});
+ if(p.getInfo().usbProductId===0x5210){d=await Runtime.connect(p);const id=await d.identify(),storage=await d.status();report.events.push({at:new Date().toISOString(),kind:'runtime',...id,storage});$('status').textContent='Tape Looper verified. Playback and recording are available.';}
+ else {d=await BackupSerial.connect(p);const line=await d.transact(async()=>{await d.send('S409AUTO?');return d.line()});if(!/^STORAGE409 AUTO state=\d+ error=\d+ gate=[01] host=[01] ejected=[01] rejects=\d+$/.test(line))throw Error('Select an SP-1 running the409 candidate.');report.events.push({at:new Date().toISOString(),kind:'drive',status:line});const state=Number(/state=(\d+)/.exec(line)[1]);$('status').textContent=state===2?'Drive is open. Copy files, then eject in Finder.':state===4?'Drive checks stopped. Keep the device powered and save diagnostics. No automatic repair or formatting.':state===5?'Drive verified; returning to Tape Looper.':state===0?'Maintenance mode, not an automatic drive session. Use the existing maintenance workflow.':'Checking storage. Keep USB connected.';}
+ }catch(e){report.events.push({at:new Date().toISOString(),kind:'error',message:e.message});$('status').textContent='Stopped: '+e.message;}finally{try{await d?.close()}catch{}$('check').disabled=false;$('save').disabled=false;}};
+$('save').onclick=()=>{const a=document.createElement('a'),u=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));a.href=u;a.download='sp1-drive409-diagnostic.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};

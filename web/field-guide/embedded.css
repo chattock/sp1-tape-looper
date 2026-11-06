@@ -1,0 +1,36 @@
+/* The parent workspace supplies the shared brand/header. Teaching content unchanged. */
+.topbar{display:none}.category-nav{margin-top:14px}.content{padding-top:26px}#deviceStage{top:90px}.guide-search{display:flex;align-items:center;gap:12px;margin:0 0 24px}.guide-search input{font:inherit;font-size:14px;color:#202431;background:#ffffffbd;border:1px solid white;border-radius:22px;padding:11px 16px;width:min(280px,100%);min-height:42px}.guide-search span{font-size:12px;color:#697181;white-space:nowrap}
+@media(max-width:780px){.content{padding-top:310px}.category-nav{margin-top:12px}#deviceStage{top:65px}.guide-search{margin-bottom:20px}.guide-search input{width:100%}.guide-search span:empty{display:none}}
+
+/* Compact search lives beside the version label, outside the filtered sections. */
+.guide-search{gap:10px;min-height:44px;flex-wrap:wrap;margin-bottom:18px}
+.guide-search .guide-version{margin:0;font-size:12px;white-space:nowrap;color:#617086}
+#guideSearchToggle{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:50%;background:#ffffff70;color:#53647c}
+#guideSearchToggle:hover,#guideSearchToggle[aria-expanded=true]{background:#ffffffc9;color:#245ecc}
+#guideSearchToggle svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+.guide-search-field{display:grid;grid-template-columns:0fr;width:0;opacity:0;overflow:hidden;transition:width .25s ease,opacity .2s ease,grid-template-columns .25s ease}
+.guide-search.is-open .guide-search-field{grid-template-columns:1fr;width:min(350px,calc(100vw - 80px));opacity:1}
+.guide-search-field input{width:100%;min-width:0;box-sizing:border-box}
+#guideSearchCount{color:#697181;font-size:12px}
+@media(max-width:600px){.guide-search.is-open .guide-search-field{flex-basis:100%;width:100%}}
+@media(prefers-reduced-motion:reduce){.guide-search-field{transition:none}}
+
+.guide-search-field input:focus-visible{outline-offset:-3px}
+
+/* Match the Companion stage in browse mode. Walkthroughs keep their own framing. */
+body.embedded-workspace:not(.demonstrating) #deviceStage { transition: none; }
+@media (min-width: 781px) and (max-width: 1100px) {
+ body.embedded-workspace:not(.demonstrating) #deviceStage { width: 38%; }
+}
+
+@media (min-width: 781px) {
+ body.embedded-workspace:not(.demonstrating) #deviceStage {
+  top: calc(90px + var(--model-stage-offset, 0px));
+  bottom: calc(22px - var(--model-stage-offset, 0px));
+ }
+}
+@media (max-width: 780px) {
+ body.embedded-workspace:not(.demonstrating) #deviceStage {
+  top: calc(57px + var(--model-stage-offset, 0px));
+ }
+}

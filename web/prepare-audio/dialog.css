@@ -1,0 +1,26 @@
+/* Shared by the standalone Library and its main-page native dialog. */
+dialog.library-dialog{box-sizing:border-box;border:1px solid white;border-radius:23px;box-shadow:0 20px 100px #2038583b;background:#f8faff;color:#29364b;padding:30px;max-width:520px;width:calc(100% - 40px);font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.library-dialog::backdrop{background:#2c3d5b45;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.library-dialog h2{font-size:22px;letter-spacing:-.03em;margin:18px 0}
+.library-dialog p{font-size:14px;line-height:1.65;color:#667b95}
+.library-dialog #dialogText{white-space:pre-line;overflow-wrap:anywhere;max-height:45vh;overflow:auto}
+.library-dialog button{font:inherit;cursor:pointer;border:1px solid #dce3ee;background:#ffffffb5;color:inherit;border-radius:9px;padding:8px 12px}
+.library-dialog button:hover:not(:disabled){background:#e7eefb}
+.library-dialog button.primary{background:#2869dc;color:white;border-color:transparent}
+.library-dialog button.primary:hover:not(:disabled){background:#1b58bd}
+.library-dialog button:focus-visible,.library-dialog select:focus-visible,.library-dialog input:focus-visible{outline:3px solid #7ba8f5;outline-offset:2px}
+.library-dialog .dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}
+.library-dialog #dialogFields label{display:block;font-size:13px;margin:12px 0}
+.library-dialog input,.library-dialog select{font:inherit;color:inherit;border:1px solid #d8e1ef;background:white;padding:9px;border-radius:9px;max-width:100%}
+.library-dialog .destination-review{max-height:55vh;overflow:auto}
+.library-dialog .destination-review table{width:100%;border-collapse:collapse}
+.library-dialog .destination-review th,.library-dialog .destination-review td{padding:8px;text-align:left}
+.library-dialog .destination-review td:first-child{max-width:320px;overflow-wrap:anywhere}
+.library-dialog .destination-review select{min-width:64px;width:auto}
+dialog.library-dialog:has(.destination-review){width:min(720px,calc(100vw - 40px));max-width:720px}
+
+.clip-picker audio{display:block;width:100%;margin:16px 0}.clip-times{display:flex;gap:16px}.clip-times label{flex:1;min-width:0}.clip-times input{display:block;width:100%;box-sizing:border-box;margin-top:6px}.clip-picker .clip-error{color:#a53939}
+
+.clip-waveform{margin:14px 0}.wave-toggle{font-size:13px!important}.waveform-panel[hidden]{display:none}.waveform-panel{margin-top:12px}.wave-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}.wave-toolbar button{font-size:12px}.wave-status{font-size:12px;color:#667b95;flex:1}.wave-area{position:relative;height:144px;border:1px solid #d9e3f0;border-radius:10px;background:#eef3fa;overflow:hidden;touch-action:none;user-select:none;cursor:crosshair}.wave-area canvas{display:block;width:100%;height:100%}.wave-selection{position:absolute;top:0;bottom:0;background:#2869dc14;border-top:2px solid #2869dc88;border-bottom:2px solid #2869dc88;box-sizing:border-box;cursor:grab;min-width:1px}.wave-handle{position:absolute;top:0;bottom:0;width:14px;background:#2869dc;cursor:ew-resize;touch-action:none}.wave-handle:after{content:'';position:absolute;left:6px;top:calc(50% - 10px);height:20px;width:2px;background:#ffffffbd;border-radius:2px}.wave-left{left:0;border-radius:5px 0 0 5px}.wave-right{right:0;border-radius:0 5px 5px 0}.wave-handle:focus-visible,.wave-selection:focus-visible{outline:2px solid #1a4ba0;outline-offset:-3px}.wave-playhead{position:absolute;top:0;bottom:0;width:1px;background:#26354f;pointer-events:none}.wave-axis{display:flex;justify-content:space-between;margin-top:6px;color:#667b95;font-size:11px;font-variant-numeric:tabular-nums}.wave-help{display:block;margin-top:8px;color:#667b95}dialog.library-dialog:has(.waveform-panel:not([hidden])){width:min(780px,calc(100vw - 40px));max-width:780px;max-height:calc(100dvh - 32px);overflow:auto}
+
+.wave-toolbar [hidden]{display:none}dialog.library-dialog:has(.waveform-panel:not([hidden])){padding:24px}dialog.library-dialog:has(.waveform-panel:not([hidden])) h2{margin:4px 0 12px}dialog.library-dialog:has(.waveform-panel:not([hidden])) .dialog-actions{margin-top:16px}

@@ -8,3 +8,17 @@ build_*/
 *.elf
 *.map
 zephyr/
+
+# Local builds, private device data and external radio inputs
+output/
+__pycache__/
+*.pyc
+.vercel/
+node_modules/
+external/
+tools/clean608/radio/admission.h
+tools/clean608/radio/generated/ram_image.h
+web/release/*.bin
+web/install/radio/assets/*.bin
+web/prepare-audio/vendor/*.wasm
+web/licenses/*.tar.gz

@@ -154,7 +154,11 @@ static void spim_data_init(void)
  * ENABLED the peripheral drives SCK (+MOSI for TX) / samples MISO; on disable
  * the pins fall back to their GPIO latches (CLK low, DAT0 as configured), so
  * the surrounding bit-bang phases continue seamlessly. ~65 us per 64 bytes. */
-static void spim_xfer(const uint8_t *tx, uint32_t txlen, uint8_t *rx, uint32_t rxlen)
+#ifdef SP1_BOUNDED_SYNC_DMA
+#include "sp1_dma_wait.h"
+static uint32_t spim_now(void) { return k_cycle_get_32(); }
+#endif
+static bool spim_xfer(const uint8_t *tx, uint32_t txlen, uint8_t *rx, uint32_t rxlen)
 {
 	NRF_SPIM3->PSEL.MOSI = tx ? PIN_EMMC_DAT0 : 0xFFFFFFFFu;
 	NRF_SPIM3->PSEL.MISO = rx ? PIN_EMMC_DAT0 : 0xFFFFFFFFu;
@@ -165,10 +169,22 @@ static void spim_xfer(const uint8_t *tx, uint32_t txlen, uint8_t *rx, uint32_t r
 	NRF_SPIM3->RXD.MAXCNT = rx ? rxlen : 0;
 	NRF_SPIM3->EVENTS_END = 0;
 	NRF_SPIM3->TASKS_START = 1;
+#ifdef SP1_BOUNDED_SYNC_DMA
+	/* Maintenance qualification first; normal audio build keeps its old path.
+	 * 10ms is deliberately generous relative to the ~130us normal transfer. */
+	bool done=sp1_dma_wait(&NRF_SPIM3->EVENTS_END, &NRF_SPIM3->TASKS_STOP,
+	                      &NRF_SPIM3->EVENTS_STOPPED, &NRF_SPIM3->ENABLE,
+	                      spim_now, k_us_to_cyc_ceil32(10000u),
+	                      k_us_to_cyc_ceil32(1000u));
+	if (!done) emmc_dbg_busy_timeouts++;
+	return done;
+#else
 	while (!NRF_SPIM3->EVENTS_END) {
 		/* ~130 us for a full block at 32 MHz (measured 32.02 Mbit/s) */
 	}
 	NRF_SPIM3->ENABLE = 0;
+	return true;
+#endif
 }
 
 static inline void half_delay(uint32_t us)
@@ -648,7 +664,9 @@ static bool read_data_block(uint8_t *buf)
 		/* FAST PATH: the start bit was just consumed by the bit-bang hunt
 		 * above, so the remaining 512 data bytes + CRC16 are exactly byte-
 		 * aligned — one 32 MHz SPIM RX DMA (~130 us vs ~1.7 ms bit-banged). */
-		spim_xfer(NULL, 0, s_dma_rx, EMMC_BLOCK_SIZE + 2u);   /* DMAUNION-746: was sizeof(s_dma_rx) = 514 */
+		if (!spim_xfer(NULL, 0, s_dma_rx, EMMC_BLOCK_SIZE + 2u)) {
+			RCLK_LOW(); DAT0_OUT(); DAT0_HIGH(); return false;
+		}
 		memcpy(buf, s_dma_rx, EMMC_BLOCK_SIZE);
 		emmc_dbg_rd_crc = (uint16_t)(((uint16_t)s_dma_rx[EMMC_BLOCK_SIZE] << 8) |
 					     s_dma_rx[EMMC_BLOCK_SIZE + 1]);
@@ -719,7 +737,9 @@ static bool write_data_block(const uint8_t *buf)
 		 * the bit-bang hunt below ever looked (status read as garbage —
 		 * which froze recording solid once the status became enforced).
 		 * The END bit is clocked by hand right after, on time. */
-		spim_xfer(s_dma_tx, 2 + EMMC_BLOCK_SIZE + 2, NULL, 0);
+		if (!spim_xfer(s_dma_tx, 2 + EMMC_BLOCK_SIZE + 2, NULL, 0)) {
+			RCLK_LOW(); DAT0_OUT(); DAT0_HIGH(); return false;
+		}
 		/* END bit: DAT0 is back at its GPIO latch (output HIGH) — clock it */
 		HALF(hd); EDGE_SETTLE();
 		RCLK_HIGH(); HALF(hd); RCLK_LOW();
@@ -1252,7 +1272,9 @@ bool emmc_pon_power_off_short(void)
 
 static bool emmc_read_blocks_raw(uint32_t block_addr, uint8_t *buf, uint32_t count)
 {
-	if (!s_ready) {
+	if (!s_ready || !buf || !count ||
+	    count > UINT32_MAX / EMMC_BLOCK_SIZE ||
+	    block_addr > UINT32_MAX - (count - 1u)) {
 		return false;
 	}
 	uint8_t r1[6];
@@ -1263,12 +1285,13 @@ static bool emmc_read_blocks_raw(uint32_t block_addr, uint8_t *buf, uint32_t cou
 		}
 		return read_data_block(buf);
 	}
-	/* RETRY like CMD17 above: at high bus duty (4 playing tracks, or reads
-	 * interleaved with a take's writes) the card intermittently misses the
-	 * first command after the previous burst's CMD12 — measured live at
-	 * 20-100 fails/s, each costing a playing track its whole refill turn
-	 * (the actual audible cut-outs). One 2 ms-spaced retry recovers it. */
-	if (!send_command_retry(18, block_addr, r1, 4)) {
+	/* Closed-ended transfer, matching the asynchronous reader: declare the
+	 * exact count before CMD18. Do not issue CMD12 after successful completion;
+	 * it is reserved for abort/recovery, never used to delimit a good burst.
+	 * If either command fails, leave through the existing bounded stop path. */
+	if (!send_command_retry(23, count, r1, 2) ||
+	    !send_command_retry(18, block_addr, r1, 4)) {
+		(void)send_command_retry(12, 0, r1, 3);
 		return false;
 	}
 	/* BURST DEADLINE: every per-block bound (80 ms access hunt) can be
@@ -1291,7 +1314,8 @@ static bool emmc_read_blocks_raw(uint32_t block_addr, uint8_t *buf, uint32_t cou
 			return false;
 		}
 	}
-	(void)send_command_retry(12, 0, r1, 3);
+	/* Match the async reader's post-transfer clocks after the fixed count. */
+	for (unsigned i = 0; i < 16; i++) clk_pulse();
 	return true;
 }
 /* M46d: duty-cycled streamer priority boost — the TL-3/M46 dropout fix.

@@ -1,3 +1,84 @@
+# Tape Looper changelog
+
+## 4.0.0 — 2026-11-06
+
+### Recording and library
+
+- Multiple saved takes per track, with a separate New lane. Hold TRACK + ROCKER DOWN to cycle takes; TRACK + ROCKER UP selects New.
+- Hold FN during playback to preview the total take count, including from New. Empty lanes breathe when other saved takes exist.
+- Bluetooth audio input and recording. USB and Bluetooth inputs can be mixed; Bluetooth companion control is separate from audio pairing.
+- New filesystem-backed library and USB drive access. Hold T2 + T3 for three seconds after stopping/saving to open SP1 MUSIC.
+- Manage recordings from Finder or the browser Library: add, replace, delete, preview and download, including Download all.
+- Browser batch preparation, automatic placement for recognized song/track filenames, destination review for other files, and reimport-compatible downloads. Duplicate take names are allocated without silently overwriting an existing take.
+- Clip selection and waveform-based trimming for long browser imports; broader supported-format handling and sequential batch preparation. Approximately eight minutes per take remains the limit.
+- Supported legacy-library migration and coexistence with recognized shared filesystems. Setup checks the actual storage layout; unknown layouts are not silently erased.
+
+### Rocker modes and tape shaping
+
+- Eight modes: Pitch, Wind, Bender, Battery, Sandpaper, Magnet, Scissors / glue and Manual tape head.
+- New **2× playback top speed** in Pitch mode; semitone steps and octave gestures remain available.
+- Wind forward/rewind with momentary TRACK speed choices of 0.5x, 1.5x, 3x and 4x. Double-tap TRACK on the Wind page to latch the winding speed.
+- Bender drag/surge, Battery sag/stalls and Sandpaper wear.
+- Magnet creates undoable gaps without shortening the loop. Scissors removes sections and joins the remainder, with up to eight cuts and undo.
+- Magnet and Scissors work across loaded tracks, or on one track using TRACK + rocker while the rocker page is open. Cuts survive leaving the page; song/take changes, recording or reboot clear them.
+- Manual tape head offers momentary tape contact and four fader-controlled heads. Releasing contact is silent while the transport can continue; this is separate from four-head mode.
+- Per-track length trim and sliding of the kept section, with musical grid steps when available.
+- FN + double-tap PLAY restores the tape, including rocker transforms, Magnet gaps and Scissors cuts, while retaining FX.
+- Holding TRACK on a rocker page previews normal track lights.
+
+### Effects and tape color
+
+- Chorus gains a Flanger type.
+- Gate gains Slow gear swells alongside Gallop and Halves.
+- Bitcrush expands to Crush, Lo-fi and Radio.
+- Reverb gains Freeze.
+- Tone / Compression share Page 4, T2: tap to select, then use F2 with pickup. Both values remain applied when switching.
+- Noise becomes an amount control with Cassette, Vinyl, Pink and Minidisc sources; fader bottom turns it off.
+- Wobble offers Wow + Flutter, Wow only and Flutter only. Refined vinyl crackle and more distinct wobble types.
+- Lo-fi and Radio processing corrected to avoid generating unwanted noise from silence.
+- Effect type/division cycles no longer contain an Off step that could immediately reactivate. Lower the amount fader to turn those effects off; Filter and Tone retain their centered neutral positions.
+- Lane resets also restore their associated secondary parameters; full FX reset consistently restores types, rates, EQ and routing. Input monitor mute remains a separate setting.
+- Selectable behavior for effects when the transport stops: Keep running, Natural or All.
+- Open FX/control pages now use VOL− / VOL+ directly for navigation. Refined fader pickup and secondary-control intent detection reduce unintended changes.
+
+### Timing and controls
+
+- 3, 4, 5 or 7 beats per bar, set on Page 7 with F3 and saved per song.
+- Corrected grid creation on ungridded songs, downbeat/beat-chase alignment and bar-setting persistence. BPM rounding avoids the previous audio interruption.
+- Tighter take-switch/grid phase alignment and improved rapid take-switch responsiveness, reducing queued changes after releasing the controls.
+- Safer overdub gesture: hold a loaded TRACK, release, then tap to arm. The previous take stays saved; this release does not replace it destructively.
+- PLAY cancels a waiting recording arm and pauses. Active recordings still finish with their TRACK button.
+- Escape hatch: hold FN + T1 + T2 for two seconds. Clears control latches and resets performance controls, effects, timing offsets, trims, monitor mute and track mutes without deleting recordings. A waiting arm is cancelled; a recording already underway is finalized.
+- Clearer reset confirmations, smooth empty-lane breathing and a more visible all-track Bluetooth pairing fade.
+
+### Reliability and transfers
+
+- Fixed control-latch cases that made PLAY, faders or other gestures appear unresponsive, including page-exit pickup and armed-recording handling.
+- Improved recording-start and take-switch scheduling to reduce delays and playback starvation, including at higher speeds.
+- Corrections to bounce arming, Scissors processing, Wind direction changes and gesture ownership across pages.
+- Input monitor mute now removes the input before FX processing, preventing processed input from leaking through.
+- Improved loop-boundary handling and protection of musical timing during storage work.
+- Optimized file preparation, copy allocation, validation, conversion and eject processing; exact identical stereo channels can use a compact mono transfer without changing the resulting audio.
+- Improved recovery from drive/setup errors and interrupted operations, with guarded return/bootloader paths and protection against a held chord triggering a second action after restart.
+- Clearer copy-space errors, pending-import/eject instructions, progress and diagnostics. Large imports still require processing after eject.
+- Automatic startup after flashing and improved setup reconnection/status handling.
+
+### Website and documentation
+
+- Unified Field guide, Live companion, Library and Setup v4.
+- Sequential filesystem/Bluetooth setup with checks that skip completed work, automatic recovery storage where available and a folder fallback where needed.
+- Updated companion FX types, secondary controls, take lanes, grid, trim, Magnet gaps and Scissors cuts; inactive cards remain visible while disconnected.
+- Updated 3D walkthroughs, rocker/FX references, compact guide navigation and search.
+- New printable v4 full and pocket guides.
+
+### Upgrade notes and scope
+
+- Flash the preserving v4 BIN using Solderless, then run Setup v4. Preserving migration applies to supported layouts; Start empty explicitly erases existing storage.
+- Bluetooth audio output, the comb resonator and the separate Bluetooth SDK/agent skill are follow-up work, not features shipped in this release.
+- Transfer and eject times vary by file, storage layout and host. Do not promise a universal speed, instant eject, recovery from every possible fault, or compatibility with every custom firmware.
+
+---
+
 # Changelog
 
 All notable changes to the SP-1 Tape Looper.

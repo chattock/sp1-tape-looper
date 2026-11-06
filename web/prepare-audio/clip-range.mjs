@@ -1,0 +1,4 @@
+export const MAX_CLIP_SECONDS=480;
+export function formatTime(value){const seconds=Math.round(value*1000)/1000,minutes=Math.floor(seconds/60);return minutes+':'+(seconds%60).toFixed(3).replace(/\.?0+$/,'').replace(/^([0-9])(?=\.|$)/,'0$1')}
+export function parseTime(value){const text=String(value).trim();if(!/^\d+(?::[0-5]?\d){0,2}(?:\.\d{1,3})?$/.test(text))return NaN;return text.split(':').reduce((n,x)=>n*60+Number(x),0)}
+export function clipRange(startText,endText,duration){const start=parseTime(startText),end=parseTime(endText);if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<=start)throw Error('Enter a start and end time, such as 1:30 and 2:00.');if(end-start>MAX_CLIP_SECONDS+1e-8)throw Error('Choose up to 8 minutes.');if(Number.isFinite(duration)&&duration>0&&end>duration+0.001)throw Error('Choose times within the source audio.');return {start,end}}

@@ -1,0 +1,34 @@
+/* Compact guide index; only the hovered or focused label appears. */
+#categories.guide-rail{position:fixed;top:88px;bottom:28px;left:0;z-index:9;width:52px;max-width:52px;margin:0;padding:14px 0;display:flex;flex-direction:column;justify-content:center;gap:0;border:0;border-radius:0;overflow:visible;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+#categories.guide-rail .rail-tick{position:relative;flex:calc(1 + var(--near)*5) 1 0;min-height:3px;max-height:calc(13px + var(--near)*22px);width:52px;padding:0;margin:0;border:0;border-radius:0;display:flex;align-items:center;justify-content:flex-start;background:transparent;box-shadow:none;color:#293244;transition:flex-grow .18s ease,max-height .18s ease;--near:0;--label-opacity:0}
+.rail-mark{display:block;height:2px;margin-left:12px;width:calc(9px + var(--near)*25px);background:#6c7b91;opacity:calc(.36 + var(--near)*.64);transition:width .16s ease,opacity .16s ease;pointer-events:none}
+.major .rail-mark{width:calc(18px + var(--near)*21px);height:2px;opacity:calc(.6 + var(--near)*.4)}.current .rail-mark{background:#2868d8;opacity:1}
+.rail-label{position:absolute;left:52px;top:50%;transform:translateY(-50%);font-size:calc(11px + var(--near)*5px);line-height:1.15;font-weight:calc(450 + var(--near)*180);max-width:290px;white-space:nowrap;padding:4px 9px;border-radius:7px;background:#f2f5fbf5;color:#334158;opacity:var(--label-opacity);visibility:hidden;transition:opacity .16s ease,font-size .16s ease;pointer-events:none}
+.revealed .rail-label{visibility:visible}.rail-tick:focus-visible{outline:2px solid #3476df;outline-offset:-4px}.guide-jump{display:none}
+.content{padding-left:68px}.guide-intro,.guide-category,.tile-section,article[id*="card-"]{scroll-margin-top:35px}
+.new-walkthroughs{margin-top:25px}.whats-new .new-badge{display:none}body.demonstrating #categories{visibility:hidden}
+@media(max-width:780px),(hover:none),(pointer:coarse){#categories.guide-rail{display:none}.guide-jump{display:block;position:sticky;top:8px;z-index:8;width:calc(100% - 36px);margin:14px 18px 0;padding:11px 14px;border-radius:14px;border:1px solid #ffffffb0;background:#f4f7fbe8;color:#273247;font:inherit;font-size:14px}.content{padding-left:20px;padding-right:20px}.guide-intro,.guide-category,.tile-section,article[id*="card-"]{scroll-margin-top:75px}}
+@media(prefers-reduced-motion:reduce){.rail-mark,.rail-label{transition:none}}
+@media print{#categories.guide-rail,.guide-jump{display:none}.content{padding-left:0}}
+
+/* Keep the index quiet until the pointer or keyboard enters it. */
+#categories.guide-rail{opacity:.55;transition:opacity .2s ease}
+#categories.guide-rail:hover,#categories.guide-rail:focus-within{opacity:1}
+@media(prefers-reduced-motion:reduce){#categories.guide-rail{transition:none}}
+
+/* Bare ticks: exclude the shared glass category-nav treatment, including its rim. */
+#categories.guide-rail::before,#categories.guide-rail::after{content:none;display:none}
+#categories.guide-rail{--rail-reach:0;background:none!important;border:0!important;box-shadow:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+#categories.guide-rail .rail-tick:hover{background:none;filter:none}
+.rail-mark{margin-left:14px;width:calc(6px + var(--near)*18px)}
+.section .rail-mark{width:calc(11px + var(--near)*16px);opacity:calc(.52 + var(--near)*.48)}
+.major .rail-mark{margin-left:14px;width:calc(20px + var(--near)*10px);height:2px;opacity:calc(.85 + var(--near)*.15)}
+#categories.guide-rail .rail-tick.major:not(:first-child){margin-top:5px}
+.major .rail-label{font-size:12px;font-weight:650;letter-spacing:-.1px;opacity:var(--rail-reach);visibility:visible;transform:translate(calc(-8px + var(--rail-reach)*8px),-50%);transition:opacity .16s ease,transform .2s ease}
+.major.revealed .rail-label,#categories:focus-within .major .rail-label{opacity:1;transform:translate(0,-50%)}
+#categories.guide-rail.nearby{opacity:calc(.55 + var(--rail-reach)*.45)}
+@media(prefers-reduced-motion:reduce){.major .rail-label{transition:none}}
+@media(forced-colors:active){.rail-mark{background:CanvasText}.current .rail-mark{background:Highlight}}
+
+#categories.guide-rail:focus-within{opacity:1}
+.nearby .major .rail-label,.revealed .rail-label{pointer-events:none}

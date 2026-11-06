@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "purpose": "metadata-only; no SDK acceptance/download or bundled source",
+  "dependencies": [
+    {
+      "component": "20706A2",
+      "revision": "5aa165091eef6c8d14e92cb10f29cbababc77ffa",
+      "official_repository": "https://github.com/Infineon/20706A2",
+      "official_license": "https://raw.githubusercontent.com/Infineon/20706A2/5aa165091eef6c8d14e92cb10f29cbababc77ffa/LICENSE.txt",
+      "license_sha256": "a897bb8282351e03edd9ed9382829ef11761c56afd50af0d4e98856b3602cd1d",
+      "treatment": "external-official-dependency",
+      "local_destination": "external/infineon/20706A2"
+    },
+    {
+      "component": "TARGET_CYBT-353027-EVAL",
+      "revision": "5d2c436f92b920a64512848e8117cf43e126d916",
+      "official_repository": "https://github.com/Infineon/TARGET_CYBT-353027-EVAL",
+      "official_license": "https://raw.githubusercontent.com/Infineon/TARGET_CYBT-353027-EVAL/5d2c436f92b920a64512848e8117cf43e126d916/LICENSE.txt",
+      "license_sha256": "aed445dc4b6832c07501ddb0c937a7bc342bb630d54636fca2b8177ec5722de0",
+      "treatment": "external-official-dependency",
+      "local_destination": "external/infineon/TARGET_CYBT-353027-EVAL"
+    },
+    {
+      "component": "btsdk-drivers",
+      "revision": "51aac9832d4af9f8da3e1a4175537f3b44f8048e",
+      "official_repository": "https://github.com/Infineon/btsdk-drivers",
+      "official_license": "https://raw.githubusercontent.com/Infineon/btsdk-drivers/51aac9832d4af9f8da3e1a4175537f3b44f8048e/LICENSE.txt",
+      "license_sha256": "aed445dc4b6832c07501ddb0c937a7bc342bb630d54636fca2b8177ec5722de0",
+      "treatment": "external-official-dependency",
+      "local_destination": "external/infineon/btsdk-drivers"
+    },
+    {
+      "component": "btsdk-include",
+      "revision": "839d8476f333cd7cefbf368bc91cfd281fc9cc86",
+      "official_repository": "https://github.com/Infineon/btsdk-include",
+      "official_license": "https://raw.githubusercontent.com/Infineon/btsdk-include/839d8476f333cd7cefbf368bc91cfd281fc9cc86/LICENSE.txt",
+      "license_sha256": "aed445dc4b6832c07501ddb0c937a7bc342bb630d54636fca2b8177ec5722de0",
+      "treatment": "external-official-dependency",
+      "local_destination": "external/infineon/btsdk-include"
+    },
+    {
+      "component": "btsdk-tools",
+      "revision": "0943e94ccca9ed871b0e9a6ebfbc126ad50a6d11",
+      "official_repository": "https://github.com/Infineon/btsdk-tools",
+      "official_license": "https://raw.githubusercontent.com/Infineon/btsdk-tools/0943e94ccca9ed871b0e9a6ebfbc126ad50a6d11/LICENSE.txt",
+      "license_sha256": "aed445dc4b6832c07501ddb0c937a7bc342bb630d54636fca2b8177ec5722de0",
+      "treatment": "external-official-dependency",
+      "local_destination": "external/infineon/btsdk-tools"
+    },
+    {
+      "component": "core-make",
+      "revision": "251ade90cd56005369ced67cf0583171783b1cd1",
+      "official_repository": "https://github.com/Infineon/core-make",
+      "official_license": "https://raw.githubusercontent.com/Infineon/core-make/251ade90cd56005369ced67cf0583171783b1cd1/LICENSE",
+      "license_sha256": "9fb6f1f4809e149758b5f725c44fc37d4de6662aef4b7b5df6c45906a575f615",
+      "treatment": "Apache-2.0 component; may be vendored retaining terms",
+      "local_destination": "external/infineon/core-make"
+    },
+    {
+      "component": "mtb-example-btsdk-audio-watch",
+      "revision": "2548d181996d1ac7cf2d36262456b8e4747c07ee",
+      "official_repository": "https://github.com/Infineon/mtb-example-btsdk-audio-watch",
+      "official_license": "https://raw.githubusercontent.com/Infineon/mtb-example-btsdk-audio-watch/2548d181996d1ac7cf2d36262456b8e4747c07ee/LICENSE.txt",
+      "license_sha256": "aed445dc4b6832c07501ddb0c937a7bc342bb630d54636fca2b8177ec5722de0",
+      "treatment": "external-official-dependency",
+      "local_destination": "external/infineon/mtb-example-btsdk-audio-watch"
+    },
+    {
+      "component": "mtb-example-btsdk-empty",
+      "revision": "05255bf770bd9f102b703e38ea745e8c00e4abf0",
+      "official_repository": "https://github.com/Infineon/mtb-example-btsdk-empty",
+      "official_license": "https://raw.githubusercontent.com/Infineon/mtb-example-btsdk-empty/05255bf770bd9f102b703e38ea745e8c00e4abf0/LICENSE.txt",
+      "license_sha256": "aed445dc4b6832c07501ddb0c937a7bc342bb630d54636fca2b8177ec5722de0",
+      "treatment": "external-official-dependency",
+      "local_destination": "external/infineon/mtb-example-btsdk-empty"
+    }
+  ]
+}

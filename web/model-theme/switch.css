@@ -1,0 +1,67 @@
+#deviceStage.model-switch-stage > #viewport {
+ position: absolute;
+ inset: 36px 0 0;
+ width: 100%;
+ height: auto;
+}
+.model-theme-switch {
+ position: absolute;
+ z-index: 2;
+ top: -4px;
+ right: clamp(8px, 2.5vw, 28px);
+ display: grid;
+ place-items: center;
+ width: 44px;
+ height: 40px;
+ padding: 0;
+ border: 0;
+ background: none;
+ pointer-events: auto;
+ cursor: pointer;
+ --lever-angle: 0deg;
+ --lever-face: linear-gradient(155deg, #647082, #29323e 70%);
+}
+.model-theme-switch::after {
+ content: "";
+ grid-area: 1 / 1;
+ width: 3px;
+ height: 3px;
+ border-radius: 50%;
+ transform: translate(15px, -8px);
+ background: #788398;
+}
+.model-theme-mark {
+ position: relative;
+ grid-area: 1 / 1;
+ width: 30px;
+ height: 32px;
+}
+.model-theme-mark::before,
+.model-theme-mark::after {
+ content: "";
+ position: absolute;
+ inset: 0;
+ background: var(--lever-face);
+ mask: url("./te-mark.svg?v=2") center / contain no-repeat;
+}
+.model-theme-mark::before { z-index: 1; background: linear-gradient(155deg, #647082, #29323e 70%); }
+.model-theme-mark::after {
+ mask-image: url("./te-lever.svg");
+ transform-origin: 38% 50%;
+ transform: rotate(var(--lever-angle));
+ filter: drop-shadow(0 2px 1px #17233265);
+ will-change: transform;
+ transition: transform 125ms cubic-bezier(.2, .82, .3, 1.2);
+}
+.model-theme-switch[aria-pressed="true"] {
+ --lever-angle: 36deg;
+}
+.model-theme-switch[aria-pressed="true"]::after {
+ background: #e58c47;
+ box-shadow: 0 0 5px #e58c4780;
+}
+.model-theme-switch:focus-visible { outline: 2px solid #2869dc; outline-offset: -3px; border-radius: 12px; }
+.model-theme-switch:disabled { cursor: progress; }
+@media (prefers-reduced-motion: reduce) {
+ .model-theme-mark::after { transition: none; }
+}

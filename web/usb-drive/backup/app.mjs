@@ -1,0 +1,10 @@
+import {BackupSerial} from './serial.mjs?v=396.1';
+import {backupMusic,verifyBackup} from './core.mjs?v=396.1';
+const $=id=>document.getElementById(id);let device,busy=false;
+function state(){ $('connect').disabled=busy||!!device;$('backup').disabled=busy||!device;$('verify').disabled=busy;}
+async function run(fn){if(busy)return;busy=true;state();const wakePromise=navigator.wakeLock?.request('screen').catch(()=>null);try{await fn()}catch(e){$('status').textContent=`Stopped: ${e.message}\nKeep any partial backup folder. No automatic retry or device changes.`;await device?.close();device=null}finally{const wake=await wakePromise;await wake?.release().catch(()=>{});busy=false;state()}}
+$('connect').onclick=()=>run(async()=>{device=await BackupSerial.connect();$('status').textContent='Connected. Choose a folder to begin the music backup.'});
+$('backup').onclick=()=>run(async()=>{const folder=await showDirectoryPicker({mode:'readwrite'});const result=await backupMusic(device,folder,p=>{$('progress').max=p.total;$('progress').value=p.done;$('status').textContent=`Backing up ${p.name}\n${(p.done/1048576).toFixed(1)} / ${(p.total/1048576).toFixed(1)} MiB. Keep this tab and USB connected.`});$('status').textContent=`Backup verified: ${result.name}\n${result.manifest.files.length-1} tracks and saved settings. Keep this folder private. You can now restore348.`;await device.close();device=null;});
+$('verify').onclick=()=>run(async()=>{const folder=await showDirectoryPicker({mode:'read'});$('status').textContent='Checking saved files…';const m=await verifyBackup(folder);$('status').textContent=`Verified ${m.files.length-1} tracks and settings for ${m.identity}.\nThis confirms backup file integrity, not a physical restore test.`});
+window.addEventListener('beforeunload',e=>{if(busy){e.preventDefault();e.returnValue=''}});
+if(!navigator.serial||!window.showDirectoryPicker){$('status').textContent='Open this page in desktop Chrome or Edge on HTTPS or localhost.';$('connect').disabled=$('backup').disabled=$('verify').disabled=true}

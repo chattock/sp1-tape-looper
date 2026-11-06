@@ -1,0 +1,15 @@
+*.bin binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.glb binary
+# Preserve upstream formatting in vendored files and license texts.
+tools/import469/vendor/** -whitespace
+web/**/vendor/** -whitespace
+LICENSES/** -whitespace
+web/licenses/** -whitespace
+patches/** -whitespace
+# Keep qualified firmware snapshots byte-for-byte unchanged.
+tools/capacity422/runtime/** -whitespace
+tools/clean608/radio/generated/probe.c -whitespace

@@ -1,0 +1,7 @@
+// One static, bounded rim filter. No render loop, screenshots or page cloning.
+const reduced=matchMedia('(prefers-reduced-motion: reduce), (prefers-reduced-transparency: reduce), (prefers-contrast: more)');
+const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('width','0');svg.setAttribute('height','0');svg.setAttribute('aria-hidden','true');svg.style.position='absolute';svg.innerHTML='<defs><filter id="glass481-rim" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency=".008 .025" numOctaves="1" seed="7" result="rim"/><feDisplacementMap in="SourceGraphic" in2="rim" scale="7" xChannelSelector="R" yChannelSelector="G"/></filter></defs>';
+function apply(){document.documentElement.classList.toggle('glass-optics',!reduced.matches)}
+if(document.body)document.body.append(svg);else addEventListener('DOMContentLoaded',()=>document.body.append(svg),{once:true});apply();reduced.addEventListener('change',apply);
+// A highlight follows direct interaction only; no animation task while idle.
+let last=0;document.addEventListener('pointermove',e=>{if(reduced.matches||performance.now()-last<45)return;const target=e.target.closest?.('.topbar,.category-nav,.demo-dock');if(!target)return;last=performance.now();const r=target.getBoundingClientRect();target.style.setProperty('--glass-x',Math.round(100*(e.clientX-r.left)/r.width)+'%')},{passive:true});

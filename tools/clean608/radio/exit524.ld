@@ -1,0 +1,4 @@
+SECTION_PROLOGUE(.exit524,,)
+{
+ KEEP(*(.exit524.text*))
+} GROUP_LINK_IN(EXIT524)

@@ -1,0 +1,121 @@
+diff --git a/subsys/usb/device_next/class/Kconfig.uac2 b/subsys/usb/device_next/class/Kconfig.uac2
+index d1dd3382..a61d8e95 100644
+--- a/subsys/usb/device_next/class/Kconfig.uac2
++++ b/subsys/usb/device_next/class/Kconfig.uac2
+@@ -10,6 +10,17 @@ config USBD_AUDIO2_CLASS
+ 
+ if USBD_AUDIO2_CLASS
+ 
++config USBD_UAC2_FS_WINDOWS_WORKAROUND
++	bool "Windows compatible Full-Speed explicit feedback (backport)"
++	help
++	  Microsoft Windows USB Audio 2.0 driver (usbaudio2.sys) expects the
++	  Full-Speed explicit feedback endpoint wMaxPacketSize to be 4 (the
++	  USB 2.0 specification says 3) and the value in Q16.16 format.
++	  Without this, Windows shows the device with a warning (Code 10,
++	  "cannot start"). Linux and macOS parse the format from the declared
++	  size, so they work either way. Backported from upstream Zephyr
++	  (see zephyrproject-rtos/zephyr issue #77212).
++
+ module = USBD_UAC2
+ module-str = usbd uac2
+ source "subsys/logging/Kconfig.template.log_config"
+diff --git a/subsys/usb/device_next/class/usbd_uac2.c b/subsys/usb/device_next/class/usbd_uac2.c
+index ee95e643..c374d0ea 100644
+--- a/subsys/usb/device_next/class/usbd_uac2.c
++++ b/subsys/usb/device_next/class/usbd_uac2.c
+@@ -22,6 +22,22 @@
+ #include <zephyr/logging/log.h>
+ LOG_MODULE_REGISTER(usbd_uac2, CONFIG_USBD_UAC2_LOG_LEVEL);
+ 
++/* SP-1 U1 (SOF-OFF). Set to 0 to restore stock SOF-driven behaviour.
++ * With CONFIG_UDC_ENABLE_SOF=n, uac2_sof() never runs, so its
++ * per-frame feedback write is gone. The feedback EP's own completion
++ * re-arms it in the common case, but the `if (err) return 0;` path in
++ * uac2_request() leaves that loop dead with nothing to restart it --
++ * SOF used to be the restart. So we also re-arm from the ISO OUT
++ * completion, which is the most reliable per-frame tick while audio
++ * is streaming, using the SAME guards uac2_sof() used. */
++#define SP1_U1_SOF_OFF 1
++
++#if defined(CONFIG_USBD_UAC2_FS_WINDOWS_WORKAROUND)
++/* See write_explicit_feedback(): false = 3-byte Q10.14 (USB spec / Apple),
++ * true = 4-byte Q16.16 (Microsoft). Toggled at runtime by the application. */
++bool uac2_fs_fb_windows_fmt;
++#endif
++
+ #define DT_DRV_COMPAT zephyr_uac2
+ 
+ #define COUNT_UAC2_AS_ENDPOINT_BUFFERS(node)					\
+@@ -432,7 +448,23 @@ static void write_explicit_feedback(struct usbd_class_data *const c_data,
+ 	fb_value = ctx->ops->feedback_cb(dev, terminal, ctx->user_data);
+ 
+ 	if (usbd_bus_speed(uds_ctx) == USBD_SPEED_FS) {
++#if defined(CONFIG_USBD_UAC2_FS_WINDOWS_WORKAROUND)
++		/* Runtime-selectable: Microsoft's usbaudio2.sys wants 4-byte
++		 * Q16.16 on Full-Speed; Apple wants the USB 2.0 spec's 3-byte
++		 * Q10.14 and kills the stream on the Windows format. The
++		 * descriptor stays wMaxPacketSize=4 (Windows refuses to start
++		 * otherwise; a 3-byte transfer on a 4-byte endpoint is a legal
++		 * short ISO packet everywhere else). The application watches
++		 * for a started-but-starved stream and toggles this flag until
++		 * data flows, converging on whatever the host parses. */
++		if (uac2_fs_fb_windows_fmt) {
++			net_buf_add_le32(buf, fb_value << 2);
++		} else {
++			net_buf_add_le24(buf, fb_value);
++		}
++#else
+ 		net_buf_add_le24(buf, fb_value);
++#endif
+ 	} else {
+ 		net_buf_add_le32(buf, fb_value);
+ 	}
+@@ -855,6 +887,23 @@ static int uac2_request(struct usbd_class_data *const c_data, struct net_buf *bu
+ 	/* Reschedule the read or explicit feedback write */
+ 	if (USB_EP_DIR_IS_OUT(ep)) {
+ 		schedule_iso_out_read(c_data, ep, mps, terminal);
++#if SP1_U1_SOF_OFF
++		/* SP-1 U1: uac2_sof()'s per-frame feedback write, relocated
++		 * here. Same cadence (one ISO OUT completion per frame while
++		 * streaming) and the same three guards it used. */
++		{
++			const struct usb_ep_descriptor *sp1_fb_ep =
++				get_as_feedback_ep(c_data, as_idx);
++
++			if ((sp1_fb_ep != NULL) &&
++			    !(ctx->fb_queued & ctx->fb_double & BIT(as_idx)) &&
++			    atomic_test_bit(&ctx->as_active, as_idx)) {
++				write_explicit_feedback(c_data,
++					sp1_fb_ep->bEndpointAddress,
++					cfg->as_terminals[as_idx]);
++			}
++		}
++#endif
+ 	} else if (is_feedback) {
+ 		write_explicit_feedback(c_data, ep, cfg->as_terminals[as_idx]);
+ 	}
+diff --git a/subsys/usb/device_next/class/usbd_uac2_macros.h b/subsys/usb/device_next/class/usbd_uac2_macros.h
+index bd83a3c4..f23d6b9e 100644
+--- a/subsys/usb/device_next/class/usbd_uac2_macros.h
++++ b/subsys/usb/device_next/class/usbd_uac2_macros.h
+@@ -802,12 +802,18 @@
+ 	(struct usb_desc_header *) &DESCRIPTOR_NAME(hs_std_data_ep, node),	\
+ 	(struct usb_desc_header *) &DESCRIPTOR_NAME(cs_data_ep, node),
+ 
++#if defined(CONFIG_USBD_UAC2_FS_WINDOWS_WORKAROUND)
++#define EXPLICIT_FEEDBACK_ENDPOINT_FS_FEEDBACK_LEN (0x04)
++#else
++#define EXPLICIT_FEEDBACK_ENDPOINT_FS_FEEDBACK_LEN (0x03)
++#endif
++
+ #define AS_EXPLICIT_FEEDBACK_ENDPOINT_FS_DESCRIPTOR(node)			\
+ 	0x07,						/* bLength */		\
+ 	USB_DESC_ENDPOINT,				/* bDescriptorType */	\
+ 	AS_NEXT_IN_EP_ADDR(node),			/* bEndpointAddress */	\
+ 	0x11,						/* bmAttributes */	\
+-	U16_LE(0x03),					/* wMaxPacketSize */	\
++	U16_LE(EXPLICIT_FEEDBACK_ENDPOINT_FS_FEEDBACK_LEN), /* wMaxPacketSize */\
+ 	0x01, /* TODO: adjust to P 5.12.4.2 Feedback */	/* bInterval */
+ 
+ #define AS_EXPLICIT_FEEDBACK_FS_DESCRIPTOR_ARRAY(node)				\

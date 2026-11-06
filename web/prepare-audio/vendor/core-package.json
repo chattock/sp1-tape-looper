@@ -1,0 +1,12 @@
+{
+  "name": "tape-looper-audio-decoder",
+  "version": "ffmpeg-5.1.4-audio612",
+  "description": "Source-built single-thread audio decoder; not the npm @ffmpeg/core 0.12.10 binary",
+  "components": {
+    "FFmpeg": "LGPL-2.1-or-later (audio-only configure; see source archive)",
+    "ffmpeg.wasm wrapper": "MIT",
+    "Emscripten runtime": "See emscripten-LICENSE.txt"
+  },
+  "source": "../../licenses/audio-decoder-source.tar.gz",
+  "build": "../../licenses/decoder-build.md"
+}

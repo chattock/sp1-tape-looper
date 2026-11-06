@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "core": {
+    "package": "@ffmpeg/core",
+    "version": "0.12.10",
+    "singleThread": true
+  },
+  "fixturesPassed": [
+    "WAV PCM24 mono44.1k",
+    "MP3 mono CBR",
+    "FLAC mono",
+    "AIFF PCM24 mono",
+    "M4A AAC mono",
+    "Ogg Vorbis stereo48k",
+    "Opus stereo48k"
+  ],
+  "output": "WAV PCM16 mono/stereo48k, exact prepared frames",
+  "limits": {
+    "sourceBytes": 67108864,
+    "batchBytes": 134217728,
+    "files": 16,
+    "outputFrames": 8000000,
+    "workerDeadlineMs": 120000
+  },
+  "unqualified": [
+    "DRM",
+    "unknown-duration fallback streams",
+    "arbitrary multichannel layout",
+    "all variants of each container",
+    "sample-perfect compressed loop boundary recovery"
+  ]
+}
