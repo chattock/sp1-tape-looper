@@ -60,7 +60,19 @@ export function finishGuideAudit(cards){
  stopPage.steps[0].detail='With Page 2 open and Track 2 recording the copy, keep PLAY held.';
  const placement=cards.find(c=>c.id==='center-placement');
  placement.note='The all-track shortcut also resets FX.';
- cards.push({id:'beats-per-bar-v4',category:4,group:'Page 7 / Take & timing',title:'Choose beats per bar',gesture:'Page 7 · F3 = 3 / 4 / 5 / 7',body:'Hold FN + T4, then release. Press VOL+ three times for Page 7. Move F3 through its saved position, then select 3, 4, 5 or 7 beats per bar, bottom to top. Tap FN to close.',note:'Saved per song. The default is 4 beats per bar.',steps:[]});
+ cards.push({id:'beats-per-bar-v4',category:4,group:'Page 7 / Take & timing',title:'Choose beats per bar',gesture:'Page 7 · F3 = 3 / 4 / 5 / 7',body:'Hold FN + T4, then release. Press VOL+ three times for Page 7. Move F3 through its saved position, then select 3, 4, 5 or 7 beats per bar, bottom to top. Tap FN to close.',note:'Saved per song. The default is 4 beats per bar. T3 flashes the selected number of beats.',initialFaders:[.8,.8,.8,.8],steps:[
+ {label:'Open Page 4',detail:'Hold FN + T4, then release both.',hold:['FN','T4'],tap:[],view:'comboHold',duration:2,context:{playing:false,loaded:[1],grid:false}},
+ {label:'Move to Page 5',detail:'Press VOL+. No FN needed.',hold:[],tap:['VOL+'],view:'top',duration:2},
+ {label:'Move to Page 6',detail:'Press VOL+ again.',hold:[],tap:['VOL+'],view:'top',duration:2},
+ {label:'Open Page 7',detail:'Press VOL+ once more for Take & timing.',hold:[],tap:['VOL+'],view:'top',duration:2},
+ {label:'Pick up the saved value',detail:'Move F3 through its saved position. The default is 4 beats per bar.',hold:[],tap:[],faders:{3:96/255},view:'faders',duration:2},
+ {label:'Choose 5 beats per bar',detail:'Raise F3 to the third band. Bottom to top: 3, 4, 5, 7. T3 flashes five times.',hold:[],tap:[],faders:{3:160/255},view:'faders',duration:2.5},
+ {label:'Return to the tape',detail:'Tap FN to close. The beats-per-bar setting stays saved for this song.',hold:[],tap:['FN'],view:'comboHold',duration:2}
+ ]});
+ cards.push({id:'escape-hatch-v4',category:1,group:'Everyday controls',title:'Escape hatch',gesture:'Hold FN + T1 + T2 · 2 seconds',body:'Reset performance controls without deleting recordings. Hold all three until the four track lights glow solid, then release.',note:'Resets FX, speed, trim, timing and rocker settings; unmutes tracks and input. A waiting recording is cancelled; an active recording is saved.',steps:[
+ {label:'Hold FN + T1 + T2',detail:'Hold all three for two seconds. The track lights fill, then glow solid to confirm.',hold:['FN','T1','T2'],tap:[],view:'comboHold',seconds:3,duration:1.5,context:{playing:true,loaded:[1],grid:false}},
+ {label:'Release all three',detail:'Normal controls return. Your recordings stay saved.',hold:[],tap:[],view:'front',duration:2}
+ ]});
  const length=cards.find(c=>c.id==='take-length');
  length.body='On Page 7, F2 selects the take length. F3 selects 3, 4, 5 or 7 beats per bar, from bottom to top. Move through the saved value to take control.';
  length.note='Beats per bar is saved per song; the default is 4. Variable mode counts bars and needs a grid. Fixed mode counts base loops and needs a first take.';

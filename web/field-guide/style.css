@@ -143,3 +143,11 @@ html,body,body *,body *::before,body *::after{-webkit-tap-highlight-color:transp
  input[type="text"],input[type="search"],textarea{-webkit-user-select:text;user-select:text}
  canvas,input[type="range"]{touch-action:none}
 }
+
+/* Quiet permalinks keep sections shareable without adding another toolbar. */
+.section-permalink{display:inline-block;margin-inline-start:.45em;font-size:.65em;font-weight:500;text-decoration:none;color:inherit;opacity:.25;vertical-align:middle}
+.section-permalink:hover,.section-permalink:focus-visible{opacity:1;color:var(--blue,#2365cf)}
+.new-effects{margin-block:1.25rem 2rem}
+.new-effects h2{margin-top:0}
+.new-effects p{line-height:1.65}
+.new-effects a{color:var(--blue,#2365cf);text-underline-offset:.18em}

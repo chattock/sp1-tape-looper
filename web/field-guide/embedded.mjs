@@ -1,6 +1,6 @@
 import {filterFx} from './fx-rack610.mjs?v=610';
 import {filterRockers} from './rocker-guide.js?v=610';
-import {cards} from './content.js?v=610';
+import {cards} from './content.js?v=620';
 function init(){
  if(window!==parent)document.body.classList.add('embedded-workspace');
  const content=document.getElementById('content'),wrap=document.createElement('div');wrap.className='guide-search';wrap.innerHTML=`<span class="eyebrow guide-version">TAPE LOOPER 4.0</span><button type="button" id="guideSearchToggle" aria-label="Search Field guide" aria-expanded="false" aria-controls="guideSearchField"><svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg></button><div id="guideSearchField" class="guide-search-field" inert><input type="search" id="guideSearch" aria-label="Search Field guide" placeholder="Takes, Slow gear, bounce…" tabindex="-1"></div><span id="guideSearchCount" role="status"></span>`;content.prepend(wrap);

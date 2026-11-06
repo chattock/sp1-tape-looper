@@ -66,7 +66,7 @@ ${this.audioTrace.join('\n')}`;}
   this.starting=this.prepareAudio().finally(()=>{this.starting=null;});return this.starting;
  }
  async prepareAudio(){try{
-  await this.context.audioWorklet.addModule('./audio-worklet.js?v=610');const module=await WebAssembly.compile(await (await fetch('./assets/firmware-dsp552.wasm?v=552')).arrayBuffer());
+  await this.context.audioWorklet.addModule('./audio-worklet.js?v=620');const module=await WebAssembly.compile(await (await fetch('./assets/firmware-dsp552.wasm?v=552')).arrayBuffer());
   const coreModule=await WebAssembly.compile(await (await fetch('./assets/firmware-core483.wasm')).arrayBuffer());
   const codecModule=await WebAssembly.compile(await (await fetch('./assets/firmware-codec.wasm')).arrayBuffer());
   const drumResponse=await fetch('./assets/looper-track.wav');if(!drumResponse.ok)throw Error('Drum sample unavailable');

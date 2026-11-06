@@ -24,10 +24,10 @@ export const nestedIds=new Set(Object.values(related).flat());
 // Keep the old walkthrough addressable; resize-repeat now covers the full sequence.
 export const hiddenIds=new Set(['catch','repeat-faders']);
 export const groupIntros={
- 'Page 5 / Global EQ':'Hold FN + T4 until Page 4 opens, then release both. Hold FN again and tap VOL+ once for Page 5. Release FN to use the page; tap FN to close.',
- 'Page 6 / Stereo placement':'Hold FN + T4 until Page 4 opens, then release both. Hold FN again and tap VOL+ twice for Page 6. Release FN to use the page; tap FN to close.',
- 'Page 7 / Take & timing':'Hold FN + T4 until Page 4 opens, then release both. Hold FN again and tap VOL+ three times for Page 7. Release FN to use the page; tap FN to close.',
- 'Page 8 / Next take format':'Hold FN + T4 until Page 4 opens, then release both. Hold FN again and tap VOL+ four times for Page 8. Release FN to use the page; tap FN to close.',
+ 'Page 5 / Global EQ':'Hold FN + T4 until Page 4 opens, then release both. Press VOL+ once for Page 5. Tap FN to close.',
+ 'Page 6 / Stereo placement':'Hold FN + T4 until Page 4 opens, then release both. Press VOL+ twice for Page 6. Tap FN to close.',
+ 'Page 7 / Take & timing':'Hold FN + T4 until Page 4 opens, then release both. Press VOL+ three times for Page 7. Tap FN to close.',
+ 'Page 8 / Next take format':'Hold FN + T4 until Page 4 opens, then release both. Press VOL+ four times for Page 8. Tap FN to close.',
  'Bounce what you hear':'A bounce records the playing mix onto another track: effects, chops, beat repeats and speed moves can become part of the new recording. Start with a tape copy; sampler print is an alternate way to capture it.',
  'Four heads, one loop':'An optional way to play: four heads read different positions in one recording. Your other recordings stay available.',
  'Pages & pickup':'Pages temporarily give the controls a different job. Open a page, adjust it, then tap FN to return. Effects stay set when you leave.'
@@ -46,6 +46,6 @@ export function introduction(playIcon){
 }
 
 export function whatsNew(playIcon,cards,markup,rockers,effects){
- const ids=['takes-v4','bluetooth-v4','track-trim-v4','track-slide-v4','beats-per-bar-v4'];
- return `<section class="guide-intro whats-new" id="whats-new" data-section="-1" aria-labelledby="new-title"><h1 id="new-title">What’s New</h1><div class="tile-grid new-walkthroughs">${ids.map(id=>markup(cards.find(c=>c.id===id),false,'new-')).join('')}</div>${rockers(playIcon,cards,'new-')}</section>`;
+ const ids=['takes-v4','bluetooth-v4','track-trim-v4','track-slide-v4','beats-per-bar-v4','escape-hatch-v4'];
+ return `<section class="guide-intro whats-new" id="whats-new" data-section="-1" aria-labelledby="new-title"><h1 id="new-title">What’s New</h1><div class="tile-grid new-walkthroughs">${ids.map(id=>markup(cards.find(c=>c.id===id),false,'new-')).join('')}</div><article class="tile new-effects" id="new-effects"><h2>New effects &amp; tape color</h2><p><a data-guide-link="fx-rack-1-panel-1">Flanger</a>, <a data-guide-link="fx-rack-1-panel-3">Slow gear</a>, <a data-guide-link="fx-rack-2-panel-4">Lo-fi / Radio</a>, <a data-guide-link="fx-rack-3-panel-11">Reverb Freeze</a>, <a data-guide-link="fx-rack-4-panel-13">Compression</a>, <a data-guide-link="fx-rack-4-panel-14">Cassette / Vinyl / Pink / Minidisc noise</a> and <a data-guide-link="fx-rack-4-panel-15">separate Wow / Flutter</a>.</p><a data-guide-link="category-section-3">Explore effects →</a></article>${rockers(playIcon,cards,'new-')}</section>`;
 }

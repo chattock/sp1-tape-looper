@@ -1,10 +1,10 @@
 import {applyHairline} from '../model-theme/hairline.mjs';
 import {confirmationCloseup} from './led-patterns.js?v=610';
-import {Scenario} from './scenarios.js?v=610';
+import {Scenario} from './scenarios.js?v=620';
 import {AUDIO_ENABLED} from './features.js';
-import {AudioPreview} from './audio.js?v=610';
+import {AudioPreview} from './audio.js?v=620';
 import {GestureComposer} from './gestures.js?v=610';
-import {Simulator} from './simulator.js?v=611';
+import {Simulator} from './simulator.js?v=620';
 import {loadFirmwareCore,firmwareLEDDisplay,ledFaceBrightness} from './firmware-core.js?v=610';
 import * as T from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';

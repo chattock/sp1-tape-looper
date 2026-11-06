@@ -7,17 +7,17 @@ const clamp=(n,a=0,b=1)=>Math.max(a,Math.min(b,n));
 const freshTrack=()=>({state:'empty',muted:false,length:4,level:1,reverse:false,mono:false,placement:.5,nudge:.5,takes:[],selected:-1});
 const secondaryDefaults=()=>[[128,128,128,128],[128,128,128,166],[128,128,128,179],[128,0,128,128]].map(row=>row.map(v=>v/255));
 export function snapBeatFrames(bf){if(!bf)return bf;const bpm100=Math.floor((288000000+Math.floor(bf/2))/bf),whole=Math.floor((bpm100+50)/100);if(whole<50||whole>200||Math.abs(bpm100-whole*100)>40)return bf;return Math.floor((2880000+Math.floor(whole/2))/whole)||bf;}
-const song=()=>({tracks:Array.from({length:4},freshTrack),grid:false,bpm:120,offset:0,preset:0});
+const song=()=>({tracks:Array.from({length:4},freshTrack),grid:false,bpm:120,offset:0,preset:0,beatsPerBar:4});
 export class Simulator{
  constructor(){this.reset();}
- reset(){this.now=0;this.clock=0;this.powered=true;this.playing=false;this.page=0;this.pageAt=0;this.slot=0;this.songs=Array.from({length:16},song);this.keys=new Map();this.faders=[1,1,1,1];this.pickup=[null,null,null,null];this.fx=Array.from({length:6},(_,p)=>Array.from({length:4},(_,i)=>p===4||p===5||p===3&&i===1||p===0&&i===0?.5:0));this.secondary=secondaryDefaults();this.spread=0;this.cycles={...FX_DEFAULT_CYCLES};this.takeSequence=0;this.windLatch=3;this.windLastTap=null;this.speed=1;this.octaveFrom=0;this.volume=45/256;this.volumeIndex=10;this.fixed=false;this.route=3;this.monitorMuted=false;this.bright=false;this.input=false;this.charging=false;this.heads=false;this.headSource=0;this.headPositions=[0,.25,.5,.75];this.window={start:0,end:1,position:0,size:1};this.repeat=null;this.recording=null;this.tapTimes=[];this.playTaps=[];this.rateTaps={};this.rates={};this.lastTaps={};this.successUntil=0;this.flash=null;this.powerGesture=null;this.lastMessage='Ready';this.isolate=null;this.recordReady=null;this.rockerOpen=false;this.rockerMode=0;this.cutMark=null;this.cuts=[];this.btTaps=[];this.btHold=null;this.bluetooth=null;this.rockerAt=0;this.manualContact=false;this.wear=0;}
+ reset(){this.now=0;this.clock=0;this.powered=true;this.playing=false;this.page=0;this.pageAt=0;this.slot=0;this.songs=Array.from({length:16},song);this.keys=new Map();this.faders=[1,1,1,1];this.pickup=[null,null,null,null];this.fx=Array.from({length:6},(_,p)=>Array.from({length:4},(_,i)=>p===4||p===5||p===3&&i===1||p===0&&i===0?.5:0));this.secondary=secondaryDefaults();this.spread=0;this.cycles={...FX_DEFAULT_CYCLES};this.takeSequence=0;this.windLatch=3;this.windLastTap=null;this.speed=1;this.octaveFrom=0;this.volume=45/256;this.volumeIndex=10;this.fixed=false;this.route=3;this.monitorMuted=false;this.bright=false;this.input=false;this.charging=false;this.heads=false;this.headSource=0;this.headPositions=[0,.25,.5,.75];this.window={start:0,end:1,position:0,size:1};this.repeat=null;this.recording=null;this.tapTimes=[];this.playTaps=[];this.rateTaps={};this.rates={};this.lastTaps={};this.hatch=null;this.successUntil=0;this.flash=null;this.powerGesture=null;this.lastMessage='Ready';this.isolate=null;this.recordReady=null;this.rockerOpen=false;this.rockerMode=0;this.cutMark=null;this.cuts=[];this.btTaps=[];this.btHold=null;this.bluetooth=null;this.rockerAt=0;this.manualContact=false;this.wear=0;}
  get current(){return this.songs[this.slot];}get tracks(){return this.current.tracks;}
  has(key){return this.keys.has(key);}say(text){this.lastMessage=text;}
  consume(...keys){for(const key of keys){const k=this.keys.get(key);if(k)k.used=true;}}
  confirm(){this.successUntil=this.now+480;}
  openPage(page,walk=false){this.page=((page-1+8)%8)+1;this.pageAt=this.now;this.rearm();this.flash={pattern:'page-entry',at:this.now,page:this.page,walk};this.consume('FN',...['T1','T2','T3','T4']);this.say('Page '+this.page);}
  controlValue(i){return this.page===4&&i===1&&this.cycles['4:2']===1?this.secondary[3][1]:this.fx[this.page-1][i];}
- rearm(){this.pickup=this.faders.map((_,i)=>this.page<=6&&this.page?this.controlValue(i):this.page===8?null:this.page===7?(i===0?.5+this.current.offset:i===1?this.current.preset/4:null):this.tracks[i].level);}
+ rearm(){this.pickup=this.faders.map((_,i)=>this.page<=6&&this.page?this.controlValue(i):this.page===8?null:this.page===7?(i===0?.5+this.current.offset:i===1?this.current.preset/4:i===2?([3,4,5,7].indexOf(this.current.beatsPerBar||4)*64+32)/255:null):this.tracks[i].level);}
  startTake(i,kind='ordinary'){
   if(this.recording!==null)return;
   if(kind==='ordinary'&&this.monitorMuted){this.flash={pattern:'no-action',at:this.now};this.say('Unmute input before recording');return;}
@@ -43,6 +43,9 @@ export class Simulator{
     else {this.endIsolate();this.isolate=this.tracks.map(t=>t.muted);this.isolateKey=trackKey;this.tracks.forEach((t,j)=>{if(j===n)t.muted=false;else if(t.state==='playing'||this.heads)t.muted=true;});this.say('Isolating track '+(n+1));}
     this.consume('FN','PLAY',trackKey);return;
    }
+   if(this.has('FN')&&this.has('T1')&&this.has('T2')&&!this.has('PLAY')){
+    this.hatch={at:this.now,fired:false};this.consume('FN','T1','T2');return;
+   }
    if(i>=0&&this.has('FN')&&this.has('T1')&&this.has('T4')){
     for(let p=0;p<5;p++)this.fx[p]=Array.from({length:4},(_,n)=>p===4||p===3&&n===1||p===0&&n===0?.5:0);
     this.secondary=secondaryDefaults();this.spread=0;for(const id in this.cycles)this.cycles[id]=id==='3:3'?2:0;this.rates={};this.route=3;
@@ -61,6 +64,7 @@ export class Simulator{
   }
   const press=this.keys.get(key);if(!press)return;const held=this.now-press.at;
   this.keys.delete(key);
+  if(this.hatch&&['FN','T1','T2'].includes(key))this.hatch=null;
   if((key==='UP'||key==='DOWN')&&this.rockerMode===7){this.heads=false;this.manualContact=false;this.say('Tape contact released');}
   if((key==='UP'||key==='DOWN')&&this.rockerMode===1&&this.windBackup){this.speed=this.windBackup.speed;this.tracks.forEach((t,i)=>t.reverse=this.windBackup.reverse[i]);this.windBackup=null;}
   if((key==='UP'||key==='DOWN')&&this.rockerMode===2&&this.bendBackup!==undefined){this.speed=this.bendBackup;delete this.bendBackup;}
@@ -112,7 +116,7 @@ export class Simulator{
   if(this.page<=4){const id=this.page+':'+(i+1);if(id in this.cycles){this.cycles[id]=(this.cycles[id]+1)%FX_CYCLES[id];this.flash={pattern:'lane-count',at:this.now,lane:i+1,count:id==='4:4'?this.cycles[id]:this.cycles[id]+1};if(['1:4','2:4','3:1','3:2','3:3','4:4'].includes(id))delete this.rates[id];}else {this.fx[this.page-1][i]=this.page===1&&i===0||this.page===4&&i===1?.5:0;this.secondary[this.page-1][i]=secondaryDefaults()[this.page-1][i];}}
   if(this.page===5)this.fx[4][i]=.5;
   if(this.page===6){this.tracks[i].placement=.5;this.fx[5][i]=.5;}
-  if(this.page===7){if(this.tracks[i].trim){delete this.tracks[i].trim;}else if(this.tracks[i].nudge!==.5)this.tracks[i].nudge=.5;else if(i===0)this.current.offset=0;else if(i===1)this.current.preset=0;}
+  if(this.page===7){if(this.tracks[i].trim){delete this.tracks[i].trim;}else if(this.tracks[i].nudge!==.5)this.tracks[i].nudge=.5;else if(i===0)this.current.offset=0;else if(i===1)this.current.preset=0;else if(i===2)this.current.beatsPerBar=4;}
   if(this.page===8)this.tracks[i].mono=!this.tracks[i].mono;
   this.rearm();this.say('Page '+this.page+' · track '+(i+1));
  }
@@ -207,11 +211,24 @@ export class Simulator{
   const target=this.pickup[i];if(target!==null){if(Math.abs(v-target)>.025&&(old-target)*(v-target)>0){this.say('Cross the stored value to pick up');return;}this.pickup[i]=null;}
   if(!this.page)this.tracks[i].level=v;
   else if(this.page<=6){if(this.page===4&&i===1&&this.cycles['4:2']===1)this.secondary[3][1]=v;else this.fx[this.page-1][i]=v;if(this.page===6)this.tracks[i].placement=v;}
-  else if(this.page===7){if(i===0)this.current.offset=v-.5;if(i===1){this.current.preset=Math.min(4,Math.floor(v*5));this.flash={pattern:'length',at:this.now,count:this.current.preset};}}
+  else if(this.page===7){if(i===0)this.current.offset=v-.5;if(i===1){this.current.preset=Math.min(4,Math.floor(v*5));this.flash={pattern:'length',at:this.now,count:this.current.preset};}if(i===2){const beats=[3,4,5,7][Math.min(3,Math.floor(v*256/64))];if(beats!==(this.current.beatsPerBar||4)){this.current.beatsPerBar=beats;this.flash={pattern:'lane-count',lane:3,count:beats,at:this.now};}}}
   this.say(this.page?'Page '+this.page+' · fader '+(i+1):'Track '+(i+1)+' level');
+ }
+ escapeHatch(){
+  this.finishTake(true);this.recordReady=null;this.endIsolate();
+  this.page=0;this.rockerOpen=false;this.rockerMode=0;this.heads=false;this.manualContact=false;
+  this.speed=1;this.window={start:0,end:1,position:0,size:1};this.repeat=null;
+  this.current.offset=0;this.current.preset=0;this.current.beatsPerBar=4;
+  this.fx=Array.from({length:6},(_,p)=>Array.from({length:4},(_,i)=>p===4||p===5||p===3&&i===1||p===0&&i===0?.5:0));
+  this.secondary=secondaryDefaults();this.cycles={...FX_DEFAULT_CYCLES};this.spread=0;this.rates={};this.route=3;this.monitorMuted=false;
+  this.resetCuts();this.windLatch=3;this.windLastTap=null;this.windBackup=null;delete this.bendBackup;this.magnetMark=null;this.wear=0;
+  this.tracks.forEach(t=>{t.muted=false;t.reverse=false;t.placement=.5;t.nudge=.5;t.gaps=[];delete t.trim;});
+  this.playTaps=[];this.tapTimes=[];this.btTaps=[];this.btHold=null;this.flash=null;this.powerGesture=null;
+  this.rearm();this.confirm();this.say('Performance controls reset');
  }
  tick(ms){
   const dt=Math.max(0,Math.min(ms-this.now,100));this.now=ms;if(this.powered&&(this.playing||this.current.grid&&this.tracks.every(t=>t.state==='empty')))this.clock+=dt/1000*this.speed;
+  if(this.hatch&&!this.hatch.fired&&ms-this.hatch.at>=2000){this.hatch.fired=true;this.escapeHatch();}
   if(this.cutMark&&!this.playing)this.cutMark=null;
   if(this.recordReady&&ms>=this.recordReady.until)this.recordReady=null;
   if(this.btHold){const age=ms-this.btHold.at;if(age>=1000&&!this.btHold.action){this.btHold.action=1;this.bluetooth={state:1,at:ms};this.consume('FN');this.say('Bluetooth input discovery');}if(age>=3000&&this.btHold.action===1){this.btHold.action=2;this.bluetooth={state:5,at:ms};this.say('Bluetooth off');}}
@@ -297,6 +314,7 @@ export class Simulator{
   }else this.preview=null;
   if(this.btHold&&this.btHold.action===0){row((1<<Math.min(4,1+Math.floor((this.now-this.btHold.at)/250)))-1);}
   else if(!(this.flash?.pattern==='success'&&this.now-this.flash.at<480)&&this.bluetooth&&!this.page&&!this.rockerOpen&&!this.recording&&(!fn||this.btHold?.action)){const mask=firmwareBluetooth(this.bluetooth.state,this.now-this.bluetooth.at,this.now);if(mask&256){for(let i=0;i<4;i++){o['LED.Side'+(i+1)]=mask&(1<<i)?1:0;o['LED.Track'+(i+1)]=mask&(16<<i)?mask&512?(mask>>>16&255)/255:1:0;}}}
+  if(this.hatch&&!this.hatch.fired&&this.now-this.hatch.at>=300){const count=Math.min(4,Math.floor((this.now-this.hatch.at-300)*4/1700)+1);for(let i=1;i<=4;i++)o['LED.Track'+i]=i<=count?1:0;}
   if(this.now<this.successUntil)for(let i=1;i<=4;i++)o['LED.Track'+i]=1;
   return o;
  }
@@ -322,5 +340,5 @@ export class Simulator{
  }
  resetCuts(){this.cuts=[];this.cutMark=null;this.tracks.forEach(t=>{delete t.playLength;delete t.phaseOffset;});}
  endIsolate(){if(this.isolate){this.tracks.forEach((t,i)=>t.muted=this.isolate[i]);this.isolate=null;this.isolateKey=null;}}
- cancel(){this.keys.clear();this.powerGesture=null;if(this.isolate){this.tracks.forEach((t,i)=>t.muted=this.isolate[i]);this.isolate=null;}}
+ cancel(){this.hatch=null;this.keys.clear();this.powerGesture=null;if(this.isolate){this.tracks.forEach((t,i)=>t.muted=this.isolate[i]);this.isolate=null;}}
 }

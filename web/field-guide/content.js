@@ -12086,7 +12086,7 @@ export const cards = [
   }
 ];
 
-import {updateFxGuide,finishGuideAudit} from './fx-guide552.mjs?v=610';
+import {updateFxGuide,finishGuideAudit} from './fx-guide552.mjs?v=620';
 updateFxGuide(cards);
 
 finishGuideAudit(cards);

@@ -67,7 +67,7 @@ $('connect').onclick=async()=>{if(connected){stop('Disconnected.');return;}const
 setInterval(()=>{if(connected&&!storageActive&&lastAt&&performance.now()-lastAt>3000){$('state').classList.add('stale');updateExplorer(null);renderMix(null);model.setSnapshot(null);for(const id of ['transport','mode','speed','volume','song'])$(id).textContent='—';loading('stale','Waiting for fresh state','Last readings cleared · waiting for the connected device');}},500);
 $('export').onclick=()=>{let url=URL.createObjectURL(new Blob([JSON.stringify({schema:1,hardwarePass:false,omittedEvents,events},null,2)],{type:'application/json'}));let a=document.createElement('a');a.href=url;a.download='sp1-companion-session-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 
-import './workspace.mjs?v=611';
+import './workspace.mjs?v=620';
 
 $('settings').onclick=async()=>{if(!usb||storageActive)return;try{const s=await usb.request(3);$('instantRecord').checked=!!s[0];$('stoppedEffects').value=s[1];stoppedHint();$('settingsResult').textContent='';$('settingsDialog').showModal();}catch(e){status(e.message);}};
 $('saveSettings').onclick=async()=>{if(!usb)return;$('saveSettings').disabled=true;$('settingsResult').textContent='Saving…';try{const applied=await usb.request(4,[+$('instantRecord').checked,+$('stoppedEffects').value]);$('instantRecord').checked=!!applied[0];$('stoppedEffects').value=applied[1];stoppedHint();$('settingsResult').textContent='Saved on SP-1.';log('settings-saved',Array.from(applied));}catch(e){$('settingsResult').textContent=e.message;}finally{$('saveSettings').disabled=false;}};

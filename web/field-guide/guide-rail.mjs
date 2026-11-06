@@ -4,7 +4,7 @@ export function initGuideRail({root,content,reduced,onSelect,onActive}){
   if(el.closest('#whats-new'))continue;
   const title=el.querySelector(':scope > h1,:scope > .category-heading h2,:scope > h2,:scope > .tile-heading h3,:scope > .rocker-heading h2,:scope > .rocker-mode-heading h3,:scope > .rocker-mode-top h3,:scope > h3');
   if(!title)continue;if(!el.id)el.id='guide-group-'+entries.length;
-  entries.push({el,label:(el.matches('.guide-category')?String(el.dataset.section).padStart(2,'0')+' ':'')+title.textContent.trim(),major:el.matches('.guide-category'),section:el.matches('.tile-section'),rocker:el.classList.contains('rocker-mode-panel')});
+  entries.push({el,label:(el.matches('.guide-category')?String(el.dataset.section).padStart(2,'0')+' ':'')+[...title.childNodes].filter(n=>!n.classList?.contains('section-permalink')).map(n=>n.textContent).join('').trim(),major:el.matches('.guide-category'),section:el.matches('.tile-section'),rocker:el.classList.contains('rocker-mode-panel')});
  }
  root.classList.remove('category-nav');root.classList.add('guide-rail');root.setAttribute('aria-label','Jump to guide section');
  root.innerHTML=entries.map((e,i)=>`<button type="button" class="rail-tick${e.major?' major':e.section?' section':''}" data-rail="${i}" aria-label="${esc(e.label)}" aria-controls="${e.el.id}" tabindex="${i===0?0:-1}"><span class="rail-mark" aria-hidden="true"></span><span class="rail-label" aria-hidden="true">${esc(e.label)}</span></button>`).join('');

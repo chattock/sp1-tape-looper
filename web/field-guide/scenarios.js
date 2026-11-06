@@ -1,6 +1,6 @@
 // Executable teaching scenarios. Prerequisites are set once; controls then drive
 // the same adapter used by direct interaction. No effects inferred from LED labels.
-import {Simulator} from './simulator.js?v=610';
+import {Simulator} from './simulator.js?v=620';
 export function stepSeconds(card,index){
  const step=card.steps[index];
  // The preset demo separates the armed LED from the grid punch-in.
@@ -22,6 +22,7 @@ export function prepareScenario(card){
  if(card.id in modes){s.rockerMode=modes[card.id];s.rockerOpen=card.id!=='scissors386';}
  if(card.id==='takes-v4')s.current.tracks[0].takes=[{...s.tracks[0],takes:[]}];
  if(['track-slide-v4','track-trim-reset-v4'].includes(card.id)){const spb=280,full=Math.ceil(s.tracks[0].length*48000/spb),kept=Math.floor(full/2);s.tracks[0].trim={head:0,tail:full-kept,length:kept*spb/48000};if(card.id==='track-trim-reset-v4')s.tracks[1].trim={...s.tracks[0].trim};}
+ if(card.id==='escape-hatch-v4'){s.speed=.5;s.window.size=.25;s.tracks[0].muted=true;s.fx[1][3]=.5;}
  if(card.id==='normal-speed')s.speed=.5;
  if(card.id==='move-window'||card.id==='reset-window'||card.id==='repeat-chop')s.window={start:0,end:1,position:.25,size:.25};
  if(card.id==='reset-window')s.window.reverse=true;
