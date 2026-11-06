@@ -1,6 +1,6 @@
 {
   "version": 444,
-  "file": "TAPE-LOOPER-V4.bin",
+  "file": "TAPE-LOOPER-V4-BETA.bin",
   "sha256": "e73e3786c1a2b33cf92685f92533404f5eec78f4f9384607725bf7c2140badbf",
   "publicQualified": true,
   "maintenance": 425,
@@ -21,17 +21,17 @@
   "flashing": "external-github-solderless",
   "releaseURL": "https://github.com/chattock/sp1-tape-looper/releases",
   "runtimeRevision": 539,
-  "channel": "stable",
+  "channel": "beta",
   "hardwareQualified": true,
-  "betaDownloadURL": "../release/TAPE-LOOPER-V4.bin",
+  "betaDownloadURL": "../release/TAPE-LOOPER-V4-BETA.bin",
   "betaBundle": 612,
   "variants": {
     "keepRecordings": {
-      "file": "TAPE-LOOPER-V4.bin",
+      "file": "TAPE-LOOPER-V4-BETA.bin",
       "bytes": 774068,
       "sha256": "e73e3786c1a2b33cf92685f92533404f5eec78f4f9384607725bf7c2140badbf",
       "destructive": false,
-      "url": "../release/TAPE-LOOPER-V4.bin",
+      "url": "../release/TAPE-LOOPER-V4-BETA.bin",
       "preservesStorage": true
     }
   },
@@ -51,5 +51,5 @@
   "bluetoothForwardRecovery": true,
   "bluetoothBackupRequired": false,
   "configuredFirmwareBuild": 608,
-  "releaseVersion": "4.0.0"
+  "releaseVersion": "4.0.0-beta.1"
 }

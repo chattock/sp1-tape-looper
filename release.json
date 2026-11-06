@@ -21,9 +21,10 @@
       "main_sha256": "9cf1f8679c52ab00c60de4567ba5c219d885eb769f9ab67b42a2f418ceb7113c"
     }
   },
-  "version": "4.0.0",
+  "version": "4.0.0-beta.1",
   "audio_callback_unchanged_from_beta612": true,
   "radio_and_storage_payloads_unchanged_from_beta612": true,
   "hardware_control_test": "User confirmed Tone/Compression candidate working",
-  "full_build_requires_external_inputs": true
+  "full_build_requires_external_inputs": true,
+  "channel": "beta"
 }
