@@ -22,13 +22,15 @@ See the [changelog](CHANGELOG.md) for the full changes since 3.1.1.
 
 ## Install
 
-1. Download the latest Tape Looper BIN from [Releases](https://github.com/chattock/sp1-tape-looper/releases/tag/v4.0.0-official).
-2. Flash it using [Solderless](https://solderless.engineering).
-3. Open [Setup v4](https://sp1-tape-looper.vercel.app/#setup), connect your SP-1 and follow the steps.
+Install everything from [Setup v4](https://sp1-tape-looper.vercel.app/#setup). No separate download or flashing tool is needed.
 
-The SP-1 starts automatically after flashing. Setup checks the filesystem and Bluetooth firmware, skipping work that is already complete.
+1. Open [Setup v4](https://sp1-tape-looper.vercel.app/#setup) in desktop Chrome or Edge and connect your SP-1.
+2. Select **Install v4**. When asked, turn the SP-1 off, hold **T1 + T4** while connecting USB and release when T1 lights up.
+3. Keep USB connected. Setup installs the firmware, restarts the SP-1, then checks the filesystem and Bluetooth firmware, skipping work that is already complete.
 
-Use desktop Chrome or Edge for Setup. Keep USB connected while an operation is running. If your computer switches its audio output to SP-1, select your usual speakers or headphones during setup.
+Existing recordings and storage are kept. If your computer switches its audio output to SP-1, select your usual speakers or headphones during setup.
+
+**Prefer to flash yourself?** Download the BIN from [Releases](https://github.com/chattock/sp1-tape-looper/releases/tag/v4.0.0-official) and flash it with [Solderless](https://solderless.engineering). Then open [Setup v4](https://sp1-tape-looper.vercel.app/#setup) to finish the filesystem and Bluetooth steps.
 
 ### Existing recordings
 
