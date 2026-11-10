@@ -61,13 +61,12 @@ Print the pocket guide double-sided, flip on the short edge and fold in three.
 - **New take:** hold TRACK and click **ROCKER UP**, then record.
 - **Overdub:** hold a loaded TRACK, release, then tap to arm. The earlier take stays saved.
 - **Effects:** hold FN + a track button to open a control page. Release both; use VOL− / VOL+ to move between pages. Tap FN to close.
-- **Beats per bar:** on Page 7, F3 selects **3 / 4 / 5 / 7**, from bottom to top. This is saved per song; the default is 4.
 
 Faders use pickup: move through a control's saved value before changing it.
 
 ## Bluetooth
 
-Tap FN twice, then hold the third press for about one second. All four track LEDs slowly fade together while pairing.
+Tap FN 3 times and hold the last press until all four track lights fade in and out.
 
 Choose the SP-1 in your phone or computer's Bluetooth audio settings, then record normally.
 
