@@ -9,7 +9,7 @@ Record from USB or Bluetooth, layer tracks, add effects and manipulate playback 
 
 ## What's new in v4
 
-- **Unlimited takes.** Keep earlier recordings and switch between takes without replacing them.
+- **Unlimited takes per track.** Keep earlier recordings and switch between takes without replacing them.
 - **Bluetooth recording.** Stream audio from your phone or computer. USB and Bluetooth inputs can be mixed.
 - **USB Library.** Add, replace, delete and download loops through Finder or the browser. Batch imports, automatic audio conversion and a waveform clip picker for long files.
 - **Eight rocker modes.** Pitch, Wind, Bender, Battery, Sandpaper, Magnet, Scissors/glue and Manual tape head.
