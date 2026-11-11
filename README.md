@@ -4,8 +4,8 @@ A hands-on tape looper for the Teenage Engineering SP-1. Four tracks, sixteen so
 
 Record from USB or Bluetooth, layer tracks, add effects and manipulate playback like tape. Save recordings on the device and manage them through Finder or the browser Library.
 
-**[3D Interactive Guide](https://sp1-tape-looper.vercel.app/#guide) · [Live Companion](https://sp1-tape-looper.vercel.app/#live) · [Library](https://sp1-tape-looper.vercel.app/#transfer) · [Setup v4](https://sp1-tape-looper.vercel.app/#setup)**
-**[Download firmware](https://github.com/chattock/sp1-tape-looper/releases/tag/v4.0.0-official) · [Changelog](CHANGELOG.md)**
+**[3D Interactive Guide](https://sp1-tape-looper.vercel.app/#guide) · [Printable Guide](docs/sp1-4.0-reference.pdf) · [Pocket Guide](docs/sp1-4.0-pocket-guide.pdf) · [Live Companion](https://sp1-tape-looper.vercel.app/#live) · [Library](https://sp1-tape-looper.vercel.app/#transfer) · [Setup v4](https://sp1-tape-looper.vercel.app/#setup)**
+**[Changelog](CHANGELOG.md)**
 
 ## What's new in v4
 
@@ -18,7 +18,7 @@ Record from USB or Bluetooth, layer tracks, add effects and manipulate playback 
 - **More responsive controls.** Improved recording and take switching, safer overdub gestures, clearer LED feedback and recovery gestures for stuck controls.
 - **Updated website.** Interactive 3D walkthroughs, live device feedback, guided setup and printable v4 guides.
 
-See the [changelog](CHANGELOG.md) for the full changes since 3.1.1.
+See the [changelog](CHANGELOG.md) for all changes and gestures since 3.1.1.
 
 ## Install
 
@@ -60,7 +60,7 @@ Print the pocket guide double-sided, flip on the short edge and fold in three.
 - **Switch takes:** hold TRACK and click **ROCKER DOWN**.
 - **New take:** hold TRACK and click **ROCKER UP**, then record.
 - **Overdub:** hold a loaded TRACK, release, then tap to arm. The earlier take stays saved.
-- **Effects:** hold FN + a track button to open a control page. Release both; use VOL− / VOL+ to move between pages. Tap FN to close.
+- **Effects:** hold FN + a track button to open a control page. Release both; move the faders to adjust effects. Use VOL− / VOL+ to move between pages. Tap FN to close.
 
 Faders use pickup: move through a control's saved value before changing it.
 
