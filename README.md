@@ -14,7 +14,7 @@ Record from USB or Bluetooth, layer tracks, add effects and manipulate playback 
 - **USB Library.** Add, replace, delete and download loops through Finder or the browser. Batch imports, automatic audio conversion and a waveform clip picker for long files.
 - **Eight rocker modes.** Pitch, Wind, Bender, Battery, Sandpaper, Magnet, Scissors/glue and Manual tape head.
 - **More effects and tape color.** Flanger, Slow gear, Lo-fi, Radio, Reverb Freeze, compression, expanded noise types and separate Wow/Flutter choices.
-- **More timing control.** Playback up to **2×**, per-track trim and slide, and **3 / 4 / 5 / 7 beats per bar**.
+- **More timing control.** Playback up to **2×**, per-track trim and slide, and a grid with **3 / 4 / 5 / 7 beats per bar** (Page 7, F3; saved per song).
 - **More responsive controls.** Improved recording and take switching, safer overdub gestures, clearer LED feedback and recovery gestures for stuck controls.
 - **Updated website.** Interactive 3D walkthroughs, live device feedback, guided setup and printable v4 guides.
 
