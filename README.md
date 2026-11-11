@@ -32,14 +32,6 @@ Existing recordings and storage are kept. If your computer switches its audio ou
 
 **Prefer to flash yourself?** Download the BIN from [Releases](https://github.com/chattock/sp1-tape-looper/releases/tag/v4.0.0-official) and flash it with [Solderless](https://solderless.engineering). Then open [Setup v4](https://tapelooper.club/#setup) to finish the filesystem and Bluetooth steps.
 
-### Existing recordings
-
-The regular BIN preserves existing storage. Setup offers a preserving upgrade for supported Tape Looper libraries, including 3.1.1.
-
-Recognized compatible shared filesystems can keep other firmware's files alongside Tape Looper's library. Unsupported layouts need separate handling; Setup checks before proceeding.
-
-**Start empty erases existing music, settings and other firmware's stored files.** Back up anything you want to keep before choosing it.
-
 ## Learn the controls
 
 The [3D Interactive Guide](https://tapelooper.club/#guide) demonstrates the gestures on an animated SP-1. The [Live Companion](https://tapelooper.club/#live) shows your connected device's tracks, takes, effects and timing.
