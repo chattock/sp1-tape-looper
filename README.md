@@ -1,6 +1,6 @@
 # SP-1 Tape Looper 4.0
 
-A hands-on tape looper for the Teenage Engineering SP-1. Four tracks, sixteen songs, multiple takes, Bluetooth recording and eight rocker modes for shaping your loops.
+A hands-on tape looper for the Teenage Engineering SP-1. Four tracks, sixteen songs, unlimited takes, Bluetooth recording and eight rocker modes for shaping your loops.
 
 Record from USB or Bluetooth, layer tracks, add effects and manipulate playback like tape. Save recordings on the device and manage them through Finder or the browser Library.
 
