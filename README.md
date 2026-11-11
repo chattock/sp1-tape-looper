@@ -57,13 +57,13 @@ Print the pocket guide double-sided, flip on the short edge and fold in three.
 
 The core of Tape Looper really just comes down to a few concepts:
 
-- Recording tracks (tap TRACK btn start/stop)
-- Chopping (FN + ROCKER)
-- Speed + pitch (ROCKER)
-- Adding FX (HOLD FN + TRACK btn opens FX page, fader changes an FX, VOL-/+ switches FX pages, FN closes FX pages... the side LEDs indicate which page you are on)
-- Bouncing down the mix (everything you hear) into a take (PLAY + TRACK btn start, TRACK btn stop)
+- Recording tracks **(tap TRACK btn start/stop)**
+- Chopping **(FN + ROCKER)**
+- Speed + pitch **(ROCKER)**
+- Adding FX **(HOLD FN + TRACK btn opens FX page, fader changes an FX, VOL-/+ switches FX pages, FN closes FX pages... the side LEDs indicate which page you are on)**
+- Bouncing down the mix (everything you hear) into a take **(PLAY + TRACK btn start, TRACK btn stop)**
 
-Also there are 4 banks of 4 songs each, you can cycle each bank with (FN + TRACK btn tap). Each of the 4 tracks on each song allows for unlimited takes (TRACK btn + ROCKER UP for a new take, TRACK btn + ROCKER DOWN to cycle through all of that track's takes)
+Also there are 4 banks of 4 songs each, you can cycle each bank with **(FN + TRACK btn tap)**. Each of the 4 tracks on each song allows for unlimited takes **(TRACK btn + ROCKER UP for a new take, TRACK btn + ROCKER DOWN to cycle through all of that track's takes)**
 
 Faders use pickup: move through a control's saved value before changing it.
 
