@@ -4,7 +4,7 @@ A hands-on tape looper for the Teenage Engineering SP-1. Four tracks, sixteen so
 
 Record from USB or Bluetooth, layer tracks, add effects and manipulate playback like tape. Save recordings on the device and manage them through Finder or the browser Library.
 
-**[3D Interactive Guide](https://sp1-tape-looper.vercel.app/#guide) · [Printable Guide](docs/sp1-4.0-reference.pdf) · [Pocket Guide](docs/sp1-4.0-pocket-guide.pdf) · [Live Companion](https://sp1-tape-looper.vercel.app/#live) · [Library](https://sp1-tape-looper.vercel.app/#transfer) · [Setup v4](https://sp1-tape-looper.vercel.app/#setup)**
+**[3D Interactive Guide](https://tapelooper.club/#guide) · [Printable Guide](docs/sp1-4.0-reference.pdf) · [Pocket Guide](docs/sp1-4.0-pocket-guide.pdf) · [Live Companion](https://tapelooper.club/#live) · [Library](https://tapelooper.club/#transfer) · [Setup v4](https://tapelooper.club/#setup)**
 **[Changelog](CHANGELOG.md)**
 
 ## What's new in v4
@@ -22,15 +22,15 @@ See the [changelog](CHANGELOG.md) for all changes and gestures since 3.1.1.
 
 ## Install
 
-Install everything from [Setup v4](https://sp1-tape-looper.vercel.app/#setup). No separate download or flashing tool is needed.
+Install everything from [Setup v4](https://tapelooper.club/#setup). No separate download or flashing tool is needed.
 
-1. Open [Setup v4](https://sp1-tape-looper.vercel.app/#setup) in desktop Chrome or Edge and connect your SP-1.
+1. Open [Setup v4](https://tapelooper.club/#setup) in desktop Chrome or Edge and connect your SP-1.
 2. Select **Install v4**. When asked, turn the SP-1 off, hold **T1 + T4** while connecting USB and release when T1 lights up.
 3. Keep USB connected. Setup installs the firmware, restarts the SP-1, then checks the filesystem and Bluetooth firmware, skipping work that is already complete.
 
 Existing recordings and storage are kept. If your computer switches its audio output to SP-1, select your usual speakers or headphones during setup.
 
-**Prefer to flash yourself?** Download the BIN from [Releases](https://github.com/chattock/sp1-tape-looper/releases/tag/v4.0.0-official) and flash it with [Solderless](https://solderless.engineering). Then open [Setup v4](https://sp1-tape-looper.vercel.app/#setup) to finish the filesystem and Bluetooth steps.
+**Prefer to flash yourself?** Download the BIN from [Releases](https://github.com/chattock/sp1-tape-looper/releases/tag/v4.0.0-official) and flash it with [Solderless](https://solderless.engineering). Then open [Setup v4](https://tapelooper.club/#setup) to finish the filesystem and Bluetooth steps.
 
 ### Existing recordings
 
@@ -42,7 +42,7 @@ Recognized compatible shared filesystems can keep other firmware's files alongsi
 
 ## Learn the controls
 
-The [3D Interactive Guide](https://sp1-tape-looper.vercel.app/#guide) demonstrates the gestures on an animated SP-1. The [Live Companion](https://sp1-tape-looper.vercel.app/#live) shows your connected device's tracks, takes, effects and timing.
+The [3D Interactive Guide](https://tapelooper.club/#guide) demonstrates the gestures on an animated SP-1. The [Live Companion](https://tapelooper.club/#live) shows your connected device's tracks, takes, effects and timing.
 
 Printable guides:
 
@@ -55,12 +55,15 @@ Print the pocket guide double-sided, flip on the short edge and fold in three.
 
 ### Start here
 
-- **Record:** tap an empty track's button. Tap it again to finish.
-- **Play / pause:** press PLAY. If a recording is waiting to start, PLAY cancels the arm and pauses.
-- **Switch takes:** hold TRACK and click **ROCKER DOWN**.
-- **New take:** hold TRACK and click **ROCKER UP**, then record.
-- **Overdub:** hold a loaded TRACK, release, then tap to arm. The earlier take stays saved.
-- **Effects:** hold FN + a track button to open a control page. Release both; move the faders to adjust effects. Use VOL− / VOL+ to move between pages. Tap FN to close.
+The core of Tape Looper really just comes down to a few concepts:
+
+- Recording tracks (tap TRACK btn start/stop)
+- Chopping (FN + ROCKER)
+- Speed + pitch (ROCKER)
+- Adding FX (HOLD FN + TRACK btn opens FX page, fader changes an FX, VOL-/+ switches FX pages, FN closes FX pages... the side LEDs indicate which page you are on)
+- Bouncing down the mix (everything you hear) into a take (PLAY + TRACK btn start, TRACK btn stop)
+
+Also there are 4 banks of 4 songs each, you can cycle each bank with (FN + TRACK btn tap). Each of the 4 tracks on each song allows for unlimited takes (TRACK btn + ROCKER UP for a new take, TRACK btn + ROCKER DOWN to cycle through all of that track's takes)
 
 Faders use pickup: move through a control's saved value before changing it.
 
@@ -70,7 +73,7 @@ Tap FN 3 times and hold the last press until all four track lights fade in and o
 
 Choose the SP-1 in your phone or computer's Bluetooth audio settings, then record normally.
 
-After restarting the SP-1, enable Bluetooth again and select it on your source device to reconnect. Bluetooth audio pairing and the [Live Companion](https://sp1-tape-looper.vercel.app/#live)'s Bluetooth connection are separate.
+After restarting the SP-1, enable Bluetooth again and select it on your source device to reconnect. Bluetooth audio pairing and the [Live Companion](https://tapelooper.club/#live)'s Bluetooth connection are separate.
 
 This release supports **Bluetooth audio input**. Sending audio to Bluetooth headphones or speakers is not included.
 
@@ -86,7 +89,7 @@ Stop playback and let saving finish. Hold **T2 + T3 for three seconds**, then re
 The **SP1 MUSIC** drive appears on your computer.
 
 - **Finder / File Explorer:** open the drive and manage the song, track and take folders.
-- **[Browser Library](https://sp1-tape-looper.vercel.app/#transfer):** select the **SP1 MUSIC drive itself** in the folder picker.
+- **[Browser Library](https://tapelooper.club/#transfer):** select the **SP1 MUSIC drive itself** in the folder picker.
 
 The Library prepares supported audio automatically. Recognized song/track filenames can be placed automatically; other files let you choose their destinations. Long files can be clipped before importing.
 
@@ -113,7 +116,7 @@ Hold **FN + TRACK** to open a page. Release both, then use **VOL− / VOL+** to 
 
 Faders adjust amounts; track buttons cycle the available types or divisions. On Page 4, tap **T2** to select Tone or Compression, then adjust **F2**. Both settings remain applied.
 
-Effects stay set when you leave a page. The [3D Interactive Guide](https://sp1-tape-looper.vercel.app/#guide) covers each control and its secondary gestures; the [Live Companion](https://sp1-tape-looper.vercel.app/#live) shows your current settings.
+Effects stay set when you leave a page. The [3D Interactive Guide](https://tapelooper.club/#guide) covers each control and its secondary gestures; the [Live Companion](https://tapelooper.club/#live) shows your current settings.
 
 ## Rocker modes
 
@@ -132,7 +135,7 @@ Magnet and Scissors can affect the loaded tracks together, or one track using TR
 
 **Hold FN and double-tap PLAY** to restore the tape, including Magnet gaps and Scissors cuts, while keeping effects.
 
-See the [3D Interactive Guide](https://sp1-tape-looper.vercel.app/#guide) for each mode's gestures.
+See the [3D Interactive Guide](https://tapelooper.club/#guide) for each mode's gestures.
 
 ## Audio
 
@@ -170,7 +173,7 @@ Mention whether you were using USB audio, Bluetooth, the Companion or drive mode
 
 Tape Looper's original code is released under the MIT License. Third-party components retain their own licenses and notices in [LICENSES](LICENSES).
 
-[Build instructions](BUILDING.md) identify the source layout and external inputs. The public source package does not include proprietary vendor inputs or private device data. Browser audio-decoder notices and matching source accompany the [website](https://sp1-tape-looper.vercel.app/licenses/) and release downloads.
+[Build instructions](BUILDING.md) identify the source layout and external inputs. The public source package does not include proprietary vendor inputs or private device data. Browser audio-decoder notices and matching source accompany the [website](https://tapelooper.club/licenses/) and release downloads.
 
 ## Credits
 
