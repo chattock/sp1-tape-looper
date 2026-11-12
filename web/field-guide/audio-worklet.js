@@ -2,7 +2,7 @@ import {Scenario} from './scenarios.js?v=620';
 import {makeDrums} from './drums.js';
 import {TapeAudio} from './audio-dsp.js?v=610';
 import {useFirmwareCore} from './firmware-core.js?v=610';
-import {Simulator} from './simulator.js?v=gesture-audit-20261112';
+import {Simulator} from './simulator.js?v=gesture-check-20261112';
 const audioState=(s,epoch,example)=>({epoch,example,clock:s.clock,powered:s.powered,playing:s.playing,slot:s.slot,grid:s.current.grid,fixed:s.fixed,loopLength:s.tracks.find(t=>t.state==='playing')?.length,tracks:s.tracks,fx:s.fx,secondary:s.secondary,spread:s.spread,cycles:s.cycles,rates:s.rates,bpm:s.current.bpm,speed:s.speed,volume:s.volume,route:s.route,input:s.input,monitorMuted:s.monitorMuted,heads:s.heads,headSource:s.headSource,headPositions:s.headPositions,window:s.window,repeat:s.repeat,recording:s.recording,fixture:s.fixture});
 class SP1Audio extends AudioWorkletProcessor{
  constructor(options){super();const o=this.options=options.processorOptions;useFirmwareCore(new WebAssembly.Instance(o.coreModule).exports);this.engine=new TapeAudio(sampleRate,makeDrums(sampleRate),o.module,o.codecModule);this.engine.setSource(o.defaultSource||null);this.engine.inputMuted=!!o.inputMuted;this.sim=new Simulator();Object.assign(this.sim,o.state);this.sim.audioInputPeak=0;this.frames=0;this.epoch=0;this.seq=0;this.example=false;this.checkpoints=new Map();this.port.onmessage=({data:m})=>{

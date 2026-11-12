@@ -12291,3 +12291,16 @@ finishGuideAudit(cards);
   if(step.slowConfirmation)step.slowConfirmation={...step.slowConfirmation,length:(i+1)*.08};
  }
 }
+
+// Conditional resets skip settings already clear; page context also allows heads.
+{
+ const c=id=>cards.find(card=>card.id===id);
+ c('reset-timing').steps[0].detail='Tap T1 to clear its trim, then track timing, then grid offset. Settings already clear are skipped.';
+ c('reverse').body='With control pages closed, hold FN + the track button first, then tap PLAY before its page opens. Repeat to reverse back.';
+ c('isolate').body='With control pages closed, hold FN + PLAY first, then press the track to hear alone. Release the track to restore the mix.';
+ c('grid-record-lights').gesture='Two flashes per beat';
+ c('grid-record-lights').body='An armed track flashes twice per beat while waiting for punch-in. The same pulse marks a recording finishing its beat.';
+ c('grid-record-lights').note='Recording continues until its aligned stop.';
+ c('grid-record-lights').steps[0].detail='T2 flashes twice per beat until punch-in, then stays solid while recording.';
+ c('grid-record-lights').steps[1].detail='T2 flashes twice per beat until the aligned stop, then pulses with playback.';
+}

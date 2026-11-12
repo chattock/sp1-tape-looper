@@ -84,3 +84,26 @@ test('every FX type/division caption and flash count matches the executed track 
   }
  }
 });
+test('monitor chord works on every page and rocker mode without changing routing or mode',()=>{
+ for(const page of [0,1,2,3,4,5,6,7,8])for(const rockerOpen of [false,true])for(const mode of [0,1,2,3,4,5,6,7])for(const route of [1,2,3]){
+  const s=new Simulator();s.page=page;s.rockerOpen=rockerOpen;s.rockerMode=mode;s.route=route;
+  s.button('PLAY',true);s.button('VOL−',true);s.tick(50);s.button('VOL+',true);s.tick(150);
+  assert(s.monitorMuted);assert.equal(s.route,route);assert.equal(s.page,page);assert.equal(s.rockerMode,mode);
+ }
+});
+test('single and double volume taps under PLAY choose routes after the pair grace window',()=>{
+ const s=new Simulator();s.button('PLAY',true);s.button('VOL−',true);s.tick(80);assert.equal(s.route,3);s.button('VOL−',false);s.tick(101);assert.equal(s.route,1);
+ s.tick(200);s.button('VOL−',true);s.tick(280);s.button('VOL−',false);s.tick(301);assert.equal(s.route,3);
+ s.tick(400);s.button('VOL+',true);s.tick(480);s.button('VOL+',false);s.tick(501);assert.equal(s.route,2);
+});
+test('Page 7 reset skips clear settings rather than requiring three taps',()=>{
+ for(const trim of [false,true])for(const nudge of [false,true]){
+  const s=new Simulator();s.page=7;s.current.offset=.2;s.tracks[0].nudge=nudge?.7:.5;if(trim)s.tracks[0].trim={head:1,tail:0};
+  const expected=1+Number(trim)+Number(nudge);let taps=0;while(s.current.offset&&taps<4){s.pageTap(0);taps++;}assert.equal(taps,expected);
+ }
+ assert.match(card('reset-timing').steps[0].detail,/already clear are skipped/);
+});
+test('releasing PLAY ends the routing double-tap chain',()=>{
+ const s=new Simulator();s.button('PLAY',true);s.button('VOL−',true);s.tick(50);s.button('VOL−',false);s.button('PLAY',false);assert.equal(s.route,1);
+ s.tick(150);s.button('PLAY',true);s.button('VOL+',true);s.tick(251);assert.equal(s.route,2);
+});

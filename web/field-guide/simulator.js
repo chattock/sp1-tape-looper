@@ -63,7 +63,7 @@ export class Simulator{
    return;
   }
   const press=this.keys.get(key);if(!press)return;const held=this.now-press.at;
-  this.keys.delete(key);
+  this.keys.delete(key);if(key==='PLAY'){this.flushRoute();this.lastVolume=null;}
   if(this.hatch&&['FN','T1','T2'].includes(key))this.hatch=null;
   if((key==='UP'||key==='DOWN')&&this.rockerMode===7){this.heads=false;this.manualContact=false;this.say('Tape contact released');}
   if((key==='UP'||key==='DOWN')&&this.rockerMode===1&&this.windBackup){this.speed=this.windBackup.speed;this.tracks.forEach((t,i)=>t.reverse=this.windBackup.reverse[i]);this.windBackup=null;}
@@ -123,13 +123,13 @@ export class Simulator{
  volumeAction(key){
   const up=key==='VOL+',d=up?1:-1;for(const k of this.keys.keys())if(/^T[1-4]$/.test(k))this.consume(k);
   if(this.has('FN')&&this.has('VOL+')&&this.has('VOL−')){this.page=0;this.rockerOpen=true;this.rockerAt=this.now;this.flash={pattern:'page-entry',at:this.now,page:(this.rockerMode%4)+1};this.consume('FN','VOL+','VOL−');this.say('Rocker '+(this.rockerMode+1));return;}
-  if(this.rockerOpen&&!this.has('FN')){this.rockerMode=Math.max(0,Math.min(7,this.rockerMode+d));this.rockerAt=this.now;this.consume(key);this.say('Rocker '+(this.rockerMode+1));return;}
+  if(this.rockerOpen&&!this.has('FN')&&!this.has('PLAY')){this.rockerMode=Math.max(0,Math.min(7,this.rockerMode+d));this.rockerAt=this.now;this.consume(key);this.say('Rocker '+(this.rockerMode+1));return;}
 
-  if(this.has('PLAY')&&this.has('VOL+')&&this.has('VOL−')){this.monitorMuted=!this.monitorMuted;if(this.monitorMuted&&this.recording?.kind==='ordinary'&&this.tracks[this.recording.i].state==='armed')this.finishTake(true);this.flash={pattern:this.monitorMuted?'sweep-down':'sweep-up',at:this.now};this.consume('PLAY','VOL+','VOL−');this.say(this.monitorMuted?'Input monitor muted':'Input monitor on');return;}
+  if(this.has('PLAY')&&this.has('VOL+')&&this.has('VOL−')){this.pendingRoute=null;this.lastVolume=null;this.monitorMuted=!this.monitorMuted;if(this.monitorMuted&&this.recording?.kind==='ordinary'&&this.tracks[this.recording.i].state==='armed')this.finishTake(true);this.flash={pattern:this.monitorMuted?'sweep-down':'sweep-up',at:this.now};this.consume('PLAY','VOL+','VOL−');this.say(this.monitorMuted?'Input monitor muted':'Input monitor on');return;}
   if(this.has('FN')&&this.has('PLAY')){if(up)this.window.position=0;else {this.window={start:0,end:1,position:0,size:1};this.current.offset=0;this.current.preset=0;this.current.beatsPerBar=4;this.tracks.forEach(t=>{t.nudge=.5;delete t.trim;});}this.consume('FN','PLAY',key);this.confirm();this.say('Window reset');return;}
   if(this.page&&!this.has('FN')&&!this.has('PLAY')){this.openPage(this.page+d,true);this.consume(key);return;}
   if(this.has('FN')){if(this.page)this.openPage(this.page+d,true);else {this.window.position=(this.window.position+d*this.window.size+1)%1;this.say('Loop window moved');}this.consume('FN',key);return;}
-  if(this.has('PLAY')){if(this.repeat){this.repeat.position=(this.repeat.position+d*this.repeat.size+1)%1;this.say('Repeat moved');}else{this.route=this.lastVolume&&this.lastVolume.key===key&&this.now-this.lastVolume.at<350?3:up?2:1;this.lastVolume={key,at:this.now};this.flash={pattern:['','one','two','three'][this.route],at:this.now};this.say(['','Input FX','Track FX','Input + track FX'][this.route]);}this.consume('PLAY',key);return;}
+  if(this.has('PLAY')){if(this.repeat){this.repeat.position=(this.repeat.position+d*this.repeat.size+1)%1;this.say('Repeat moved');}else{this.pendingRoute={key,at:this.now};}this.consume('PLAY',key);return;}
   this.volumeIndex=Math.max(0,Math.min(15,this.volumeIndex+d));this.volume=[0,2,3,4,6,8,11,16,23,32,45,64,90,128,181,256][this.volumeIndex]/256;this.say('Volume '+Math.round(this.volume*100)+'%');
  }
  rock(dir,repeating=false){
@@ -226,8 +226,17 @@ export class Simulator{
   this.playTaps=[];this.tapTimes=[];this.btTaps=[];this.btHold=null;this.flash=null;this.powerGesture=null;
   this.rearm();this.confirm();this.say('Performance controls reset');
  }
+ // The firmware gives the second volume button 100 ms to join a monitor chord.
+ flushRoute(){
+  const p=this.pendingRoute;if(!p||this.has('PLAY')&&this.now-p.at<100)return;
+  this.pendingRoute=null;
+  this.route=this.lastVolume&&p.at-this.lastVolume.at<=350?3:p.key==='VOL+'?2:1;
+  this.lastVolume=this.route===3?null:p;
+  this.flash={pattern:['','one','two','three'][this.route],at:this.now};
+  this.say(['','Input FX','Track FX','Input + track FX'][this.route]);
+ }
  tick(ms){
-  const dt=Math.max(0,Math.min(ms-this.now,100));this.now=ms;if(this.powered&&(this.playing||this.current.grid&&this.tracks.every(t=>t.state==='empty')))this.clock+=dt/1000*this.speed;
+  const dt=Math.max(0,Math.min(ms-this.now,100));this.now=ms;this.flushRoute();if(this.powered&&(this.playing||this.current.grid&&this.tracks.every(t=>t.state==='empty')))this.clock+=dt/1000*this.speed;
   if(this.hatch&&!this.hatch.fired&&ms-this.hatch.at>=2000){this.hatch.fired=true;this.escapeHatch();}
   if(this.cutMark&&!this.playing)this.cutMark=null;
   if(this.recordReady&&ms>=this.recordReady.until)this.recordReady=null;

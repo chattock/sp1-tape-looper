@@ -1,6 +1,6 @@
 // Executable teaching scenarios. Prerequisites are set once; controls then drive
 // the same adapter used by direct interaction. No effects inferred from LED labels.
-import {Simulator} from './simulator.js?v=gesture-audit-20261112';
+import {Simulator} from './simulator.js?v=gesture-check-20261112';
 export function gestureSeconds(card,index){
  const step=card.steps[index];
  // The preset demo separates the armed LED from the grid punch-in.

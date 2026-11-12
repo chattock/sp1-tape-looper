@@ -1,10 +1,10 @@
 import {applyHairline} from '../model-theme/hairline.mjs';
 import {confirmationCloseup} from './led-patterns.js?v=610';
-import {Scenario,gestureSeconds,gestureCues,CAMERA_SETTLE_SECONDS} from './scenarios.js?v=gesture-audit-20261112';
+import {Scenario,gestureSeconds,gestureCues,CAMERA_SETTLE_SECONDS} from './scenarios.js?v=gesture-check-20261112';
 import {AUDIO_ENABLED} from './features.js';
-import {AudioPreview} from './audio.js?v=gesture-audit-20261112';
+import {AudioPreview} from './audio.js?v=gesture-check-20261112';
 import {GestureComposer} from './gestures.js?v=610';
-import {Simulator} from './simulator.js?v=gesture-audit-20261112';
+import {Simulator} from './simulator.js?v=gesture-check-20261112';
 import {loadFirmwareCore,firmwareLEDDisplay,ledFaceBrightness} from './firmware-core.js?v=610';
 import * as T from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
