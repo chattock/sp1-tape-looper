@@ -12156,3 +12156,72 @@ finishGuideAudit(cards);
   if(step.context?.loaded)step.context={...step.context,loaded:[1]};
  }
 }
+
+// Walkthrough captions focus on the control and its immediate result.
+{
+ const captions={
+  power:{1:'The side lights fill as SP-1 wakes.',2:'Release to finish startup.',3:'Hold FN for 2.5 seconds. The side lights fill, then clear.',4:'SP-1 is off.',5:'The side lights show charge; the last lit LED blinks while charging.'},
+  transport:{2:'Playback stays in its new state.',3:'Release to restart from the beginning.'},
+  levels:{1:'F1–F4 control tracks 1–4.',3:'Raise F1 to restore its level.'},
+  'takes-v4':{1:'Hold T1 and click ROCKER UP. Your current take stays saved.',2:'Release both, then tap T1 to arm. Tap again to finish.',3:'Hold T1 and click ROCKER DOWN to cycle takes at the running song position.',4:'During playback, hold FN. Each track light counts its saved takes.'},
+  replace:{1:'Hold for 0.6 seconds to prepare overdub.',2:'Tap the track within 10 seconds to arm overdub.',4:'The overdub becomes another take; the earlier take stays saved.'},
+  delete:{2:'The deleted take’s light stays dark.'},
+  songs:{4:'When stopped, solid shows the bank; blinking shows the song.'},
+  brightness:{1:'Hold FN + PLAY for five seconds.'},
+  octave:{2:'Halve the speed: one octave down.',3:'Double the speed: one octave up.'},
+  'move-window':{1:'Keep FN held while moving the loop window.'},
+  'four-faders':{3:'Slide the section without changing its length.',4:'Lower F4 to shorten the section around its center.',5:'Restore the section set by F1–F3.'},
+  'reset-window':{1:'Keep both held while resetting the window.',4:'Keep both held while moving the window home.',5:'Move home, keeping the window’s size and direction.'},
+  isolate:{1:'Hold FN + PLAY before pressing a track.',3:'Restore the previous track mutes.'},
+  heads:{3:'Faders control head levels; empty heads pulse dimly.',5:'Keep FN held and move F2 to position head 2.'},
+  'head-source':{1:'In four-head mode, keep FN held to position a head.',2:'Move F2 to position head 2.',3:'Raise F2 to move head 2 back.'},
+  'round-grid':{1:'Tap FN at least four times in time.',2:'Hold FN for about one second to round to the nearest whole BPM.',4:'The track lights sweep out and back to confirm rounding.'},
+  pickup:{2:'Cross the saved value to take control of the effect.'},
+  'tap-rate':{1:'On the effect’s page, keep FN held.',3:'Hold FN + PLAY, then tap the effect’s track button.'},
+  secondaries:{1:'On Page 2, hold T4 to adjust echo feedback.',2:'Keep T4 held and move F4 to change feedback.',3:'Keep T4 held and raise F4 to adjust feedback.'},
+  routing:{1:'Keep PLAY held while choosing an FX route.'},
+  monitor:{1:'Hold PLAY + VOL− + VOL+ to toggle input monitoring.'},
+  'reset-fx':{1:'Keep FN held while resetting the page.'},
+  'center-placement':{1:'Center track 1.',2:'The track stays centered.'},
+  preset:{3:'Normal track controls return.'},
+  nudge:{1:'On Page 7, hold T1 to adjust its timing.',2:'Keep T1 held and move F1 to shift its timing.',3:'Keep T1 held and raise F1 to shift it back.'},
+  'nudge-lights':{1:'Move F1 while holding T1. Its light shows the timing offset.'},
+  'reset-timing':{1:'Center track 1’s timing; if centered, clear the grid offset.',2:'The reset stays applied.'},
+  format:{1:'Hold both until Page 4 opens.',8:'Choose mono or stereo for track 1’s next take.',9:'Stereo blinks; mono stays solid.'},
+  'repeat-chop':{1:'Keep PLAY held to repeat part of the chop.',2:'If a full beat cannot fit, ROCKER UP catches one quarter of the chop.'},
+  'tremolo-spread':{4:'Keep T3 held to adjust stereo spread.',5:'Move F4 to change the spread between channels.',6:'Keep T3 held and raise F4 to adjust the spread.'},
+  'track-lights':{5:'Each track pulses when its loop wraps.'},
+  'status-lights':{1:'The meter fills from bottom to top.',2:'Solid shows the bank; blinking shows the song.'},
+  'tape-copy':{2:'Start a copy of the playing mix on T2.',5:'The copy is saved separately; the source stays saved.',7:'Raise F2 to bring the copy into the mix.'},
+  'stop-page':{1:'Keep PLAY held on the FX page.'},
+  'flow-back':{1:'T2 is recording the repeat.'},
+  'scissors386':{2:'Use VOL− / VOL+ to choose Scissors / glue.'},
+  'bluetooth-v4':{1:'Triple-tap FN and hold the last press until all four track lights fade, then release.',2:'Choose SP-1 in Bluetooth settings. The lights sweep when connected.',3:'Tap empty T3 and start Bluetooth audio. T3 turns solid as recording starts.',4:'Tap T3 again. The take joins the loop.'},
+  'wind-v4':{1:'Hold ROCKER DOWN to rewind; release to let the tape settle back.',2:'Release the rocker. Hold FN and double-tap PLAY to reset.'},
+  'bender-v4':{1:'Hold ROCKER DOWN to stretch the tape; release for a spring-like recovery.',2:'Release the rocker. Hold FN and double-tap PLAY to reset.'},
+  'battery-v4':{1:'Hold ROCKER DOWN to add sag, wobble and stalls.',2:'Release the rocker. Hold FN and double-tap PLAY to reset.'},
+  'sandpaper-v4':{1:'Hold ROCKER DOWN to add roughness, breakup and drag.',2:'Release the rocker. Hold FN and double-tap PLAY to reset.'},
+  'magnet-v4':{1:'Hold ROCKER DOWN to erase a section; release to leave a gap.',2:'Release the rocker. Hold FN and double-tap PLAY to reset.'},
+  'manual-head-v4':{1:'Hold ROCKER UP to hear the moving tape.',4:'Open the rocker page and use VOL− to select another mode.'},
+  'track-trim-v4':{1:'Keep both held; each fader trims its own track.',2:'Lower F1 to shorten track 1’s loop.',3:'Release both. The trim stays; cross the saved level to mix again.'},
+  'track-slide-v4':{1:'Trim a track before moving its section.',2:'Hold PLAY and lower F1 to move track 1’s section later.',3:'Release PLAY. The section keeps its length and position.'},
+  'beats-per-bar-v4':{5:'Move F3 through its saved position to take control.',6:'Raise F3 to select 5. Bottom to top: 3, 4, 5, 7; T3 counts the choice.',7:'Tap FN to close. The song keeps its beats-per-bar setting.'},
+  'escape-hatch-v4':{1:'Hold all three for two seconds; solid track lights confirm the reset.'}
+ };
+ for(const card of cards)for(const [index,detail]of Object.entries(captions[card.id]||{}))card.steps[Number(index)-1].detail=detail;
+}
+{
+ const edits={
+  eq:{5:'F2 controls the 350 Hz band.',6:'Lower F2 to cut the band.',7:'Raise F2; center is flat and above center boosts.'},
+  placement:{6:'F1 controls track 1’s stereo position.',7:'Lower F1 to move track 1 left.',8:'Raise F1 to move track 1 right.'},
+  offset:{7:'F1 controls the grid offset.',8:'Lower F1 to move the grid earlier.',9:'Raise F1 to move the grid later.'},
+  'wah-resonance':{4:'Keep T3 held while moving F3.',5:'Lower F3 for sharper resonance.',6:'Raise F3 for softer resonance.'},
+  'echo-feedback':{4:'Keep T4 held while moving F4.',5:'Move F4 to change echo feedback.',6:'Keep T4 held and raise F4 to adjust feedback.'},
+  'tremolo-shape':{4:'Keep T3 held while moving F3.',5:'Move F3 to change the tremolo shape.',6:'Keep T3 held and raise F3 to adjust the shape.'},
+  'reverb-damping':{4:'Keep T4 held while moving F4.',5:'Lower F4 for darker reverb.',6:'Raise F4 for brighter reverb.'},
+  'filter-damping-v4':{4:'Keep T1 held while moving F1.',5:'Move F1 to change filter damping.',6:'Keep T1 held and raise F1 to adjust damping.'},
+  'chorus-span-v4':{4:'Keep T2 held while moving F2.',5:'Move F2 to change chorus / flanger span.',6:'Keep T2 held and raise F2 to adjust the span.'},
+  'phaser-feedback-v4':{4:'Keep T1 held while moving F1.',5:'Move F1 to change phaser feedback.',6:'Keep T1 held and raise F1 to adjust feedback.'}
+ };
+ for(const card of cards)for(const [index,detail]of Object.entries(edits[card.id]||{}))card.steps[Number(index)-1].detail=detail;
+}

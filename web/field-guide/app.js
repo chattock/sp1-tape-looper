@@ -5,7 +5,7 @@ import {rockerMarkup,bindRockers,selectRocker} from './rocker-guide.js?v=624-cop
 import {stepSeconds} from './scenarios.js?v=walkthrough7-20261112';
 import {track,trackOnce,configureAnalytics} from './telemetry.js?v=610';
 import {Device} from './device.js?v=camera-return-20261112';
-import {categories,cards} from './content.js?v=guide-copy-20261112';
+import {categories,cards} from './content.js?v=caption-pass-20261112';
 import {related,nestedIds,hiddenIds,groupIntros,introduction,whatsNew} from './guide-layout.js?v=walkthrough6-20261112';
 configureAnalytics(cards,categories);
 const $=s=>document.querySelector(s),playIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5v17l14-8.5z"/></svg>';
