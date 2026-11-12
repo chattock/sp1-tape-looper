@@ -1195,7 +1195,7 @@ export const cards = [
     "steps": [
       {
         "label": "Hold FN",
-        "detail": "Example starts at half speed. Keep it held for both taps.",
+        "detail": "Keep FN held for both taps.",
         "hold": [
           "FN"
         ],
@@ -1816,7 +1816,7 @@ export const cards = [
       },
       {
         "label": "Hold FN + PLAY",
-        "detail": "For this second example, a quarter-loop chop starts away from home.",
+        "detail": "Use VOL+ to move a chopped section home without changing its size.",
         "hold": [
           "FN",
           "PLAY"
@@ -2745,7 +2745,7 @@ export const cards = [
     "steps": [
       {
         "label": "Find fader 1",
-        "detail": "This example starts with the stored setting at the center.",
+        "detail": "Move the fader through the stored value to take control.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -3253,7 +3253,7 @@ export const cards = [
       },
       {
         "label": "Page 1 is open",
-        "detail": "The side lights identify Page 1. This example starts on soft.",
+        "detail": "The side lights identify Page 1.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -3532,7 +3532,7 @@ export const cards = [
       },
       {
         "label": "Page 1 is open",
-        "detail": "The side lights identify Page 1. This example starts on gallop.",
+        "detail": "The side lights identify Page 1.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -4617,7 +4617,7 @@ export const cards = [
       },
       {
         "label": "Page 3 is open",
-        "detail": "The side lights identify Page 3. This example starts on beat.",
+        "detail": "The side lights identify Page 3.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -4896,7 +4896,7 @@ export const cards = [
       },
       {
         "label": "Page 3 is open",
-        "detail": "The side lights identify Page 3. This example starts on beat.",
+        "detail": "The side lights identify Page 3.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -5175,7 +5175,7 @@ export const cards = [
       },
       {
         "label": "Page 3 is open",
-        "detail": "The side lights identify Page 3. This example starts on beat.",
+        "detail": "The side lights identify Page 3.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -6443,7 +6443,7 @@ export const cards = [
     "steps": [
       {
         "label": "Hold T4",
-        "detail": "Example: hold T4 on Page 2. Example starts with the secondary at its midpoint.",
+        "detail": "Example: hold T4 on Page 2.",
         "hold": [
           "T4"
         ],
@@ -7862,7 +7862,7 @@ export const cards = [
     "steps": [
       {
         "label": "Choose one bar on Page 7",
-        "detail": "This example has a beat grid. Set F2 to 1 for a one-bar take. Shown slowed down.",
+        "detail": "With a beat grid, set F2 to 1 for a one-bar take. Shown slowed down.",
         "hold": [],
         "tap": [],
         "faders": {
@@ -9302,7 +9302,7 @@ export const cards = [
       },
       {
         "label": "Page 2 is open",
-        "detail": "The side lights identify Page 2. Example starts with the secondary at its midpoint.",
+        "detail": "The side lights identify Page 2.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -9476,7 +9476,7 @@ export const cards = [
       },
       {
         "label": "Page 2 is open",
-        "detail": "The side lights identify Page 2. Example starts with the secondary at its midpoint.",
+        "detail": "The side lights identify Page 2.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -9650,7 +9650,7 @@ export const cards = [
       },
       {
         "label": "Page 3 is open",
-        "detail": "The side lights identify Page 3. Example starts with the secondary at its midpoint.",
+        "detail": "The side lights identify Page 3.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -9824,7 +9824,7 @@ export const cards = [
       },
       {
         "label": "Page 3 is open",
-        "detail": "The side lights identify Page 3. Example starts with the secondary at its midpoint.",
+        "detail": "The side lights identify Page 3.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -9998,7 +9998,7 @@ export const cards = [
       },
       {
         "label": "Page 3 is open",
-        "detail": "The side lights identify Page 3. Example starts with the secondary at its midpoint.",
+        "detail": "The side lights identify Page 3.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -11288,12 +11288,12 @@ export const cards = [
     "group": "Connect & wake",
     "title": "Bluetooth Support",
     "gesture": "Triple-tap FN and hold the last press until all four track lights start fading in and out, then release",
-    "body": "Triple-tap FN and hold the last press until all four track lights start fading in and out, then release to enable Bluetooth audio discovery. Holding for 3 seconds turns Bluetooth off. Pair SP-1 from your phone or computer, select it as the audio output, then record normally.",
+    "body": "Triple-tap FN and hold the last press until all four track lights start fading in and out, then release to enable Bluetooth audio discovery. Pair SP-1 from your phone or computer, select it as the audio output, then record normally.",
     "note": "The gesture also works during playback and USB audio. USB and Bluetooth input mix together. This release focuses on Bluetooth input; outgoing audio to speakers or keyboards is deferred.",
     "steps": [
       {
         "label": "Enable Bluetooth audio",
-        "detail": "Triple-tap FN and hold the last press until all four track lights start fading in and out, then release. Holding for 3 seconds turns Bluetooth off. The track lights fill T1 to T4, then fade together. This example starts with an empty, stopped song.",
+        "detail": "Triple-tap FN and hold the last press until all four track lights start fading in and out, then release. The track lights fill T1 to T4, then fade together.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -11982,7 +11982,7 @@ export const cards = [
     "steps": [
       {
         "label": "Start with a trimmed track",
-        "detail": "Track 1 already has a shorter kept section; Track 2 continues normally.",
+        "detail": "Trim the track first, then choose which part plays.",
         "hold": [],
         "tap": [],
         "faders": {},
