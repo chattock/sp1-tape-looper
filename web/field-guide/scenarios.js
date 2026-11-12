@@ -1,16 +1,35 @@
 // Executable teaching scenarios. Prerequisites are set once; controls then drive
 // the same adapter used by direct interaction. No effects inferred from LED labels.
 import {Simulator} from './simulator.js?v=620';
-export function stepSeconds(card,index){
+export function gestureSeconds(card,index){
  const step=card.steps[index];
  // The preset demo separates the armed LED from the grid punch-in.
  if(card.id==='preset'&&(index===3||index===4))return step.seconds??step.duration*2;
  return Math.max(2.5,step.seconds??step.duration*2);
 }
+// Presentation time and physical gesture time are deliberately independent.
+export const CAMERA_SETTLE_SECONDS=.8;
+export const TAP_CUE_TRAIL_SECONDS=1.2;
+export function stepSeconds(){return 7;}
+export function gestureCues(card,index,t,events=stepEvents(card,index)){
+ const cues=new Map();if(t<0)return cues;
+ for(const key of card.steps[index].hold||[])cues.set(key==='UP'||key==='DOWN'?'ROCKER':key,'hold');
+ const downs=new Map();
+ for(const [at,type,key,on]of events){
+  if(type!=='button')continue;
+  if(on){downs.set(key,at);continue;}
+  const start=downs.get(key);if(start===undefined)continue;downs.delete(key);
+  const kind=at-start>=.18?'hold':'tap',trail=kind==='tap'?TAP_CUE_TRAIL_SECONDS:.35;
+  if(t>=start&&t<at+trail)cues.set(key==='UP'||key==='DOWN'?'ROCKER':key,kind);
+ }
+ for(const [key,start]of downs)if(t>=start)cues.set(key==='UP'||key==='DOWN'?'ROCKER':key,t-start>=.18?'hold':'tap');
+ if(t>=.35&&t<2.15)for(const n of Object.keys(card.steps[index].faders||{}))cues.set('F'+n,'slide');
+ return cues;
+}
 const secondary={'secondaries':[2,4],'wah-resonance':[2,3],'echo-feedback':[2,4],'tremolo-shape':[3,3],'tremolo-spread':[3,3],'reverb-damping':[3,4]};
 export function prepareScenario(card){
  const s=new Simulator(),first=card.steps[0],c=first.context||{};s.playing=c.playing??true;s.current.grid=!!c.grid;s.input=false;
- const loaded=c.loaded??[1];for(const n of loaded)s.tracks[n-1].state='playing';
+ const loaded=c.loaded??[1];for(const n of loaded)s.tracks[n-1].state='playing';for(const n of c.muted||[])s.tracks[n-1].muted=true;
  s.faders=[...(card.initialFaders||[.8,.8,.8,.8])];s.tracks.forEach((t,i)=>t.level=s.faders[i]);s.fixture=loaded.length>1?'split':'mix';
  s.page=first.hold?.includes('FN')&&first.hold.some(k=>/^T[1-4]$/.test(k))?0:first.page||0;s.heads=!!c.heads;
  if(card.secondaryTarget||secondary[card.id]){const [p,l]=card.secondaryTarget||secondary[card.id];s.fx[p-1][l-1]=.6;s.secondary[p-1][l-1]=.5;s.spread=.5;}
@@ -53,6 +72,9 @@ export function prepareScenario(card){
 // Each list represents physical press/release order; timing is in seconds within
 // the teaching step, independent of display frame rate.
 export function stepEvents(card,index){const s=card.steps[index],events=[],tap=(k,t=.55,len=.12)=>{events.push([t,'button',k,true],[t+len,'button',k,false]);};
+ // Give the caption time to read before holding FN; the next step taps TRACK
+ // before the 2.5-second shutdown threshold. Never stretch this physical hold.
+ if(card.id==='songs'&&index===0)events.push([1.8,'button','FN',true]);
  if(card.id==='bluetooth-v4'){
   if(index===0){tap('FN',.2,.08);tap('FN',.45,.08);tap('FN',.7,1.2);}
   if(index===1)events.push([2.5,'bluetooth-connected']);
@@ -78,8 +100,8 @@ export function stepEvents(card,index){const s=card.steps[index],events=[],tap=(
 export class Scenario {
  constructor(card){this.card=card;this.sim=prepareScenario(card);this.index=-1;this.elapsed=0;}
  begin(index){
-  if(index!==this.index+1){this.sim=prepareScenario(this.card);this.index=-1;for(let i=0;i<index;i++){this.begin(i);this.advance(stepSeconds(this.card,i));}}
-  else if(this.index>=0)this.advance(stepSeconds(this.card,this.index));
+  if(index!==this.index+1){this.sim=prepareScenario(this.card);this.index=-1;for(let i=0;i<index;i++){this.begin(i);this.advance(gestureSeconds(this.card,i));}}
+  else if(this.index>=0)this.advance(gestureSeconds(this.card,this.index));
   const s=this.sim,step=this.card.steps[index];this.index=index;this.elapsed=0;this.start=s.now;this.cursor=0;this.u=undefined;this.events=stepEvents(this.card,index);this.from=[...s.faders];
   this.fixture(index);
   const held=new Set(step.hold||[]);

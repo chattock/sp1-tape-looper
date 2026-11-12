@@ -1,0 +1,139 @@
+/* Shared semantic palette: workspace, embedded pages, dialogs and model UI. */
+.color-theme{display:grid!important;place-items:center;width:36px;min-width:36px;height:36px;padding:0!important;border:1px solid #8292aa35!important;border-radius:50%!important;background:transparent!important;color:inherit!important;font:23px/1 system-ui!important;cursor:pointer;box-shadow:none!important}
+.color-theme[aria-pressed=false]{font-size:17px!important}
+.color-theme:hover{background:#8292aa18!important}.standalone-theme{position:fixed;right:18px;top:16px;z-index:100}
+html[data-theme=dark]{--ink:#ededed;--muted:#adadad;--blue:#8bb5ff;--stroke:#333333;--glass:linear-gradient(145deg,#1c1c1cee,#121212dd);--surface:#171717e8;--glass-tint:#191919e0;--glass-edge:#383838;--glass-shadow:0 12px 36px #0003;--glass-blue:#8bb5ff;color:#ededed;background:#0a0a0a;color-scheme:dark}
+html[data-theme=dark] body{color:var(--ink);background-color:#0a0a0a;background-image:none}
+html[data-theme=dark] .ambient{background:none}
+html[data-theme=dark] :is(h1,h2,h3,h4,strong,.brand,.parameter-value,.mix-top strong){color:var(--ink)!important}
+html[data-theme=dark] :is(p,small,summary,label,td,th,footer,.tile,.tile-body,.brand span,.hint,.note,.subtitle,.track-state,.lane-value,.value-control,.value-foot,.side-title,.side-bottom,.gesture-grid,.rocker-summary,.rocker-tip,.rocker-footer,.window-reset-hint,.wave-help,.wave-axis,.wave-status,.guide-version,.mix-heading,.mix-top b){color:var(--muted)!important}
+html[data-theme=dark] :is(.eyebrow,.gesture,.lane-number,#pageEntry,.new-badge,.rocker-mode-kind,.step-count,.fx-secondary a,a.context-show,.context-show,.rocker-watch,.watch-tile,.new-play,.walkthrough-button){color:#8bb5ff!important}
+html[data-theme=dark] :is(.glass,.topbar,.category-nav,.demo-dock,.toolbar){background:linear-gradient(128deg,#1d1d1ded,#111111e8)!important;border-color:#383838!important;box-shadow:0 8px 28px #0002,inset 0 1px #8a898524!important}
+html[data-theme=dark] :is(.topbar,.category-nav,.demo-dock,.toolbar)::before{background:linear-gradient(150deg,#bcbab512,transparent 45%)!important;box-shadow:inset 0 1px #bcbab51c!important}
+html[data-theme=dark] :is(.tile,.orientation,.starting-path,.card,section.card,.mix-panel,.value-card,.lane,.mini-help,.reference-card,.new-lesson,.rocker-guide,.fx-guide,.live-summary,.finder,.browser,dialog,.library-dialog,#inspector,.search-results,.guide-search-results){background:#171717f2!important;border-color:#333333!important;box-shadow:0 8px 28px #0002!important;color:var(--ink)!important}
+html[data-theme=dark] :is(.live-summary .tile,.related-card,.fx-mode-panel,.rocker-mode-panel){background:transparent!important;box-shadow:none!important}
+html[data-theme=dark] :is(.master-tabs,.page-tabs,.rocker-slot-nav,.fx-nav,.category-nav,.demo-controls,.demo-progress,.finder>aside){background:#111111c9!important;border-color:#333333!important;box-shadow:inset 0 1px #8292aa10!important}
+html[data-theme=dark] :is(button,.side,.page-tab,.master-tabs button,.category-nav button,.rocker-slot-nav button,.fx-nav button){color:#c7c7c7}
+html[data-theme=dark] :is(button[aria-selected=true],button[aria-pressed=true],.side.selected,.category-nav button.active,.page-tab.active){background:#333333!important;color:#fafafa!important;border-color:#606060!important;box-shadow:0 2px 8px #0002!important}
+html[data-theme=dark] :is(button.primary,#connect,#next,.primary){background:linear-gradient(160deg,#3478ee,#225ac7)!important;color:#fff!important;border-color:#6294ee55!important}
+html[data-theme=dark] :is(button.primary,#connect,#next,.primary) :is(span,strong){color:#fff!important}
+html[data-theme=dark] :is(.watch-tile,.rocker-watch,.new-play,#guideSearchToggle,.actions button,.dialog-actions button:not(.primary),.library-dialog button:not(.primary),#settings,#export){background:#242424!important;color:#a7c7ff!important;border-color:#474747!important;box-shadow:none!important}
+html[data-theme=dark] :is(input:not([type=range]):not([type=checkbox]),select,textarea){background:#111111!important;color:#ededed!important;border-color:#474747!important;box-shadow:none!important}
+html[data-theme=dark] input::placeholder{color:#adadad!important}
+html[data-theme=dark] :is(a,.link){color:#a7c7ff}
+html[data-theme=dark] :is(.brand){color:var(--ink)}
+html[data-theme=dark] :is(.release-details,.card-note,.related-guides,.lane details,.rocker-footer,.fx-secondary,.fx-guide footer,.reference-group,.control-row,.fx-row,th,td,#crumbs,.finder footer,.live-summary .tile+.tile,footer){border-color:#333333!important}
+html[data-theme=dark] :is(thead,th,#crumbs,.rocker-footer,.fx-guide footer){background:#111111!important}
+html[data-theme=dark] :is(tr:hover,.side:hover){background:#272727!important}
+html[data-theme=dark] :is(tr.selected,#banner){background:#323b48!important;color:#c1d8ff!important}
+html[data-theme=dark] :is(.danger,.error,.clip-error){color:#ff9e98!important}
+html[data-theme=dark] :is(.success,.done){color:#86d3b5!important}
+html[data-theme=dark] :is(pre,code){color:#c7c7c7;background:#111111}
+html[data-theme=dark] dialog::backdrop{background:#080808a6!important}
+html[data-theme=dark] #focusScrim{background:#08080866!important}
+html[data-theme=dark] .wave-area{background:#131313!important;border-color:#474747!important}
+html[data-theme=dark] .wave-selection{background:#7ba8ff26;border-color:#8bb5ff}
+html[data-theme=dark] .wave-playhead{background:#e6edf9}
+html[data-theme=dark] :is(meter,progress,input[type=range]){accent-color:#8bb5ff}
+html[data-theme=dark] :is(button,a,input,select,summary):focus-visible{outline-color:#a4c8ff!important}
+html[data-theme=dark] .rocker-diagram{color:#a7c7ff}
+html[data-theme=dark] ::selection{background:#496a9c;color:white}
+@media(prefers-reduced-transparency:reduce){html[data-theme=dark] :is(.glass,.topbar,.category-nav,.demo-dock,.toolbar,dialog){background:#171717!important;backdrop-filter:none!important}}
+html[data-theme=dark]{--soft:#adadad;--line:#333333}
+html[data-theme=dark] :is(.mix-channel,.state-group,.rocker-mode,.layout-lane,.take-chip,.live-badge,.status-badge,#activity,.setup-tasks .actions button,.secondary,.quiet-action,.file-action,.layout-actions button,.rail-label){background:#202020!important;border-color:#404040!important;color:#cccccc!important;box-shadow:none!important}
+html[data-theme=dark] :is(.finder footer,.finder footer details){background:#111111!important;color:#adadad!important}
+html[data-theme=dark] :is(.take-chip.current,.rail-tick.current .rail-mark){background:#5789db!important;color:#fff!important}
+html[data-theme=dark] :is(#next,#saveSettings,#layoutApply,#resumeCompanion){background:linear-gradient(160deg,#3478ee,#225ac7)!important;color:#fff!important}
+html[data-theme=dark] :is(.danger){background-color:#462e33!important}
+html[data-theme=dark] .guide-rail{background:transparent!important;box-shadow:none!important;border:0!important}
+html[data-theme=dark] .embedded body{background:transparent!important}
+html[data-theme=dark] select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='m1 1 5 5 5-5' fill='none' stroke='%23a2afc2' stroke-width='1.5'/%3E%3C/svg%3E")!important;background-repeat:no-repeat!important;background-position:right 14px center!important}
+html[data-theme=dark] :is(#demo,.demo-copy,.shape-options button,#retryModel){background:#171717f2!important;color:var(--ink)!important;border-color:#333333!important;box-shadow:0 8px 28px #0002!important}
+html[data-theme=dark] .demo-copy{background:transparent!important;box-shadow:none!important}
+html[data-theme=dark] :is(dd,.rocker-actions dd,.context-entry){color:#c7c7c7!important}
+html[data-theme=dark] :is(dt,.rocker-actions dt,.step-caption>span){color:#a7c7ff!important}
+html[data-theme=dark] :is(.rocker-actions>div,.start-shape,.context-grid>div,.setup-checklist li){border-color:#383838!important}
+html[data-theme=dark] :is(.rocker-slot-nav button>span,.fx-nav button>span){background:#3b3b3b!important;color:#c1d8ff!important}
+html[data-theme=dark] #stepSegments button{background:#474747!important}
+html[data-theme=dark] #stepSegments button.done{background:#858b93!important}
+html[data-theme=dark] #stepSegments button.current{background:#8bb5ff!important}
+html[data-theme=dark] :is(.round,.demo-dock button){color:#dedede!important}
+html[data-theme=dark] .tile.is-playing{border-color:#8bb5ff!important}
+html[data-theme=dark] .take-lane-label{color:#adadad!important}
+html[data-theme=dark] #demo .demo-copy{background:transparent!important;box-shadow:none!important;border:0!important}
+
+/* Inline walkthrough links retain their light-theme geometry, without button fills. */
+html[data-theme=dark] .context-show{background:transparent!important;border-color:transparent!important;box-shadow:none!important}
+
+/* Neutral editorial text hierarchy; actions retain the original blue palette. */
+html[data-theme=light]{--reading-title:#242424;--reading-strong:#242424;--reading-body:#555;--reading-muted:#686868}
+html[data-theme=dark]{--reading-title:#ededed;--reading-strong:#e4e4e4;--reading-body:#adadad;--reading-muted:#a3a3a3}
+html[data-theme] :is(h1,h2,h3,h4){color:var(--reading-title)!important}
+html[data-theme] :is(.eyebrow,.gesture,.lane-number,#pageEntry,.new-badge,.rocker-mode-kind,.step-count,.step-caption>span,dt,.rocker-actions dt){color:var(--reading-strong)!important}
+html[data-theme] :is(.tile-body,.context-entry,.rocker-summary,.rocker-tip,.rocker-footer,.fx-secondary,dd,.rocker-actions dd,.subtitle,.gesture-grid,.window-reset-hint,.wave-help,.wave-axis,.guide-version,.mix-heading,.side-title,.side-bottom){color:var(--reading-body)!important}
+html[data-theme] :is(.tile p,.orientation p,.starting-path p,.card p,.reference-card p,.new-lesson p,.rocker-guide p,.fx-guide p,.demo-copy p){color:var(--reading-body)!important}
+html[data-theme] :is(.tile summary,.hint,.note,.value-foot,.take-lane-label,.brand span){color:var(--reading-muted)!important}
+
+/* A restrained color cue for gesture instructions. */
+html[data-theme=light]{--gesture-ink:#315fc0}
+html[data-theme=dark]{--gesture-ink:#99baff}
+html[data-theme] :is(.gesture,#pageEntry,.rocker-actions dt,dt,.step-caption>span){color:var(--gesture-ink)!important}
+
+/* Library controls and surfaces share the workspace palette in every state. */
+html[data-theme=dark] #finder button:not(.primary):not(.side){background:#242424!important;color:#c7d7ef!important;border-color:#474747!important;box-shadow:none!important}
+html[data-theme=dark] #finder button:not(.primary):not(.side):hover:not(:disabled){background:#303030!important;color:#e3ecfa!important}
+html[data-theme=dark] .finder :is(.navigation button,#crumbs button,.close){background:transparent!important;border-color:transparent!important}
+html[data-theme=dark] .finder tbody tr:nth-child(even){background:#1c1c1c}
+html[data-theme=dark] .finder tbody tr.selected{background:#29384d!important}
+html[data-theme=dark] .finder .content.dragging{background:#1d2a3c;outline-color:#8bb5ff}
+html[data-theme=dark] :is(.muted,.reference-card summary span,.related-count){color:#adadad}
+html[data-theme=dark] #finder button.danger{background:#382326!important;color:#ffb0aa!important;border-color:#78504e!important}
+html[data-theme=dark] #finder button.danger:hover:not(:disabled){background:#482b30!important;color:#ffd0cc!important}
+html[data-theme=light] .finder :is(th,footer,.side-title,.side-bottom small,.muted){color:#5e6b7b}
+/* Disabled still means unavailable, but labels remain readable. */
+html[data-theme=light] :is(button,input,select,#next,#connect,#saveSettings,#layoutApply,#resumeCompanion):disabled{opacity:1!important;background:#edf0f4!important;color:#626b78!important;border-color:#d3d9e1!important;box-shadow:none!important;cursor:default}
+html[data-theme=dark] :is(button,input,select,#next,#connect,#saveSettings,#layoutApply,#resumeCompanion):disabled,html[data-theme=dark] .finder#finder button:disabled{opacity:1!important;background:#202020!important;color:#999!important;border-color:#3b3b3b!important;box-shadow:none!important;cursor:default}
+html[data-theme] button:disabled :is(span,strong){color:inherit!important}
+html[data-theme=dark] .reference-card summary{color:#d2d2d2}
+html[data-theme=dark] :is(.release-details ul,.new-note,.group-intro,.start-lesson small){color:#adadad}
+html[data-theme=dark] .finder .toolbar::after{background:linear-gradient(90deg,transparent,#8bb5ff 35%,#8bb5ff 65%,transparent)}
+html[data-theme=dark] .finder[aria-busy="true"] .toolbar::after{opacity:.85}
+@media(prefers-reduced-motion:reduce){html[data-theme=dark] .finder[aria-busy="true"] .toolbar::after{opacity:.45}}
+/* Semantic feedback must win over general paragraph colors. */
+html[data-theme=dark] :is(.clip-picker,.library-dialog,.card) :is(.error,.clip-error){color:#ff9e98!important}
+html[data-theme=dark] :is(.library-dialog,.card) .success{color:#86d3b5!important}
+html[data-theme=light] :is(#inspector p,.card-note,.related-count,.reference-card .note,.wave-help,.wave-axis,.wave-status){color:#626b78!important}
+/* Keep disconnected readings visibly muted without fading away their labels. */
+html[data-theme] #state.stale{opacity:1;filter:grayscale(1)}
+html[data-theme=light] #state.stale :is(strong,b,.parameter-value,.lane-value,.value-control,.state-value){color:#626b78!important}
+html[data-theme=dark] #state.stale :is(strong,b,.parameter-value,.lane-value,.value-control,.state-value){color:#999!important}
+html[data-theme] .state-value small{opacity:1;color:var(--reading-muted)}
+
+/* Quickstart and manual-guide controls use the same dark surfaces as walkthroughs. */
+html[data-theme=dark] :is(.start-number,.start-play){background:#292929;color:#a7c7ff}
+html[data-theme=dark] :is(.start-lesson,.start-shape){border-color:#383838}
+html[data-theme=dark] .start-lesson:hover{background:transparent}
+html[data-theme=dark] .start-lesson:hover .start-play{background:#363636;color:#d4e4ff}
+html[data-theme=dark] :is(.modifiers button,#accessibleButtons button,#resetDevice,.combo-chips button,.rocker-jump-grid button){background:#242424;color:#c7d7ef;border-color:#474747;box-shadow:none}
+html[data-theme=dark] :is(.latch-choices button.selected,.combo-chips button.latched){background:#29384d;color:#c1d8ff;border-color:#526b8a;box-shadow:none}
+html[data-theme=dark] :is(.latch-choices button,.rocker-jump-grid button span){color:#adadad}
+html[data-theme=dark] :is(.rocker-slot-nav button,.rocker-jump-grid button,.combo-chips button):hover{background:#303030;color:#e3ecfa}
+html[data-theme=dark] .shape-options button:hover{background:#242424!important}
+
+/* Companion: control banks, live meters, and connection states. */
+html[data-theme=dark] #companionView .value-grid:not(:has(.layout-lane)){background:#202020;border-color:#383838}
+html[data-theme=dark] #companionView :is(.value-card+.value-card,.group-values .state-value+.state-value,#storageNotice){border-color:#383838}
+html[data-theme=dark] #companionView .level-meter{background:#333}
+html[data-theme=dark] #companionView .pickup-position{background:#f3c879;box-shadow:0 0 0 1px #171717}
+html[data-theme=dark] #companionView :is(.track-reading,.track-detail-label,.pickup-hint,.layout-actions details,#layoutResult,#status span){color:var(--muted)}
+html[data-theme=dark] #companionView #status.loading{background:#202631;border-color:#3c4c64;box-shadow:0 8px 28px #0005}
+html[data-theme=dark] #companionView #status.loading::before{border-color:#45536b;border-top-color:#99baff}
+html[data-theme=dark] #companionView .timeline-position{stroke:#99baff}
+html[data-theme=dark] #companionView .timeline-beat{stroke:#526b88}
+html[data-theme=dark] #companionView .timeline-mark{stroke:#e7a3d8}
+html[data-theme=dark] #companionView .timeline-head{fill:#d2a0e1}
+html[data-theme=dark] #companionView .timeline-join{stroke:#f2a5bd}
+html[data-theme=dark] #settingsDialog #closeSettings{color:#c7d7ef}
+html[data-theme=dark] #settingsDialog #closeSettings:hover{background:#292929}
+html[data-theme=dark] .topbar #settings.settings-ready{background:#242424;border-color:#474747;color:#a7c7ff}
+html[data-theme=dark] .topbar #settings.settings-ready:hover{background:#303030!important}

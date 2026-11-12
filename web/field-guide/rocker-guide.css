@@ -36,3 +36,7 @@
 .rocker-footer{padding:16px 24px;gap:16px;background:#f1f5fb66;flex-wrap:wrap}
 .rocker-footer p{flex:1;min-width:200px}
 @media(max-width:600px){.rocker-heading{padding:20px}.rocker-heading .section-title{font-size:22px}.rocker-slot-nav{margin:0 16px 20px}.rocker-mode-panel{padding:0 20px 20px}.rocker-footer{padding:16px 20px}}
+
+/* Keep each mode illustration beside its name in both themes. */
+.rocker-title-line{display:flex;align-items:center;gap:14px;margin-top:8px}.rocker-title-line h3{margin:0}.rocker-title-line .rocker-diagram{width:64px;height:30px}
+@media(max-width:600px){.rocker-title-line{gap:10px}.rocker-title-line .rocker-diagram{width:48px;height:26px}}

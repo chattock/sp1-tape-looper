@@ -13,7 +13,7 @@
 
 /* Keep the index quiet until the pointer or keyboard enters it. */
 #categories.guide-rail{opacity:.55;transition:opacity .2s ease}
-#categories.guide-rail:hover,#categories.guide-rail:focus-within{opacity:1}
+#categories.guide-rail:hover,#categories.guide-rail.keyboard-focus{opacity:1}
 @media(prefers-reduced-motion:reduce){#categories.guide-rail{transition:none}}
 
 /* Bare ticks: exclude the shared glass category-nav treatment, including its rim. */
@@ -25,10 +25,10 @@
 .major .rail-mark{margin-left:14px;width:calc(20px + var(--near)*10px);height:2px;opacity:calc(.85 + var(--near)*.15)}
 #categories.guide-rail .rail-tick.major:not(:first-child){margin-top:5px}
 .major .rail-label{font-size:12px;font-weight:650;letter-spacing:-.1px;opacity:var(--rail-reach);visibility:visible;transform:translate(calc(-8px + var(--rail-reach)*8px),-50%);transition:opacity .16s ease,transform .2s ease}
-.major.revealed .rail-label,#categories:focus-within .major .rail-label{opacity:1;transform:translate(0,-50%)}
+.major.revealed .rail-label,#categories.keyboard-focus .major .rail-label{opacity:1;transform:translate(0,-50%)}
 #categories.guide-rail.nearby{opacity:calc(.55 + var(--rail-reach)*.45)}
 @media(prefers-reduced-motion:reduce){.major .rail-label{transition:none}}
 @media(forced-colors:active){.rail-mark{background:CanvasText}.current .rail-mark{background:Highlight}}
 
-#categories.guide-rail:focus-within{opacity:1}
+#categories.guide-rail.keyboard-focus{opacity:1}
 .nearby .major .rail-label,.revealed .rail-label{pointer-events:none}

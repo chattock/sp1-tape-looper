@@ -1,6 +1,6 @@
 import {applyHairline} from '../model-theme/hairline.mjs';
 import {confirmationCloseup} from './led-patterns.js?v=610';
-import {Scenario} from './scenarios.js?v=620';
+import {Scenario,gestureSeconds,gestureCues,CAMERA_SETTLE_SECONDS} from './scenarios.js?v=walkthrough7-20261112';
 import {AUDIO_ENABLED} from './features.js';
 import {AudioPreview} from './audio.js?v=620';
 import {GestureComposer} from './gestures.js?v=610';
@@ -63,20 +63,34 @@ export class Device {
  async contextRestored(){this.contextUnavailable=false;this.shaderFailed=false;try{if(!this.model)return;this.resize();await this.prepareFrame();this.ready=true;clearTimeout(this.loadTimer);document.body.dataset.model='ready';document.querySelector('#fallback').hidden=true;document.querySelector('#loadStatus').textContent='';this.last=performance.now();if(!this.animationStarted){this.animationStarted=true;requestAnimationFrame(t=>this.frame(t))}this.onInteract({type:'context_restored',control:'renderer'});}catch(e){this.fail(e)}}
  resize(){if(!this.renderer)return;const w=this.host.clientWidth,h=this.host.clientHeight;if(!w||!h||w===this.renderWidth&&h===this.renderHeight)return;this.renderWidth=w;this.renderHeight=h;this.renderer.setSize(w,h,false);this.camera.aspect=w/h;this.camera.fov=2*Math.atan(Math.tan(Math.PI/12)/Math.min(1,w/h))*180/Math.PI;this.camera.updateProjectionMatrix()}
  go(view,immediate=false){this.introElapsed=null;const v=views[view]||views.front;this.camGoal={p:new T.Vector3(...v.p),t:new T.Vector3(...v.t)};if(immediate||this.reduced){this.camera.position.copy(this.camGoal.p);this.orbit.target.copy(this.camGoal.t);this.camGoal=null;this.orbit.update()}}
- reset(){if(this.audio)this.audio.example=false;this.composer?.cancel();this.audio?.resetExample();this.scenario=null;this.sim.reset();this.audio?.replace(this.sim);this.powerGesture=null;this.bootAt=null;this.powerSpent=false;this.powered=true;this.demo=null;this.held.clear();this.targets={};this.faderValues=[1,1,1,1];this.lightTargets={};for(const n in this.base){const o=this.nodes[n];o.position.copy(this.base[n].p);o.quaternion.copy(this.base[n].q)}}
- setDemo(step,card){if(!this.demo)this.composer.cancel();this.cueTrail.clear();this.demo={step,card,start:performance.now()};{if(!this.scenario||this.scenario.card!==card)this.scenario=new Scenario(card);this.scenario.begin(card.steps.indexOf(step));this.sim=Object.assign(new Simulator(),structuredClone(this.scenario.sim));}this.held.clear();this.targets={};for(const [n,v] of Object.entries(step.faders||{}))this.faderValues[Number(n)-1]=v;this.go(this.demoView(step));}
+ reset(){if(this.audio)this.audio.example=false;this.composer?.cancel();this.audio?.resetExample();this.scenario=null;this.sim.reset();this.audio?.replace(this.sim);this.powerGesture=null;this.bootAt=null;this.powerSpent=false;this.powered=true;this.demo=null;this.held.clear();this.pressTimes.clear();this.gestureHolds=new Set();this.demoFaders=[];this.pointers.clear();this.rockTarget=0;this.simLast=null;this.orbit.enabled=true;this.targets={};this.faderValues=[1,1,1,1];this.lightTargets={};for(const n in this.base){const o=this.nodes[n];o.position.copy(this.base[n].p);o.quaternion.copy(this.base[n].q)}}
+ setDemo(step,card){const introHeld=this.demo?.card===card&&card.steps.indexOf(step)===this.scenario?.index+1?(step.hold||[]).filter(key=>this.held.has(key)):[];if(!this.demo)this.composer.cancel();this.cueTrail.clear();this.demo={step,card,start:performance.now(),introHeld};{if(!this.scenario||this.scenario.card!==card)this.scenario=new Scenario(card);this.scenario.begin(card.steps.indexOf(step));this.sim=Object.assign(new Simulator(),structuredClone(this.scenario.sim));}this.held=new Set(introHeld);this.demoCueKinds=new Map(introHeld.map(key=>[key==='UP'||key==='DOWN'?'ROCKER':key,'hold']));this.targets={};this.faderValues=[...this.scenario.from];this.go(this.demoView(step));}
  demoView(step){
   const holds=step.hold||[];
   const controls=[...holds,...this.scenario.events.filter(([,type,,down])=>type==='button'&&down).map(([, ,key])=>key)];
-  const sideHeld=holds.includes('FN')||holds.includes('PLAY');
+  const sideHeld=controls.includes('FN')||controls.includes('PLAY');
   const faders=Object.keys(step.faders||{}).length;
+  if(sideHeld&&step.view==='sideLights')return 'right';
+  if(step.view==='comboHold')return 'comboHold';
   if(controls.some(key=>key.startsWith('VOL')))return sideHeld?'comboTop':'top';
-  if((sideHeld||holds.some(key=>/^T[1-4]$/.test(key)))&&controls.some(key=>key==='UP'||key==='DOWN'))return 'comboRocker';
-  if(sideHeld&&(faders||controls.some(key=>/^T[1-4]$/.test(key))||['faders','tracks'].includes(step.view)))return faders?'comboSlide':'comboHold';
-  return step.view;
+  if((sideHeld||faders||holds.some(key=>/^T[1-4]$/.test(key)))&&controls.some(key=>key==='UP'||key==='DOWN'))return 'comboRocker';
+  if(sideHeld&&(faders||controls.some(key=>/^T[1-4]$/.test(key))||['faders','tracks','trackLights'].includes(step.view)))return faders?'comboSlide':'comboHold';
+  if(faders)return 'faders';
+  if(controls.some(key=>/^T[1-4]$/.test(key))&&!step.view)return 'tracks';
+  return step.view||'front';
  }
  stopDemo(){this.cueTrail.clear();this.demo=null;this.targets={};this.held.clear();this.lightTargets={}}
- updateDemo(now){if(this.scenario){const t=this.demo.frozenTime??(now-this.demo.start)/1000;const local=this.scenario.advance(t);if(!this.audio.authoritative)this.sim=Object.assign(new Simulator(),structuredClone(local));const s=this.sim;this.held=new Set(s.keys.keys());this.gestureHolds=new Set([...s.keys].filter(([k,v])=>s.now-v.at>=180).map(([k])=>k));this.rockTarget=s.has('UP')?-1:s.has('DOWN')?1:0;this.faderValues=[...s.faders];this.lightTargets=s.lights();const replay=confirmationCloseup(this.demo.step,t);if(replay)Object.assign(this.lightTargets,replay);}}
+ updateDemo(now){if(this.scenario){
+ const presentation=this.demo.frozenTime??(now-this.demo.start)/1000,t=presentation-CAMERA_SETTLE_SECONDS;
+ if(t<0){this.held=new Set(this.demo.introHeld||[]);this.gestureHolds=new Set(this.held);this.rockTarget=this.held.has('UP')?-1:this.held.has('DOWN')?1:0;this.demoFaders=[];this.demoCueKinds=new Map([...this.held].map(key=>[key==='UP'||key==='DOWN'?'ROCKER':key,'hold']));return;}
+ // Finish the camera move before drawing or executing the teaching action.
+ if(this.camGoal){this.camera.position.copy(this.camGoal.p);this.orbit.target.copy(this.camGoal.t);this.camGoal=null;this.orbit.update();}
+ const index=this.scenario.index,local=this.scenario.advance(Math.min(t,gestureSeconds(this.demo.card,index)));
+ this.demoCueKinds=gestureCues(this.demo.card,index,t,this.scenario.events);
+ this.demoFaders=t>=.35&&t<1.55?Object.keys(this.demo.step.faders||{}).map(n=>'F'+n):[];
+ if(!this.audio.authoritative)this.sim=Object.assign(new Simulator(),structuredClone(local));
+ const s=this.sim;this.held=new Set(s.keys.keys());this.gestureHolds=new Set([...s.keys].filter(([k,v])=>s.now-v.at>=180).map(([k])=>k));this.rockTarget=s.has('UP')?-1:s.has('DOWN')?1:0;this.faderValues=[...s.faders];this.lightTargets=s.lights();const replay=confirmationCloseup(this.demo.step,t);if(replay)Object.assign(this.lightTargets,replay);
+ }}
 
  frame(now){requestAnimationFrame(t=>this.frame(t));const dt=Math.min((now-this.last)/1000,.1);this.last=now;if(!this.ready||document.hidden||document.body.hidden||!this.host.getClientRects().length){this.browseVisible=false;return;}this.resize();this.syncBrowsePose();const k=this.reduced?1:1-Math.exp(-dt*(this.liveSmoothingRate??13));if(this.demo)this.updateDemo(now);else this.updatePractice(now);this.audio.sync(now);if(this.introElapsed!=null){this.introElapsed+=dt;const u=Math.min(1,Math.max(0,(this.introElapsed-1)/2.2)),ease=u*u*u*(u*(u*6-15)+10),angle=Math.atan2(64,160)*ease,radius=Math.hypot(64,30,160),elevation=Math.atan2(30,Math.hypot(64,160))*ease;this.camera.position.set(Math.sin(angle)*Math.cos(elevation)*radius,Math.sin(elevation)*radius,Math.cos(angle)*Math.cos(elevation)*radius);this.orbit.target.set(0,0,0);if(u===1){this.camera.position.set(...views.front.p);this.introElapsed=null}}if(this.camGoal){const c=1-Math.exp(-dt*4.8);this.camera.position.lerp(this.camGoal.p,c);this.orbit.target.lerp(this.camGoal.t,c);if(this.camera.position.distanceTo(this.camGoal.p)<.03){this.camera.position.copy(this.camGoal.p);this.orbit.target.copy(this.camGoal.t);this.camGoal=null}}this.orbit.update();
  for(const [key,name] of buttonAliases){const o=this.nodes[name],b=this.base[name];if(!o)continue;const p=this.buttonPosition.copy(b.p),a=this.held.has(key)?1:0;if(name.startsWith('Button.Track'))p.y-=.00035*a;else if(name.startsWith('Button.Volume'))p.z+=.0003*a;else p.x-=.0005*a;o.position.lerp(p,k)}
@@ -143,10 +157,10 @@ export class Device {
  manualPress(key,on){if(on)this.audio.start();this.introElapsed=null;if(this.demo)this.onInteract({type:'takeover',control:key});if(this.demo)return;if(on){this.held.add(key);this.pressTimes.set(key,performance.now())}else{this.held.delete(key);this.pressTimes.delete(key)}if(key==='UP'||key==='DOWN')this.rockTarget=on?(key==='UP'?-1:1):0;this.sim.button(key,on);this.audio.command('button',key,on);this.onInteract({type:on?'press':'release',control:key});}
  setFader(n,v){this.introElapsed=null;if(this.demo)this.onInteract({type:'takeover',control:'F'+n});if(this.demo)return;this.faderValues[n-1]=v;this.sim.fader(n-1,v);this.audio.command('fader',n-1,v);}
  renderCues(){
- const now=performance.now(),active=new Set(this.held);if(this.demo)for(const n of Object.keys(this.demo.step.faders||{}))active.add('F'+n);for(const d of this.pointers.values())active.add(d.key);if(this.rockTarget)active.add('ROCKER');
+ const now=performance.now(),active=new Set(this.demo?this.demoCueKinds?.keys():this.held);if(this.demo)for(const key of this.demoFaders||[])active.add(key);for(const d of this.pointers.values())active.add(d.key);if(this.rockTarget)active.add('ROCKER');
  const kinds=new Map();
- for(const key of active){const pointer=[...this.pointers.values()].find(p=>p.key===key);const holding=this.demo?((this.demo.step.hold||[]).includes(key)||(key==='ROCKER'&&!!this.demo.step.rock)||this.gestureHolds?.has(key)):pointer?(now-pointer.start)>.25*1000:this.pressTimes.has(key)&&(now-this.pressTimes.get(key)>.25*1000);const kind=/^F[1-4]$/.test(key)?'slide':holding?'hold':'tap';kinds.set(key,kind);if(kind==='tap')this.cueTrail.set(key,now);else this.cueTrail.delete(key);}
- for(const [key,time] of this.cueTrail){if(now-time<1000){active.add(key);if(!kinds.has(key))kinds.set(key,'tap')}else this.cueTrail.delete(key);}
+ for(const key of active){if(this.demo){kinds.set(key,this.demoCueKinds?.get(key)||'hold');continue;}const pointer=[...this.pointers.values()].find(p=>p.key===key);const holding=this.demo?((this.demo.step.hold||[]).includes(key)||(key==='ROCKER'&&!!this.demo.step.rock)||this.gestureHolds?.has(key)):pointer?(now-pointer.start)>.25*1000:this.pressTimes.has(key)&&(now-this.pressTimes.get(key)>.25*1000);const kind=/^F[1-4]$/.test(key)?'slide':holding?'hold':'tap';kinds.set(key,kind);if(kind==='tap')this.cueTrail.set(key,now);else this.cueTrail.delete(key);}
+ for(const [key,time] of this.demo?[]:this.cueTrail){if(now-time<1000){active.add(key);if(!kinds.has(key))kinds.set(key,'tap')}else this.cueTrail.delete(key);}
  for(const key of active){const name=aliases[key]||(/^F[1-4]$/.test(key)?'Fader'+key[1]+'.Cap':key==='ROCKER'?'Rocker.Paddle':null);const o=this.nodes[name];if(!o)continue;let el=this.cues.get(key);if(!el){el=document.createElement('i');el.className='touch-cue';el.setAttribute('aria-hidden','true');this.host.append(el);this.cues.set(key,el)}
  const point=new T.Box3().setFromObject(o).getCenter(new T.Vector3()),normal=new T.Vector3(key==='FN'||key==='PLAY'?1:key==='ROCKER'?-1:0,key.startsWith('VOL')?1:0,aliases[key]?.startsWith('Button.Track')||/^F[1-4]$/.test(key)?1:0),direction=this.camera.position.clone().sub(point).normalize();
  el.dataset.kind=kinds.get(key)||'tap';

@@ -21,8 +21,10 @@ export function updateFxGuide(cards){
  {label:'Open Page 4',detail:'Hold FN + T4, then release both.',hold:['FN','T4'],tap:[],page:4,duration:2},
  {label:'Tone',detail:'Move F2 through the saved tone value. Center is flat.',hold:[],tap:[],faders:{2:.5},page:4,lane:2,amount:.5,pattern:'lane-depth',duration:2.5},
  {label:'Select Compression',detail:'Tap T2. Two flashes confirm Compression; tone stays set.',hold:[],tap:['T2'],page:4,lane:2,count:2,pattern:'lane-count',duration:2.5},
- {label:'Add compression',detail:'Move F2 to the bottom to pick up, then raise it for more compression.',hold:[],tap:[],faders:{2:.65},page:4,lane:2,amount:.65,pattern:'lane-depth',duration:3},
- {label:'Turn compression off',detail:'Lower F2 fully. Tap T2 again to return to Tone.',hold:[],tap:[],faders:{2:0},page:4,lane:2,amount:0,pattern:'lane-depth',duration:2.5}];
+ {label:'Pick up Compression',detail:'Lower F2 fully to pick up its saved zero.',hold:[],tap:[],faders:{2:0},page:4,lane:2,amount:0,pattern:'lane-depth',duration:2},
+ {label:'Add compression',detail:'Raise F2 for more compression. Tone stays set.',hold:[],tap:[],faders:{2:.65},page:4,lane:2,amount:.65,pattern:'lane-depth',duration:3},
+ {label:'Turn compression off',detail:'Lower F2 fully to turn compression off.',hold:[],tap:[],faders:{2:0},page:4,lane:2,amount:0,pattern:'lane-depth',duration:2.5},
+ {label:'Return to Tone',detail:'Tap T2 to return to Tone. Its saved value stays applied.',hold:[],tap:['T2'],faders:{},page:4,view:'tracks',duration:2}];
  for(const [id,effect,title] of secondaryLessons){
   const page=1+(effect>>2),lane=1+(effect&3),template=cards.find(c=>c.id==='echo-feedback');const c=structuredClone(template);c.id=id;c.title=title;c.group=`Page ${page} / Secondary controls`;c.gesture=`Page ${page}: hold T${lane} and move F${lane}`;c.body=`Hold T${lane} and move F${lane} to adjust ${title.toLowerCase()} without changing the main level.`;c.note='Release TRACK to return to the primary control; pick up its saved level.';c.secondaryTarget=[page,lane];
   c.steps=template.steps.map((step,index)=>{
@@ -46,7 +48,7 @@ export function updateFxGuide(cards){
 
 export function finishGuideAudit(cards){
  const removed=cards.findIndex(c=>c.id==='track-trim-reset-v4');if(removed>=0)cards.splice(removed,1);
- const walk=cards.find(c=>c.id==='walk-pages');Object.assign(walk,{title:'Move between pages',gesture:'Page open · VOL− / VOL+',body:'With any page open, press VOL− or VOL+ to move between Pages 1–8. Tap FN to close.',note:'The same controls move between rocker modes when the rocker page is open.'});
+ const walk=cards.find(c=>c.id==='walk-pages');Object.assign(walk,{title:'FX page navigation',gesture:'Page open · VOL− / VOL+',body:'With any page open, press VOL− or VOL+ to move between Pages 1–8. Tap FN to close.',note:'The same controls move between rocker modes when the rocker page is open.'});
  walk.steps=[{label:'Open Page 4',detail:'Hold FN + T4, then release both.',hold:['FN','T4'],tap:[],duration:1.4},{label:'Press VOL+',detail:'Page 5 opens. No FN needed.',hold:[],tap:['VOL+'],page:4,duration:1.4},{label:'Page 5',detail:'Use VOL− / VOL+ to move between pages. Tap FN to close.',hold:[],tap:[],page:5,duration:1.4}];
  for(const card of cards)for(const step of card.steps){
   if(step.label==='Hold FN; tap VOL+'){step.label='Press VOL+';step.hold=[];}
@@ -60,7 +62,7 @@ export function finishGuideAudit(cards){
  stopPage.steps[0].detail='With Page 2 open and Track 2 recording the copy, keep PLAY held.';
  const placement=cards.find(c=>c.id==='center-placement');
  placement.note='The all-track shortcut also resets FX.';
- cards.push({id:'beats-per-bar-v4',category:4,group:'Page 7 / Take & timing',title:'Choose beats per bar',gesture:'Page 7 · F3 = 3 / 4 / 5 / 7',body:'Hold FN + T4, then release. Press VOL+ three times for Page 7. Move F3 through its saved position, then select 3, 4, 5 or 7 beats per bar, bottom to top. Tap FN to close.',note:'Saved per song. The default is 4 beats per bar. T3 flashes the selected number of beats.',initialFaders:[.8,.8,.8,.8],steps:[
+ cards.push({id:'beats-per-bar-v4',category:4,group:'Page 7 / Take & timing',title:'Beats per bar',gesture:'Page 7 · F3 = 3 / 4 / 5 / 7',body:'Sets the bar length for the beat grid. Hold FN + T4, then release. Press VOL+ three times for Page 7. Move F3 through its saved position, then select 3, 4, 5 or 7 beats per bar, bottom to top. Tap FN to close.',note:'Saved per song. The default is 4 beats per bar. T3 flashes the selected number of beats.',initialFaders:[.8,.8,.8,.8],steps:[
  {label:'Open Page 4',detail:'Hold FN + T4, then release both.',hold:['FN','T4'],tap:[],view:'comboHold',duration:2,context:{playing:false,loaded:[1],grid:false}},
  {label:'Move to Page 5',detail:'Press VOL+. No FN needed.',hold:[],tap:['VOL+'],view:'top',duration:2},
  {label:'Move to Page 6',detail:'Press VOL+ again.',hold:[],tap:['VOL+'],view:'top',duration:2},

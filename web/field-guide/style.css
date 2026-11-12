@@ -151,3 +151,60 @@ html,body,body *,body *::before,body *::after{-webkit-tap-highlight-color:transp
 .new-effects h2{margin-top:0}
 .new-effects p{line-height:1.65}
 .new-effects a{color:var(--blue,#2365cf);text-underline-offset:.18em}
+
+/* Quiet Quickstart help, aligned with the fader disclosure. */
+.window-reset-help{margin:10px 0 0 45px;max-width:42rem}
+.window-reset-help .window-reset-hint{margin:0;font-size:12px;line-height:1.6;color:var(--muted,#637087)}
+.window-reset-help .context-show{font-size:12px;font-weight:500;min-height:36px;padding:5px 0}
+
+/* Local review: compact disclosures only in What's New. */
+.news-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:stretch}
+.news-card{min-width:0;border:1px solid var(--stroke,#dce3ee);border-radius:24px;background:var(--surface,#ffffffb3);overflow:hidden;box-shadow:0 5px 20px #182f5610}
+.news-card>summary{position:relative;display:block;list-style:none;cursor:pointer;padding:24px 48px 24px 24px;min-height:124px;box-sizing:border-box}
+.news-card>summary::-webkit-details-marker{display:none}
+.news-title{display:block;font-size:19px;font-weight:650;line-height:1.3;letter-spacing:-.4px;color:var(--ink,#202936)}
+.news-description{display:block;margin-top:9px;font-size:14px;line-height:1.55;color:var(--muted,#637087)}
+.news-chevron{position:absolute;right:25px;top:30px;width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);color:var(--muted,#637087);transition:transform .18s ease}
+.news-card[open]>summary .news-chevron{transform:rotate(225deg)}
+.news-card>summary:hover{background:#7e9bc609}
+.news-card>summary:focus-visible{outline:2px solid var(--blue,#2869dc);outline-offset:-4px;border-radius:23px}
+.news-modes{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
+.news-modes>span{font-size:11px;line-height:1.45;padding:4px 8px;border-radius:8px;background:#839dc312;color:var(--muted,#637087)}
+.news-content{padding:0 24px 24px;border-top:1px solid var(--line,#dce3ee)}
+.news-content>.tile{padding:20px 0 0;border:0;border-radius:0;background:none;box-shadow:none;margin:0}
+.news-content>.tile>.tile-heading h3{display:none}
+.news-content>.tile>.tile-heading{justify-content:flex-end;margin-bottom:8px}
+.news-content>.rocker-guide{padding:22px 0 0;margin:0;border:0;background:none;box-shadow:none}
+.news-content .rocker-heading .eyebrow,.news-content .rocker-heading h2{display:none}
+.news-content .new-effects{margin:18px 0 0;font-size:14px}
+.news-card[data-news="rockers"][open]{grid-column:1/-1}
+@media(max-width:640px){.news-grid{grid-template-columns:1fr}.news-card>summary{min-height:112px;padding:22px 44px 22px 22px}.news-content{padding:0 22px 22px}}
+@media(prefers-reduced-motion:reduce){.news-chevron{transition:none}}
+
+/* Expanded cards follow regular guide spacing; play stays in the title row. */
+.news-title-row{display:flex;align-items:center;justify-content:flex-start;gap:12px}
+.news-title-row>.watch-tile{position:static;flex:none;width:32px;height:32px;min-width:32px;min-height:32px;transform:none}
+.news-card:not([open]) .news-title-row>.watch-tile{display:none}
+.news-card[open]>summary{min-height:0;padding:20px 48px 14px 24px}
+.news-card[open]>summary .news-description,.news-card[open]>summary .news-modes{display:none}
+.news-card[open]>summary .news-chevron{top:33px}
+.news-content{border-top:0}
+.news-content>.tile{padding-top:0;transition:none;transform:none}
+.news-content>.tile:hover{transform:none}
+.news-content>.tile>.tile-heading{display:none}
+.news-content>.tile>.gesture{margin-top:0}
+.news-content>.rocker-guide{padding-top:0}
+.news-content .new-effects{margin-top:0}
+@media(max-width:640px){.news-card[open]>summary{padding:20px 44px 14px 22px}}
+
+/* Match the shared dark palette, including expanded nested content. */
+html[data-theme=dark] .news-card{background:var(--surface);border-color:var(--stroke);box-shadow:0 8px 28px #0002}
+html[data-theme=dark] .news-modes>span{background:#ffffff0a;color:var(--muted)}
+html[data-theme=dark] .news-card>summary:hover{background:#ffffff05}
+html[data-theme=dark] .news-content>:is(.tile,.rocker-guide){background:transparent!important;box-shadow:none!important;border:0!important}
+html[data-theme=dark] .news-content .new-effects a{color:var(--blue)}
+
+.news-static-heading{padding:24px 24px 14px}
+.news-static-heading h2.news-title{font-size:19px;line-height:1.3;margin:0}
+.news-effects-static .new-effects p{margin-top:0}
+@media(max-width:640px){.news-static-heading{padding:22px 22px 14px}}
