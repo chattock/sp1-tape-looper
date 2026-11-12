@@ -1,10 +1,44 @@
 {
+  "revision": "2026-11-12",
+  "firmware": "4.0",
+  "categories": [
+    {
+      "id": 1,
+      "title": "Start & record",
+      "short": "Start & record",
+      "subtitle": ""
+    },
+    {
+      "id": 2,
+      "title": "Shape the tape",
+      "short": "Shape the tape",
+      "subtitle": "Change speed, reshape a loop, or explore four heads."
+    },
+    {
+      "id": 3,
+      "title": "Effects",
+      "short": "Effects",
+      "subtitle": "Eight control pages. Every lane, gesture and route."
+    },
+    {
+      "id": 4,
+      "title": "Place & time",
+      "short": "Place & time",
+      "subtitle": "Stereo placement, take length, grid offset and nudge."
+    },
+    {
+      "id": 5,
+      "title": "Repeat & bounce",
+      "short": "Repeat & bounce",
+      "subtitle": "Catch a moment, then capture what you make of it."
+    }
+  ],
   "cards": [
     {
       "id": "connect",
       "category": 1,
       "group": "Connect & wake",
-      "title": "Connect your sound",
+      "title": "Audio inputs",
       "gesture": "USB-C or Bluetooth audio in",
       "body": "Select SP-1 as your computer or phone’s USB audio output, or pair it over Bluetooth. Both inputs can play together.",
       "note": "The headphone jack is an output. Bluetooth audio input is separate from the companion’s Bluetooth control connection.",
@@ -39,14 +73,14 @@
       "id": "power",
       "category": 1,
       "group": "Connect & wake",
-      "title": "Wake. Power off.",
+      "title": "Power",
       "gesture": "Hold FN · 1.5 s / 2.5 s",
       "body": "Hold FN about 1.5 seconds to wake. To power off, stop playback and hold FN about 2.5 seconds.",
       "note": "USB power can keep the charging gauge active.",
       "steps": [
         {
           "label": "Hold FN to wake",
-          "detail": "The side row fills during the 1.5-second hold. Track lights stay dark.",
+          "detail": "The side lights fill as SP-1 wakes.",
           "hold": [
             "FN"
           ],
@@ -60,7 +94,7 @@
         },
         {
           "label": "Release FN",
-          "detail": "After release and startup, the side row fills briefly, then clears.",
+          "detail": "Release to finish startup.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -72,7 +106,7 @@
         },
         {
           "label": "To power off, stop playback first",
-          "detail": "Keep FN held: side lights fill over 2.5 seconds, then clear. Track lights stay dark.",
+          "detail": "Hold FN for 2.5 seconds. The side lights fill, then clear.",
           "hold": [
             "FN"
           ],
@@ -86,7 +120,7 @@
         },
         {
           "label": "Release FN",
-          "detail": "The player is off. On battery, every light stays dark.",
+          "detail": "SP-1 is off.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -98,7 +132,7 @@
         },
         {
           "label": "While charging over USB",
-          "detail": "Example: three levels of charge. The last lit side LED blinks while charging.",
+          "detail": "The side lights show charge; the last lit LED blinks while charging.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -114,10 +148,10 @@
       "id": "first-loop",
       "category": 1,
       "group": "Your first loop",
-      "title": "Make your first loop",
+      "title": "Recording",
       "gesture": "Arm → send sound → tap to finish",
       "body": "Tap an empty track to arm it. Start your audio to begin recording. Tap the same track again to finish the loop, then raise its fader.",
-      "note": "While armed, tap PLAY to cancel and pause. Once recording starts, tap its track to finish.",
+      "note": "Without a grid, input sound starts recording; with a grid, recording follows its punch-in. Tap PLAY while armed to cancel and pause.",
       "steps": [
         {
           "label": "Tap T1 to arm it",
@@ -157,7 +191,7 @@
         },
         {
           "label": "Start your audio",
-          "detail": "Recording starts when input sound arrives. T1’s light turns solid.",
+          "detail": "Without a grid, input sound starts recording. T1 turns solid.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -226,9 +260,9 @@
       "id": "transport",
       "category": 1,
       "group": "Everyday controls",
-      "title": "Play. Stop. Restart.",
+      "title": "Playback controls",
       "gesture": "Tap PLAY · hold to restart",
-      "body": "Tap PLAY to start or stop. Hold PLAY, then release to restart.",
+      "body": "Tap PLAY to pause or resume. Hold PLAY for about half a second, then release to restart.",
       "note": "",
       "steps": [
         {
@@ -254,7 +288,7 @@
         },
         {
           "label": "Release",
-          "detail": "Start or stop playback.",
+          "detail": "Playback stays in its new state.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -273,7 +307,7 @@
         },
         {
           "label": "Hold PLAY for a restart",
-          "detail": "Keep PLAY held, then release to restart from the beginning.",
+          "detail": "Hold for about half a second, then release to restart.",
           "hold": [
             "PLAY"
           ],
@@ -317,14 +351,14 @@
       "id": "levels",
       "category": 1,
       "group": "Everyday controls",
-      "title": "Mix four tracks",
+      "title": "Track levels",
       "gesture": "F1–F4 = track levels",
-      "body": "Raise a fader to bring its track forward. Lower it to pull that track back.",
+      "body": "In track mode, raise a fader to bring its track forward; lower it to turn that track down.",
       "note": "",
       "steps": [
         {
           "label": "Find fader 1",
-          "detail": "Faders 1–4 always correspond to tracks 1–4 in the normal mix.",
+          "detail": "F1–F4 control tracks 1–4.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -370,7 +404,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "Raise F1 to bring track 1 back into the mix.",
+          "detail": "Raise F1 to restore its level.",
           "hold": [],
           "tap": [],
           "faders": {
@@ -420,7 +454,7 @@
       "id": "volume",
       "category": 1,
       "group": "Everyday controls",
-      "title": "Set the listening level",
+      "title": "Master volume",
       "gesture": "VOL− / VOL+",
       "body": "Use the two round buttons on the top edge to change master volume.",
       "note": "",
@@ -511,7 +545,7 @@
       "id": "mute",
       "category": 1,
       "group": "Everyday controls",
-      "title": "Mute. Restore.",
+      "title": "Track mute",
       "gesture": "Tap a loaded track",
       "body": "Tap a loaded track to mute it. Tap again to restore it.",
       "note": "Several track buttons can toggle their mutes together. Muting keeps the recorded audio.",
@@ -591,14 +625,14 @@
       "id": "takes-v4",
       "category": 1,
       "group": "Everyday controls",
-      "title": "Keep more than one take",
+      "title": "Unlimited takes",
       "gesture": "TRACK + ROCKER DOWN = saved takes · TRACK + ROCKER UP = New",
-      "body": "Hold a track and click ROCKER DOWN to cycle its recorded takes. ROCKER UP selects an empty New lane. Record normally there; your earlier takes stay saved. Each song and track has its own lane.",
-      "note": "Switch while playing or stopped. A New lane breathes when it has saved takes. Hold FN during playback to count the total takes on each track; the counts repeat together.",
+      "body": "Hold a track and click ROCKER DOWN to cycle its recorded takes. ROCKER UP selects an empty New lane. Record normally there; your earlier takes stay saved. Each song and track has its own lane. Takes are limited by available storage.",
+      "note": "Close control pages and leave four-head mode before switching takes. Switch while playing or stopped. A New lane breathes when saved takes exist. Hold FN during playback to count takes.",
       "steps": [
         {
           "label": "Choose New",
-          "detail": "In normal track mode, hold T1 and click ROCKER UP. Your current take stays saved.",
+          "detail": "Hold T1 and click ROCKER UP. Your current take stays saved.",
           "hold": [
             "T1"
           ],
@@ -612,15 +646,14 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
         },
         {
           "label": "Record another version",
-          "detail": "Release both controls, then tap T1 to arm the empty lane. Tap again to finish.",
+          "detail": "Release both, then tap T1 to arm. Tap again to finish.",
           "hold": [],
           "tap": [
             "T1"
@@ -634,15 +667,14 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
         },
         {
           "label": "Browse saved takes",
-          "detail": "Hold T1 and click ROCKER DOWN for each take. Switching follows the running song position.",
+          "detail": "Hold T1 and click ROCKER DOWN to cycle takes at the running song position.",
           "hold": [
             "T1"
           ],
@@ -656,15 +688,14 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
         },
         {
           "label": "Preview the totals",
-          "detail": "During playback, hold FN. Each track LED counts its total saved takes, including when on New.",
+          "detail": "During playback, hold FN. Each track light counts its saved takes.",
           "hold": [
             "FN"
           ],
@@ -678,8 +709,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
@@ -691,14 +721,14 @@
       "id": "replace",
       "category": 1,
       "group": "Everyday controls",
-      "title": "Overdub the current take",
+      "title": "Overdub",
       "gesture": "Hold TRACK · release · tap TRACK",
       "body": "Hold a loaded track for 0.6 seconds to prepare overdub. Release, then tap it within 10 seconds to arm. Tap again to finish.",
       "note": "The earlier take stays saved in this track’s lane. TRACK + ROCKER DOWN finds it after the new recording is saved. Tap FN to cancel preparation.",
       "steps": [
         {
           "label": "Hold the loaded track",
-          "detail": "Hold for 0.6 seconds. This prepares overdub; it does not start recording.",
+          "detail": "Hold for 0.6 seconds to prepare overdub.",
           "hold": [
             "T1"
           ],
@@ -712,8 +742,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           },
@@ -721,7 +750,7 @@
         },
         {
           "label": "Release the track",
-          "detail": "The confirmation window lasts 10 seconds.",
+          "detail": "Tap the track within 10 seconds to arm overdub.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -733,8 +762,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           },
@@ -756,8 +784,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           },
@@ -765,7 +792,7 @@
         },
         {
           "label": "Tap T1 to finish",
-          "detail": "The new result is saved as another take; the earlier audio remains available.",
+          "detail": "The overdub becomes another take; the earlier take stays saved.",
           "hold": [],
           "tap": [
             "T1"
@@ -779,8 +806,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           },
@@ -793,7 +819,7 @@
       "id": "delete",
       "category": 1,
       "group": "Everyday controls",
-      "title": "Delete a take",
+      "title": "Take deletion",
       "gesture": "Double-tap; hold the second press",
       "body": "Double-tap the track, holding the second press until deletion is acknowledged. This removes the selected take; other takes remain.",
       "note": "If the track is still saving, wait for saving to finish and try again. TRACK + ROCKER DOWN finds the remaining takes.",
@@ -819,7 +845,7 @@
         },
         {
           "label": "The track is empty",
-          "detail": "Its light goes dark.",
+          "detail": "The track light goes dark; other takes stay saved.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -840,7 +866,7 @@
       "id": "songs",
       "category": 1,
       "group": "Songs & settings",
-      "title": "Find a song",
+      "title": "Banks & songs",
       "gesture": "Hold FN + tap T1–T4",
       "body": "Choose a bank with T1–T4. Repeat the same button to step through that bank’s four songs.",
       "note": "Use this from normal track mode. A longer FN + track hold opens a page instead.",
@@ -848,9 +874,7 @@
         {
           "label": "Hold FN",
           "detail": "Keep FN held.",
-          "hold": [
-            "FN"
-          ],
+          "hold": [],
           "tap": [],
           "faders": {},
           "rock": 0,
@@ -910,10 +934,8 @@
         },
         {
           "label": "Read the song lights",
-          "detail": "Solid identifies the bank; blinking identifies the song.",
-          "hold": [
-            "FN"
-          ],
+          "detail": "When stopped, solid shows the bank; blinking shows the song.",
+          "hold": [],
           "tap": [],
           "faders": {},
           "rock": 0,
@@ -935,14 +957,14 @@
       "id": "loop-mode",
       "category": 1,
       "group": "Songs & settings",
-      "title": "Fixed or variable loops",
-      "gesture": "Briefly hold FN + PLAY; release",
-      "body": "Briefly hold FN + PLAY, then release both to switch loop length mode.",
+      "title": "Fixed & variable loops",
+      "gesture": "Hold FN + PLAY · about 0.5 s, then release",
+      "body": "Hold FN + PLAY for about half a second, then release both to switch Fixed / Variable.",
       "note": "Fixed rounds each take to a whole multiple of the base loop, keeping tracks aligned. Variable preserves each recorded length, so tracks can cycle independently. The side lights confirm your choice.",
       "steps": [
         {
           "label": "Hold FN + PLAY",
-          "detail": "Hold briefly, then release both to switch modes.",
+          "detail": "Hold both for about half a second, then release to switch modes.",
           "hold": [
             "FN",
             "PLAY"
@@ -985,7 +1007,7 @@
         },
         {
           "label": "Repeat the same gesture",
-          "detail": "Hold FN + PLAY, then release both to switch back.",
+          "detail": "Hold FN + PLAY for about half a second, then release to switch back.",
           "hold": [
             "FN",
             "PLAY"
@@ -1032,14 +1054,14 @@
       "id": "brightness",
       "category": 1,
       "group": "Songs & settings",
-      "title": "Adjust LED brightness",
+      "title": "LED brightness",
       "gesture": "Hold FN + PLAY · 5 s",
       "body": "Keep FN + PLAY held through five seconds. The lights change while you hold.",
       "note": "This longer hold leaves loop length mode unchanged.",
       "steps": [
         {
           "label": "Keep FN + PLAY held",
-          "detail": "Wait through five seconds.",
+          "detail": "Hold FN + PLAY for five seconds.",
           "hold": [
             "FN",
             "PLAY"
@@ -1074,10 +1096,10 @@
       "id": "speed",
       "category": 2,
       "group": "Speed & pitch",
-      "title": "Change speed & pitch",
+      "title": "Speed & pitch",
       "gesture": "Rocker: click / double-click / hold",
       "body": "Click for a speed step, double-click for a semitone, or hold to sweep. Pitch follows speed.",
-      "note": "Tape speed ranges from 0.25× to 2×.",
+      "note": "Pitch / speed mode: 0.25×–2×. Input recording locks speed; bounces allow speed moves.",
       "steps": [
         {
           "label": "Click the rocker up",
@@ -1161,14 +1183,14 @@
       "id": "normal-speed",
       "category": 2,
       "group": "Speed & pitch",
-      "title": "Return to 1×",
+      "title": "Speed reset",
       "gesture": "Hold FN + double-tap PLAY",
       "body": "Hold FN and tap PLAY twice. The tape returns to its normal speed.",
-      "note": "Also restores rocker tape transformations, including Magnet and Scissors. Recordings and effect-page settings stay intact.",
+      "note": "Also clears Magnet gaps and Scissors cuts. Recordings, FX settings and the selected rocker mode stay unchanged.",
       "steps": [
         {
           "label": "Hold FN",
-          "detail": "Example starts at half speed. Keep it held for both taps.",
+          "detail": "Keep FN held for both taps.",
           "hold": [
             "FN"
           ],
@@ -1233,10 +1255,10 @@
       "id": "octave",
       "category": 2,
       "group": "Speed & pitch",
-      "title": "Jump an octave",
+      "title": "Octave jumps",
       "gesture": "Hold FN + PLAY + rocker",
       "body": "With FN and PLAY held, click down for an octave lower or up for an octave higher.",
-      "note": "A step outside the tape-speed range does nothing.",
+      "note": "No jump outside 0.25×–2×. Speed changes are locked during input recording; bounces allow them.",
       "steps": [
         {
           "label": "Hold FN + PLAY",
@@ -1262,7 +1284,7 @@
         },
         {
           "label": "Press the rocker down briefly",
-          "detail": "1× → 0.5×: one octave down.",
+          "detail": "Halve the speed: one octave down.",
           "hold": [
             "FN",
             "PLAY"
@@ -1285,7 +1307,7 @@
         },
         {
           "label": "Press the rocker up briefly",
-          "detail": "0.5× → 1×: back up one octave.",
+          "detail": "Double the speed: one octave up.",
           "hold": [
             "FN",
             "PLAY"
@@ -1331,7 +1353,7 @@
       "id": "chop",
       "category": 2,
       "group": "Chop & window",
-      "title": "Shorten the loop window",
+      "title": "Loop window length",
       "gesture": "Hold FN + rocker",
       "body": "Up halves the window. Down doubles it. Hold to keep stepping.",
       "note": "The chop stays inside your fader-set region.",
@@ -1424,14 +1446,14 @@
       "id": "move-window",
       "category": 2,
       "group": "Chop & window",
-      "title": "Move the window",
+      "title": "Loop window position",
       "gesture": "Hold FN + VOL− / VOL+",
       "body": "Step the chop earlier or later through your region.",
-      "note": "With a page open, this same chord walks pages instead.",
+      "note": "To move the window home without changing its size or direction, hold FN + PLAY and press VOL+. With a page open, FN + VOL− / VOL+ moves between pages.",
       "steps": [
         {
           "label": "Hold FN",
-          "detail": "A quarter-loop chop is already playing. Keep FN held.",
+          "detail": "Keep FN held while moving the loop window.",
           "hold": [
             "FN"
           ],
@@ -1498,7 +1520,7 @@
       "id": "four-faders",
       "category": 2,
       "group": "Chop & window",
-      "title": "One window. Four faders.",
+      "title": "Loop window controls",
       "gesture": "FN + F1 / F2 / F3 / F4",
       "body": "F1 = start. F2 = end. F3 = position. F4 = size / zoom.",
       "note": "Edits start from the audible window. F4 down tightens; top restores the region set by F1–F3. Re-gripping FN preserves that region.",
@@ -1550,7 +1572,7 @@
         },
         {
           "label": "F3: position",
-          "detail": "Slide the region without changing its width.",
+          "detail": "Slide the section without changing its length.",
           "hold": [
             "FN"
           ],
@@ -1573,7 +1595,7 @@
         },
         {
           "label": "F4: size / zoom",
-          "detail": "Down tightens around the center.",
+          "detail": "Lower F4 to shorten the section around its center.",
           "hold": [
             "FN"
           ],
@@ -1596,7 +1618,7 @@
         },
         {
           "label": "F4 back to the top",
-          "detail": "Restore the region set by F1–F3.",
+          "detail": "Restore the section set by F1–F3.",
           "hold": [
             "FN"
           ],
@@ -1642,9 +1664,9 @@
       "id": "cross-edges",
       "category": 2,
       "group": "Chop & window",
-      "title": "Reverse the window",
+      "title": "Loop window reverse",
       "gesture": "FN + cross F1 past F2",
-      "body": "Hold FN and move F1—the start—past the end set by F2 to reverse the window.",
+      "body": "Hold FN and move F1 (the start) past the end set by F2 to reverse the window.",
       "note": "Crossing edges during a beat repeat does not reverse it.",
       "steps": [
         {
@@ -1717,14 +1739,14 @@
       "id": "reset-window",
       "category": 2,
       "group": "Chop & window",
-      "title": "Whole loop or home",
-      "gesture": "FN + PLAY + VOL− / VOL+",
-      "body": "VOL− resets to the whole loop, forwards. VOL+ returns home while keeping chop size and direction.",
-      "note": "Use outside a repeat. Reset clears window reverse; per-track reverse stays. During repeat, the volume buttons move its window.",
+      "title": "Reset loop controls",
+      "gesture": "Hold FN + PLAY · press VOL−",
+      "body": "Hold FN + PLAY and press VOL− to restore full loops and default timing.",
+      "note": "Clears loop-window edits, song/track trims and timing offsets. Take length returns to OFF; beats per bar to 4. Recordings, FX and per-track reverse stay unchanged.",
       "steps": [
         {
           "label": "Hold FN + PLAY",
-          "detail": "A reversed quarter-loop window is already playing. Keep FN + PLAY held.",
+          "detail": "Keep both held while restoring the loop controls.",
           "hold": [
             "FN",
             "PLAY"
@@ -1745,8 +1767,8 @@
           }
         },
         {
-          "label": "Press VOL−",
-          "detail": "Whole loop, forwards.",
+          "label": "Press VOL− to reset",
+          "detail": "Full loops return; trims and timing offsets clear. Take length OFF; beats per bar 4.",
           "hold": [
             "FN",
             "PLAY"
@@ -1770,72 +1792,7 @@
         },
         {
           "label": "Release the controls",
-          "detail": "",
-          "hold": [],
-          "tap": [],
-          "faders": {},
-          "rock": 0,
-          "view": "top",
-          "lights": [],
-          "pattern": null,
-          "duration": 1.5,
-          "context": {
-            "playing": true,
-            "loaded": [
-              1
-            ],
-            "grid": false
-          }
-        },
-        {
-          "label": "Hold FN + PLAY",
-          "detail": "For this second example, a quarter-loop chop starts away from home.",
-          "hold": [
-            "FN",
-            "PLAY"
-          ],
-          "tap": [],
-          "faders": {},
-          "rock": 0,
-          "view": "top",
-          "lights": [],
-          "pattern": null,
-          "duration": 1.5,
-          "context": {
-            "playing": true,
-            "loaded": [
-              1
-            ],
-            "grid": false
-          }
-        },
-        {
-          "label": "Press VOL+",
-          "detail": "Home, with chop size kept.",
-          "hold": [
-            "FN",
-            "PLAY"
-          ],
-          "tap": [
-            "VOL+"
-          ],
-          "faders": {},
-          "rock": 0,
-          "view": "top",
-          "lights": [],
-          "pattern": null,
-          "duration": 2.8,
-          "context": {
-            "playing": true,
-            "loaded": [
-              1
-            ],
-            "grid": false
-          }
-        },
-        {
-          "label": "Release the controls",
-          "detail": "",
+          "detail": "Release both. Recordings and FX stay unchanged.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -1858,9 +1815,9 @@
       "id": "reverse",
       "category": 2,
       "group": "Reverse or isolate",
-      "title": "Reverse one track",
+      "title": "Track reverse",
       "gesture": "FN + track first → tap PLAY",
-      "body": "Hold FN + the track button first, then tap PLAY before its page opens. Repeat to reverse back.",
+      "body": "With control pages closed, hold FN + the track button first, then tap PLAY before its page opens. Repeat to reverse back.",
       "note": "Press order matters. FN + PLAY first, then the track, isolates instead.",
       "steps": [
         {
@@ -1907,14 +1864,14 @@
       "id": "isolate",
       "category": 2,
       "group": "Reverse or isolate",
-      "title": "Momentarily isolate",
+      "title": "Track isolation",
       "gesture": "FN + PLAY first → track",
-      "body": "Hold FN + PLAY first. Then press the track you want to hear alone.",
+      "body": "With control pages closed, hold FN + PLAY first, then press the track to hear alone. Release the track to restore the mix.",
       "note": "Release the track to restore the previous mutes.",
       "steps": [
         {
           "label": "Hold FN + PLAY first",
-          "detail": "Four recorded parts are already playing. Order chooses isolate.",
+          "detail": "Hold FN + PLAY before pressing a track.",
           "hold": [
             "FN",
             "PLAY"
@@ -1970,7 +1927,7 @@
         },
         {
           "label": "Release T1",
-          "detail": "Previous mutes return.",
+          "detail": "Restore the previous track mutes.",
           "hold": [
             "FN",
             "PLAY"
@@ -2021,9 +1978,9 @@
       "id": "heads",
       "category": 2,
       "group": "Four heads, one loop",
-      "title": "Enter four-head mode",
+      "title": "Four-head mode",
       "gesture": "Hold FN + triple-tap PLAY",
-      "body": "Start with a loop playing in normal track mode. Hold FN and triple-tap PLAY. Repeat to exit.",
+      "body": "Hold FN and triple-tap PLAY while a loop plays. Hold FN and move a fader to position its head; release FN to mix head levels.",
       "note": "Faders set head levels, track taps mute, and FN + faders set head positions.",
       "steps": [
         {
@@ -2070,7 +2027,7 @@
         },
         {
           "label": "Release",
-          "detail": "Example: quarter-spaced heads. Empty destination heads pulse dimly.",
+          "detail": "Faders control head levels; empty heads pulse dimly.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -2087,6 +2044,72 @@
             "grid": false,
             "heads": true
           }
+        },
+        {
+          "label": "Hold FN",
+          "detail": "Keep FN held to position the heads.",
+          "hold": [
+            "FN"
+          ],
+          "tap": [],
+          "faders": {},
+          "rock": 0,
+          "view": "faders",
+          "lights": [],
+          "pattern": null,
+          "duration": 2.5,
+          "context": {
+            "playing": true,
+            "loaded": [
+              1
+            ],
+            "grid": false,
+            "heads": true
+          }
+        },
+        {
+          "label": "Move F2",
+          "detail": "Keep FN held and move F2 to position head 2.",
+          "hold": [
+            "FN"
+          ],
+          "tap": [],
+          "faders": {
+            "2": 0.12
+          },
+          "rock": 0,
+          "view": "faders",
+          "lights": [],
+          "pattern": null,
+          "duration": 2.5,
+          "context": {
+            "playing": true,
+            "loaded": [
+              1
+            ],
+            "grid": false,
+            "heads": true
+          }
+        },
+        {
+          "label": "Release FN",
+          "detail": "Faders now control head levels again. Tap a track to mute its head.",
+          "hold": [],
+          "tap": [],
+          "faders": {},
+          "rock": 0,
+          "view": "faders",
+          "lights": [],
+          "pattern": null,
+          "duration": 2.5,
+          "context": {
+            "playing": true,
+            "loaded": [
+              1
+            ],
+            "grid": false,
+            "heads": true
+          }
         }
       ]
     },
@@ -2094,14 +2117,14 @@
       "id": "head-source",
       "category": 2,
       "group": "Four heads, one loop",
-      "title": "Move heads. Change source.",
+      "title": "Head positions & source",
       "gesture": "FN + faders · hold a loaded track",
       "body": "In heads mode, FN + faders positions the heads. Hold another loaded track to make it the source.",
       "note": "",
       "steps": [
         {
           "label": "Hold FN",
-          "detail": "Two different recorded tracks are loaded; four-head mode is already on. FN + F2 sets its position.",
+          "detail": "In four-head mode, keep FN held to position a head.",
           "hold": [
             "FN"
           ],
@@ -2124,7 +2147,7 @@
         },
         {
           "label": "Move head 2",
-          "detail": "FN + F2 sets its position.",
+          "detail": "Move F2 to position head 2.",
           "hold": [
             "FN"
           ],
@@ -2149,7 +2172,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "FN + F2 sets its position.",
+          "detail": "Raise F2 to move head 2 back.",
           "hold": [
             "FN"
           ],
@@ -2243,7 +2266,7 @@
       "id": "grid",
       "category": 1,
       "group": "Tap a beat grid",
-      "title": "Tap a beat grid",
+      "title": "Beat grid",
       "gesture": "Tap FN 4+ times",
       "body": "From normal track mode, tap FN at least four times in time. Start on the downbeat.",
       "note": "Fresh taps align recording to beats. The saved grid follows the loop; tape speed changes its tempo.",
@@ -2288,14 +2311,14 @@
       "id": "clear-grid",
       "category": 1,
       "group": "Tap a beat grid",
-      "title": "Clear the beat grid",
+      "title": "Beat grid reset",
       "gesture": "Tap FN → press again and hold · ~1 s",
       "body": "Tap FN, then quickly press it again and hold about one second to clear the beat grid.",
-      "note": "The four TRACK lights briefly turn solid. Your recorded audio stays in place.",
+      "note": "Solid track lights confirm. Recordings and the song’s beats-per-bar setting stay unchanged.",
       "steps": [
         {
           "label": "Clear the grid",
-          "detail": "Tap, quickly press again, then hold about 1 second.",
+          "detail": "Tap FN, quickly press it again, then hold about one second to clear the grid.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -2311,14 +2334,14 @@
       "id": "round-grid",
       "category": 1,
       "group": "Tap a beat grid",
-      "title": "Round to the nearest whole BPM",
+      "title": "Whole-BPM rounding",
       "gesture": "Tap FN 4+ times → hold FN · ~1 s",
       "body": "Tap FN at least four times in time, then press and hold FN about one second to round the tapped tempo to the nearest whole BPM. For example: 119.8 to 120 BPM.",
-      "note": "Sweep = rounding succeeded. Shrug = no rounding applied; the tempo stays unchanged.",
+      "note": "Near-whole tempos round within 0.4 BPM, from 50–200 BPM. A sweep confirms rounding; all-four flashes mean no change.",
       "steps": [
         {
           "label": "Tap a new tempo",
-          "detail": "Tap FN at least four times in time. This example rounds 119.8 to 120 BPM.",
+          "detail": "Tap FN at least four times in time.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -2330,7 +2353,7 @@
         },
         {
           "label": "Hold FN to round",
-          "detail": "After tapping, press and hold FN about one second to round to the nearest whole BPM.",
+          "detail": "Hold FN for about one second to round to the nearest whole BPM.",
           "hold": [
             "FN"
           ],
@@ -2356,7 +2379,7 @@
         },
         {
           "label": "Sweep: rounding succeeded",
-          "detail": "The track lights sweep out and back: 119.8 BPM rounded to 120 BPM.",
+          "detail": "The track lights sweep out and back to confirm rounding.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -2398,7 +2421,7 @@
       "id": "open-page",
       "category": 3,
       "group": "Pages & pickup",
-      "title": "Open an effects page",
+      "title": "FX pages",
       "gesture": "Hold FN + a track button",
       "body": "Hold FN with a track button. Release both after the page opens. The page stays open.",
       "note": "T1–T4 opens Pages 1–4. Tap FN to close.",
@@ -2525,7 +2548,7 @@
       "id": "walk-pages",
       "category": 3,
       "group": "Pages & pickup",
-      "title": "Move between pages",
+      "title": "FX page navigation",
       "gesture": "Page open · VOL− / VOL+",
       "body": "With any page open, press VOL− or VOL+ to move between Pages 1–8. Tap FN to close.",
       "note": "The same controls move between rocker modes when the rocker page is open.",
@@ -2564,14 +2587,14 @@
       "id": "pickup",
       "category": 3,
       "group": "Pages & pickup",
-      "title": "Make the fader respond",
+      "title": "Fader pickup",
       "gesture": "Cross its stored value",
       "body": "Pickup prevents a parameter jump when you enter, leave or reset a page. Move through the stored value to take control.",
       "note": "Move through the stored value before a fader takes control. FN window edits respond to deliberate movement instead.",
       "steps": [
         {
           "label": "Find fader 1",
-          "detail": "This example starts with the stored setting at the center.",
+          "detail": "Move the fader through the stored value to take control.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -2591,7 +2614,7 @@
         },
         {
           "label": "Cross the stored value",
-          "detail": "Move through the center to take control of the effect.",
+          "detail": "Cross the saved value to take control of the effect.",
           "hold": [],
           "tap": [],
           "faders": {
@@ -2848,7 +2871,7 @@
       "title": "Chorus / Flanger",
       "gesture": "F2 · T2 type",
       "body": "Move F2 for depth. Tap T2 to switch Chorus / Flanger. Lower F2 to turn it off.",
-      "note": "Hold T2 and move F2 for span. Tap a rate with FN + T2, at least twice.",
+      "note": "Hold T2 and move F2 for span. Hold FN and tap T2 at least twice in time to set its rate.",
       "steps": [
         {
           "label": "Hold FN + T1",
@@ -3129,7 +3152,7 @@
         },
         {
           "label": "Page 1 is open",
-          "detail": "The side lights identify Page 1. This example starts on soft.",
+          "detail": "The side lights identify Page 1.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -3370,7 +3393,7 @@
       "title": "Gate",
       "gesture": "F4 · T4 pattern",
       "body": "Move F4 for depth. Tap T4 to cycle Gallop / Halves / Slow gear. Slow gear fades into incoming notes. Lower F4 to turn it off.",
-      "note": "Tap a rate with FN + T4, at least twice.",
+      "note": "Hold FN and tap T4 at least twice in time to set its rate.",
       "steps": [
         {
           "label": "Hold FN + T1",
@@ -3415,7 +3438,7 @@
         },
         {
           "label": "Page 1 is open",
-          "detail": "The side lights identify Page 1. This example starts on gallop.",
+          "detail": "The side lights identify Page 1.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -4288,8 +4311,8 @@
       "group": "Page 2 / FX 2",
       "title": "Echo",
       "gesture": "F4 · T4 division",
-      "body": "Tap T4 to cycle 1/16 → dotted → 1/8. F4 sets the amount. Lower F4 fully to turn it off.",
-      "note": "Hold T4 and move F4 for echo feedback. Tap a rate with FN + T4, at least twice.",
+      "body": "Tap T4 to cycle 1/16 → dotted 1/16 → 1/8. F4 sets the amount; lower it fully to turn echo off.",
+      "note": "Hold T4 and move F4 for echo feedback. Hold FN and tap T4 at least twice in time to set its rate. A plain track tap clears its tapped rate.",
       "steps": [
         {
           "label": "Hold FN + T2",
@@ -4443,7 +4466,7 @@
           }
         },
         {
-          "label": "Tap T4: dotted",
+          "label": "Tap T4: dotted 1/16",
           "detail": "T4 confirms the selected setting.",
           "hold": [],
           "tap": [
@@ -4568,7 +4591,7 @@
       "title": "Phaser",
       "gesture": "F1 · T1 division",
       "body": "Tap T1 to cycle beat → half → quarter. F1 sets the amount. Lower F1 fully to turn it off.",
-      "note": "Hold T1 and move F1 for phaser feedback. Tap a rate with FN + T1, at least twice.",
+      "note": "Hold T1 and move F1 for phaser feedback. Hold FN and tap T1 at least twice in time to set its rate. A plain track tap clears its tapped rate.",
       "steps": [
         {
           "label": "Hold FN + T3",
@@ -4613,7 +4636,7 @@
         },
         {
           "label": "Page 3 is open",
-          "detail": "The side lights identify Page 3. This example starts on beat.",
+          "detail": "The side lights identify Page 3.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -4847,7 +4870,7 @@
       "title": "Sweep",
       "gesture": "F2 · T2 division",
       "body": "Tap T2 to cycle beat → half → quarter. F2 sets the amount. Lower F2 fully to turn it off.",
-      "note": "Tap a rate with FN + T2, at least twice.",
+      "note": "Hold FN and tap T2 at least twice in time to set its rate. A plain track tap clears its tapped rate.",
       "steps": [
         {
           "label": "Hold FN + T3",
@@ -4892,7 +4915,7 @@
         },
         {
           "label": "Page 3 is open",
-          "detail": "The side lights identify Page 3. This example starts on beat.",
+          "detail": "The side lights identify Page 3.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -5126,7 +5149,7 @@
       "title": "Tremolo",
       "gesture": "F3 · T3 division",
       "body": "Tap T3 to cycle beat → half → quarter. F3 sets the amount. Lower F3 fully to turn it off.",
-      "note": "Hold T3 and move F3 for tremolo shape. Hold T3 and move F4 for stereo spread. Tap a rate with FN + T3, at least twice.",
+      "note": "Hold T3 and move F3 for tremolo shape. Hold T3 and move F4 for stereo spread. Hold FN and tap T3 at least twice in time to set its rate. A plain track tap clears its tapped rate.",
       "steps": [
         {
           "label": "Hold FN + T3",
@@ -5171,7 +5194,7 @@
         },
         {
           "label": "Page 3 is open",
-          "detail": "The side lights identify Page 3. This example starts on beat.",
+          "detail": "The side lights identify Page 3.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -5280,6 +5303,37 @@
           }
         },
         {
+          "label": "Tap T3: beat",
+          "detail": "T3 confirms the selected setting.",
+          "hold": [],
+          "tap": [
+            "T3"
+          ],
+          "faders": {},
+          "rock": 0,
+          "view": "trackLights",
+          "lights": [],
+          "pattern": "lane-count",
+          "duration": 2.5,
+          "page": 3,
+          "lane": 3,
+          "count": 1,
+          "amount": 0.9,
+          "context": {
+            "playing": true,
+            "loaded": [
+              1
+            ],
+            "grid": false
+          },
+          "slowConfirmation": {
+            "scale": 4,
+            "length": 0.08,
+            "start": 1.8
+          },
+          "seconds": 5
+        },
+        {
           "label": "Tap T3: half",
           "detail": "T3 confirms the selected setting.",
           "hold": [],
@@ -5337,37 +5391,6 @@
           "slowConfirmation": {
             "scale": 4,
             "length": 0.24,
-            "start": 1.8
-          },
-          "seconds": 5
-        },
-        {
-          "label": "Tap T3: beat",
-          "detail": "T3 confirms the selected setting.",
-          "hold": [],
-          "tap": [
-            "T3"
-          ],
-          "faders": {},
-          "rock": 0,
-          "view": "trackLights",
-          "lights": [],
-          "pattern": "lane-count",
-          "duration": 2.5,
-          "page": 3,
-          "lane": 3,
-          "count": 1,
-          "amount": 0.9,
-          "context": {
-            "playing": true,
-            "loaded": [
-              1
-            ],
-            "grid": false
-          },
-          "slowConfirmation": {
-            "scale": 4,
-            "length": 0.08,
             "start": 1.8
           },
           "seconds": 5
@@ -5868,8 +5891,22 @@
           "duration": 2.5
         },
         {
+          "label": "Pick up Compression",
+          "detail": "Lower F2 fully to pick up its saved zero.",
+          "hold": [],
+          "tap": [],
+          "faders": {
+            "2": 0
+          },
+          "page": 4,
+          "lane": 2,
+          "amount": 0,
+          "pattern": "lane-depth",
+          "duration": 2
+        },
+        {
           "label": "Add compression",
-          "detail": "Move F2 to the bottom to pick up, then raise it for more compression.",
+          "detail": "Raise F2 for more compression. Tone stays set.",
           "hold": [],
           "tap": [],
           "faders": {
@@ -5883,7 +5920,7 @@
         },
         {
           "label": "Turn compression off",
-          "detail": "Lower F2 fully. Tap T2 again to return to Tone.",
+          "detail": "Lower F2 fully to turn compression off.",
           "hold": [],
           "tap": [],
           "faders": {
@@ -5894,6 +5931,18 @@
           "amount": 0,
           "pattern": "lane-depth",
           "duration": 2.5
+        },
+        {
+          "label": "Return to Tone",
+          "detail": "Tap T2 to return to Tone. Its saved value stays applied.",
+          "hold": [],
+          "tap": [
+            "T2"
+          ],
+          "faders": {},
+          "page": 4,
+          "view": "tracks",
+          "duration": 2
         }
       ]
     },
@@ -5989,7 +6038,7 @@
         },
         {
           "label": "Move F3",
-          "detail": "Move F3 below center for vinyl crackle.",
+          "detail": "Move F3 down through its saved level to take control.",
           "hold": [],
           "tap": [],
           "faders": {
@@ -6013,7 +6062,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "Move F3 above center for hiss.",
+          "detail": "Raise F3 to add more of the selected noise.",
           "hold": [],
           "tap": [],
           "faders": {
@@ -6190,7 +6239,7 @@
       "title": "Wobble",
       "gesture": "F4 · T4 type",
       "body": "Move F4 for depth. Tap T4 to cycle Wow + flutter / Wow / Flutter. Lower F4 to turn it off.",
-      "note": "Tap a rate with FN + T4, at least twice.",
+      "note": "Hold FN and tap T4 at least twice in time to set its rate. A plain track tap clears its tapped rate.",
       "steps": [
         {
           "label": "Hold FN + T4",
@@ -6448,14 +6497,14 @@
       "id": "tap-rate",
       "category": 3,
       "group": "Pages & pickup",
-      "title": "Tap or clear an FX rate",
-      "gesture": "Hold FN + tap the lane 2+ times",
-      "body": "On its page, hold FN and tap the rate-enabled lane at least twice.",
-      "note": "Clear a tapped rate on its page with FN + PLAY + that track. Supported lanes: P1 T2/T4; P2 T4; P3 T1/T2/T3; P4 T4.",
+      "title": "FX tap tempo",
+      "gesture": "On the FX page: hold FN + tap TRACK 2+ times",
+      "body": "Open the effect’s page. Hold FN and tap its TRACK button at least twice in time to set its rate.",
+      "note": "To clear the tapped rate, hold FN + PLAY and tap its TRACK button. Rate controls: P1 T2/T4; P2 T4; P3 T1/T2/T3; P4 T4.",
       "steps": [
         {
           "label": "Hold FN",
-          "detail": "Example: Page 2 echo, T4.",
+          "detail": "On Page 2, hold FN to tap echo’s rate.",
           "hold": [
             "FN"
           ],
@@ -6477,7 +6526,7 @@
         },
         {
           "label": "Tap T4 in time",
-          "detail": "At least two taps.",
+          "detail": "Keep FN held and tap T4 at least twice in time.",
           "hold": [
             "FN"
           ],
@@ -6498,8 +6547,8 @@
           "page": 2
         },
         {
-          "label": "To clear: FN + PLAY, then T4",
-          "detail": "Use on that effect’s page.",
+          "label": "Clear tapped tempo",
+          "detail": "On the same page, hold FN + PLAY and tap T4 to clear its tapped rate.",
           "hold": [
             "FN",
             "PLAY"
@@ -6548,14 +6597,14 @@
       "id": "secondaries",
       "category": 3,
       "group": "Secondary controls",
-      "title": "Hold a lane. Shape it.",
+      "title": "Secondary FX controls",
       "gesture": "Hold track + move fader",
       "body": "Hold a lane’s TRACK button and move its fader: P1 filter damping / chorus span; P2 wah damping / echo feedback; P3 phaser feedback / tremolo shape / reverb damping. For tremolo stereo spread, hold T3 and move F4.",
       "note": "Move before releasing the track button to avoid its tap action. After release, cross the main value again before changing it.",
       "steps": [
         {
           "label": "Hold T4",
-          "detail": "Example: hold T4 on Page 2. Example starts with the secondary at its midpoint.",
+          "detail": "On Page 2, hold T4 to adjust echo feedback.",
           "hold": [
             "T4"
           ],
@@ -6577,7 +6626,7 @@
         },
         {
           "label": "Change echo feedback",
-          "detail": "Example: hold T4 on Page 2.",
+          "detail": "Keep T4 held and move F4 to change feedback.",
           "hold": [
             "T4"
           ],
@@ -6603,7 +6652,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "Example: hold T4 on Page 2.",
+          "detail": "Keep T4 held and raise F4 to adjust feedback.",
           "hold": [
             "T4"
           ],
@@ -6661,7 +6710,7 @@
       "id": "eq",
       "category": 3,
       "group": "Page 5 / Global EQ",
-      "title": "Shape the whole mix",
+      "title": "Master EQ",
       "gesture": "F1 100 Hz · F2 350 Hz · F3 1.6 kHz · F4 4 kHz",
       "body": "Down cuts; up boosts. Center or a track-button tap returns that band to flat.",
       "note": "F1 and F4 are low/high shelves. EQ always affects the whole mix; lights show cut/boost amount.",
@@ -6750,7 +6799,7 @@
         },
         {
           "label": "Find fader 2",
-          "detail": "Center is flat; up boosts.",
+          "detail": "F2 controls the 350 Hz band.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -6770,7 +6819,7 @@
         },
         {
           "label": "Cut the 350 Hz band",
-          "detail": "Center is flat; up boosts.",
+          "detail": "Lower F2 to cut the band.",
           "hold": [],
           "tap": [],
           "faders": {
@@ -6794,7 +6843,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "Center is flat; up boosts.",
+          "detail": "Raise F2; center is flat and above center boosts.",
           "hold": [],
           "tap": [],
           "faders": {
@@ -6866,14 +6915,14 @@
       "id": "routing",
       "category": 3,
       "group": "FX routing & reset",
-      "title": "Choose what gets FX",
+      "title": "FX routing",
       "gesture": "PLAY + VOL− / VOL+ / double-click",
-      "body": "VOL− = INPUT. VOL+ = TRACKS. Double-click either volume button with PLAY held = BOTH.",
-      "note": "INPUT records FX into ordinary takes. TRACKS leaves live input dry. BOTH processes the heard mix; ordinary takes stay dry. Set routing before a repeat.",
+      "body": "Hold PLAY and press VOL− for INPUT or VOL+ for TRACKS. Hold PLAY and double-click either volume button for BOTH.",
+      "note": "Routes Pages 1–4; EQ always affects the whole mix. During a beat repeat, VOL− / VOL+ move its window instead.",
       "steps": [
         {
           "label": "Hold PLAY",
-          "detail": "Echo is already active, making the route change audible. Keep PLAY held.",
+          "detail": "Keep PLAY held while choosing an FX route.",
           "hold": [
             "PLAY"
           ],
@@ -7102,14 +7151,14 @@
       "id": "monitor",
       "category": 3,
       "group": "FX routing & reset",
-      "title": "Mute the input monitor",
-      "gesture": "Hold PLAY + both VOL",
-      "body": "Toggle monitoring with PLAY and both volume buttons. Works on any page.",
-      "note": "Muted monitoring blocks ordinary recording. Unmute input before arming. On Pages 1–4, a blinking page number also marks muted monitoring.",
+      "title": "Input monitoring",
+      "gesture": "Hold PLAY + VOL− + VOL+",
+      "body": "Hold PLAY and press both volume buttons to mute or restore live input. Works on any page.",
+      "note": "Muted input is also silent in recordings and cannot arm a new input take. Unmute before recording.",
       "steps": [
         {
           "label": "Hold PLAY + both VOL",
-          "detail": "Only live input is playing; there are no recorded tracks. Toggle the live input monitor.",
+          "detail": "Hold PLAY + VOL− + VOL+ to toggle input monitoring.",
           "hold": [
             "PLAY"
           ],
@@ -7133,7 +7182,7 @@
         },
         {
           "label": "4→3→2→1: muted",
-          "detail": "Recording still captures input.",
+          "detail": "Input is muted. Unmute before recording.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -7193,14 +7242,14 @@
       "id": "reset-fx",
       "category": 3,
       "group": "FX routing & reset",
-      "title": "Reset the effects",
+      "title": "FX reset",
       "gesture": "On an FX page: FN + T1 + T4",
-      "body": "Restore the effects to their defaults, flatten EQ and set routing to BOTH.",
+      "body": "Hold FN and tap T1 + T4 together to reset all FX, flatten EQ and set routing to BOTH.",
       "note": "The four TRACK lights briefly turn solid. Effects, EQ, rates, types and routing return to defaults. Monitor mute stays as set.",
       "steps": [
         {
           "label": "On an FX page, hold FN",
-          "detail": "Echo and an EQ boost are already active. Keep it held.",
+          "detail": "Keep FN held while resetting all FX.",
           "hold": [
             "FN"
           ],
@@ -7222,7 +7271,7 @@
         },
         {
           "label": "Tap T1 + T4 together",
-          "detail": "Reset effects to defaults.",
+          "detail": "Reset all FX, EQ and routing to defaults.",
           "hold": [
             "FN"
           ],
@@ -7272,9 +7321,9 @@
       "category": 4,
       "group": "Page 6 / Stereo placement",
       "title": "Stereo track placement",
-      "gesture": "Faders 1–4 = tracks 1–4",
-      "body": "Down moves left. Up moves right. Center keeps the original balance.",
-      "note": "A mono take pans; a stereo take leans. Lights are dark at center and brighter farther to either side.",
+      "gesture": "Page 6 · F1–F4 = track placement",
+      "body": "Lower a fader to move left; raise it to move right. Return it to center, or tap its TRACK button for exact center.",
+      "note": "A mono take pans; a stereo take leans. Center restores the original balance and its light goes dark. Cross the saved position to take control.",
       "steps": [
         {
           "label": "Hold FN + T4",
@@ -7381,7 +7430,7 @@
         },
         {
           "label": "Find fader 1",
-          "detail": "Down = left; up = right.",
+          "detail": "F1 controls track 1’s stereo position.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -7401,7 +7450,7 @@
         },
         {
           "label": "Move track 1 left",
-          "detail": "Down = left; up = right.",
+          "detail": "Lower F1 to move track 1 left.",
           "hold": [],
           "tap": [],
           "faders": {
@@ -7425,7 +7474,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "Down = left; up = right.",
+          "detail": "Raise F1 to move track 1 right.",
           "hold": [],
           "tap": [],
           "faders": {
@@ -7490,6 +7539,18 @@
           },
           "lane": 1,
           "amount": 0.8
+        },
+        {
+          "label": "Tap T1 to center",
+          "detail": "Track 1 returns to its original balance.",
+          "hold": [],
+          "tap": [
+            "T1"
+          ],
+          "faders": {},
+          "page": 6,
+          "view": "tracks",
+          "duration": 1.25
         }
       ]
     },
@@ -7497,14 +7558,14 @@
       "id": "center-placement",
       "category": 4,
       "group": "Page 6 / Stereo placement",
-      "title": "Center one or all tracks",
-      "gesture": "Tap a track button · FN + T1 + T4",
-      "body": "With no take recording, tap a track to center its placement. FN + T1 + T4 centers all four on Page 6.",
+      "title": "Stereo placement reset",
+      "gesture": "Page 6: tap TRACK · FN + T1 + T4 for all",
+      "body": "On Page 6, tap a track to center its placement. Hold FN and tap T1 + T4 together to center all four and reset FX.",
       "note": "The all-track shortcut also resets FX.",
       "steps": [
         {
           "label": "Tap T1 on Page 6",
-          "detail": "Tracks start away from the center. Center that track.",
+          "detail": "Center track 1.",
           "hold": [],
           "tap": [
             "T1"
@@ -7526,7 +7587,7 @@
         },
         {
           "label": "Release",
-          "detail": "Center that track.",
+          "detail": "The track stays centered.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -7595,9 +7656,9 @@
       "id": "offset",
       "category": 4,
       "group": "Page 7 / Take & timing",
-      "title": "Move the downbeat",
+      "title": "Grid offset",
       "gesture": "F1 = grid offset",
-      "body": "Center is no offset. Up moves later; down moves earlier, by up to about half a beat.",
+      "body": "On Page 7, move F1 up for later or down for earlier, by up to about half a beat. Return F1 to center for zero offset.",
       "note": "Beat lights and future grid-aligned punches follow the offset.",
       "steps": [
         {
@@ -7726,7 +7787,7 @@
         },
         {
           "label": "Find fader 1",
-          "detail": "Up later; down earlier.",
+          "detail": "F1 controls the grid offset.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -7746,7 +7807,7 @@
         },
         {
           "label": "Move the grid",
-          "detail": "Up later; down earlier.",
+          "detail": "Lower F1 to move the grid earlier.",
           "hold": [],
           "tap": [],
           "faders": {
@@ -7768,7 +7829,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "Up later; down earlier.",
+          "detail": "Raise F1 to move the grid later.",
           "hold": [],
           "tap": [],
           "faders": {
@@ -7834,7 +7895,7 @@
       "id": "take-length",
       "category": 4,
       "group": "Page 7 / Take & timing",
-      "title": "Choose a take length",
+      "title": "Take length & beats per bar",
       "gesture": "F2 = OFF / 1 / 2 / 4 / 8",
       "body": "On Page 7, F2 selects the take length. F3 selects 3, 4, 5 or 7 beats per bar, from bottom to top. Move through the saved value to take control.",
       "note": "Beats per bar is saved per song; the default is 4. Variable mode counts bars and needs a grid. Fixed mode counts base loops and needs a first take.",
@@ -7955,14 +8016,14 @@
       "id": "preset",
       "category": 4,
       "group": "Page 7 / Take & timing",
-      "title": "Choose a length. Record a take.",
+      "title": "Preset recording length",
       "gesture": "Leave Page 7 → arm a track",
       "body": "On Page 7, choose a take length with F2. Tap FN to close the page, tap an empty track and let recording finish automatically.",
       "note": "The take stops automatically. Tap the recording track to finish earlier. Bounces do not use the preset.",
       "steps": [
         {
           "label": "Choose one bar on Page 7",
-          "detail": "This example has a beat grid. Set F2 to 1 for a one-bar take.",
+          "detail": "With a beat grid, set F2 to 1 for a one-bar take.",
           "hold": [],
           "tap": [],
           "faders": {
@@ -8008,7 +8069,7 @@
         },
         {
           "label": "Release",
-          "detail": "Leave Page 7.",
+          "detail": "Normal track controls return.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -8085,14 +8146,14 @@
       "id": "countdown",
       "category": 4,
       "group": "Page 7 / Take & timing",
-      "title": "Read the take countdown",
+      "title": "Recording countdown",
       "gesture": "Open Page 7 during a preset take",
       "body": "Up to four track lights show the units remaining. The last unit blinks.",
-      "note": "The countdown is capped at four lights; an eight-unit take stays at four until only three units remain.",
+      "note": "Fixed mode counts base loops; Variable counts grid bars. Up to four lights show the units left.",
       "steps": [
         {
-          "label": "Count down to the end of the take",
-          "detail": "Four bars remain. The last bar blinks; after recording stops, the grid chase returns.",
+          "label": "Watch the remaining bars",
+          "detail": "The track lights count down the four remaining bars.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -8109,7 +8170,28 @@
             ],
             "grid": true
           },
-          "seconds": 8.75
+          "seconds": 4
+        },
+        {
+          "label": "The last bar and finish",
+          "detail": "The last bar blinks. When recording finishes, the grid chase returns.",
+          "hold": [],
+          "tap": [],
+          "faders": {},
+          "rock": 0,
+          "view": "trackLights",
+          "lights": [],
+          "pattern": "countdown",
+          "duration": 4.5,
+          "page": 7,
+          "context": {
+            "playing": true,
+            "loaded": [
+              1
+            ],
+            "grid": true
+          },
+          "seconds": 4.75
         }
       ]
     },
@@ -8117,14 +8199,14 @@
       "id": "nudge",
       "category": 4,
       "group": "Page 7 / Nudge a loop",
-      "title": "Slide one track in time",
+      "title": "Track timing offset",
       "gesture": "Hold a track button + move its fader",
       "body": "On Page 7, hold a track button and move its fader. Up moves the track later; down moves it earlier. The edit is relative to the fader position when you held the button.",
-      "note": "Nudge works without a grid. A recording track cannot be nudged. In heads mode, nudging the source moves all its heads.",
+      "note": "Nudge is relative; centering the fader alone does not reset it. On Page 7, TRACK taps clear its trim, then nudge, then its page setting; already-clear settings are skipped. Works without a grid; recording tracks cannot be nudged.",
       "steps": [
         {
           "label": "Hold T1",
-          "detail": "Two recorded portions of the input loop are loaded so you can hear their timing change. Hold T1 on Page 7.",
+          "detail": "On Page 7, hold T1 to adjust its timing.",
           "hold": [
             "T1"
           ],
@@ -8146,7 +8228,7 @@
         },
         {
           "label": "Nudge track 1",
-          "detail": "Example: T1 + F1 on Page 7.",
+          "detail": "Keep T1 held and move F1 to shift its timing.",
           "hold": [
             "T1"
           ],
@@ -8172,7 +8254,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "Example: T1 + F1 on Page 7.",
+          "detail": "Keep T1 held and raise F1 to shift it back.",
           "hold": [
             "T1"
           ],
@@ -8242,14 +8324,14 @@
       "id": "nudge-lights",
       "category": 4,
       "group": "Page 7 / Nudge a loop",
-      "title": "Read the nudge lights",
+      "title": "Timing offset lights",
       "gesture": "Amount while held · dim glow after",
       "body": "While a track is held, its light shows the nudge amount. After release, nudged tracks glow dim between beats.",
       "note": "The 1–2–3–4 chase shows the grid. Settings save per song after about two seconds.",
       "steps": [
         {
           "label": "While T1 is held",
-          "detail": "Track 1 is already nudged. Move its fader while held before releasing. Its light shows the nudge amount.",
+          "detail": "Move F1 while holding T1. Its light shows the timing offset.",
           "hold": [
             "T1"
           ],
@@ -8299,14 +8381,14 @@
       "id": "reset-timing",
       "category": 4,
       "group": "Page 7 / Nudge a loop",
-      "title": "Reset timing controls",
+      "title": "Timing reset",
       "gesture": "Hold FN + PLAY · press VOL−",
-      "body": "Reset the window, timing offsets and track trims. Take length returns to Off.",
-      "note": "FN + T1 + T4 resets FX; it does not reset the timing page.",
+      "body": "Hold FN + PLAY and press VOL− to reset the loop window, song/track trims and timing offsets. Take length returns to OFF; beats per bar returns to 4.",
+      "note": "On Page 7, track taps clear that track’s trim first, then its nudge, then its page setting. FN + T1 + T4 resets FX instead.",
       "steps": [
         {
           "label": "Tap T1 on Page 7",
-          "detail": "Track nudge, grid offset and take length have already been changed. Center its nudge, or clear offset if already centered.",
+          "detail": "Tap T1 to clear its trim, then track timing, then grid offset. Settings already clear are skipped.",
           "hold": [],
           "tap": [
             "T1"
@@ -8328,7 +8410,7 @@
         },
         {
           "label": "Release",
-          "detail": "Center its nudge, or clear offset if already centered.",
+          "detail": "The reset stays applied.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -8373,7 +8455,7 @@
         },
         {
           "label": "Release",
-          "detail": "Offset 0; length OFF; all nudges centered.",
+          "detail": "Offsets and trims reset; take length OFF; beats per bar 4.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -8397,14 +8479,14 @@
       "id": "format",
       "category": 4,
       "group": "Page 8 / Next take format",
-      "title": "Choose mono or stereo",
+      "title": "Mono & stereo recording",
       "gesture": "Tap a track button on Page 8",
       "body": "Before recording, tap a track button to choose the format of its next take.",
       "note": "Solid light = mono. Blinking = stereo. Existing audio stays unchanged. Faders still control track levels.",
       "steps": [
         {
           "label": "Hold FN + T4",
-          "detail": "All four tracks start with mono selected for their next take. Hold FN + T4 until Page 4 opens.",
+          "detail": "Hold both until Page 4 opens.",
           "hold": [
             "FN",
             "T4"
@@ -8500,7 +8582,7 @@
         },
         {
           "label": "Tap T1 to switch",
-          "detail": "Choose its next take format.",
+          "detail": "Choose mono or stereo for track 1’s next take.",
           "hold": [],
           "tap": [
             "T1"
@@ -8520,7 +8602,7 @@
         },
         {
           "label": "Blinking: stereo",
-          "detail": "Example: T1 stereo blinks; T2–T4 mono stay solid.",
+          "detail": "Stereo blinks; mono stays solid.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -8542,7 +8624,7 @@
       "id": "catch",
       "category": 5,
       "group": "Catch & resize",
-      "title": "Catch, reshape, release",
+      "title": "Beat repeat",
       "gesture": "Hold PLAY + ROCKER UP",
       "body": "Hold PLAY and click the rocker up to catch a beat. Use the rocker to resize it, then release PLAY to return to the song.",
       "note": "",
@@ -8696,7 +8778,7 @@
       "id": "resize-repeat",
       "category": 5,
       "group": "Catch & resize",
-      "title": "Make it shorter or longer",
+      "title": "Beat repeat length",
       "gesture": "Hold PLAY → click ROCKER UP → resize",
       "body": "Hold PLAY and click the rocker up to catch a beat. ROCKER UP halves the repeat; ROCKER DOWN doubles it. Hold the rocker to keep stepping. Release PLAY to return to the song.",
       "note": "Release the rocker but keep PLAY held to repeat at the same length.",
@@ -8850,14 +8932,14 @@
       "id": "repeat-chop",
       "category": 5,
       "group": "Catch & resize",
-      "title": "Repeat inside a chop",
+      "title": "Beat repeat within a chop",
       "gesture": "PLAY + rocker inside your chop",
       "body": "The repeat only uses your chopped audio. It cannot reach outside the audible cycle.",
       "note": "If a requested beat would fill the chop: ROCKER UP starts with a quarter of it; ROCKER DOWN with half, down to the minimum size.",
       "steps": [
         {
           "label": "With a chop playing, hold PLAY",
-          "detail": "A 1/16-loop chop is already playing. One grid beat is longer than this chop.",
+          "detail": "Keep PLAY held to repeat part of the chop.",
           "hold": [
             "PLAY"
           ],
@@ -8878,7 +8960,7 @@
         },
         {
           "label": "Click ROCKER UP",
-          "detail": "The beat cannot fit, so ROCKER UP captures one quarter of the audible chop.",
+          "detail": "If a full beat cannot fit, ROCKER UP catches one quarter of the chop.",
           "hold": [
             "PLAY"
           ],
@@ -8924,7 +9006,7 @@
       "id": "release-repeat",
       "category": 5,
       "group": "Catch & resize",
-      "title": "Release: hold the tape",
+      "title": "Beat repeat release",
       "gesture": "Release PLAY with FN released",
       "body": "On a gridded song, playback resumes from the repeat, with the tape shift rounded to the nearest bar.",
       "note": "A short stutter may leave the position unchanged. Without a grid, or during a bounce, release returns to the running tape position.",
@@ -8994,7 +9076,7 @@
       "id": "repeat-no-grid",
       "category": 5,
       "group": "Catch & resize",
-      "title": "Repeat without a grid",
+      "title": "Beat repeat without a grid",
       "gesture": "Hold PLAY + rocker: ROCKER UP = 1/8 · ROCKER DOWN = 1/4",
       "body": "Without a grid, hold PLAY and click the rocker up for one eighth of the loop, or down for one quarter. Chop limits still apply.",
       "note": "On release, return to the running tape position. There is no bar-based tape hold.",
@@ -9066,7 +9148,7 @@
       "id": "move-repeat",
       "category": 5,
       "group": "Shape the repeat",
-      "title": "Move the repeating window",
+      "title": "Beat repeat position",
       "gesture": "Keep PLAY held + VOL− / VOL+",
       "body": "VOL− moves earlier. VOL+ moves later. Each press shifts by one current window length inside the audible cycle.",
       "note": "During a repeat these controls move its window, not FX routing. Set routing before catching the repeat.",
@@ -9144,7 +9226,7 @@
       "id": "repeat-octave",
       "category": 5,
       "group": "Shape the repeat",
-      "title": "Jump an octave in the repeat",
+      "title": "Beat repeat octave jumps",
       "gesture": "Keep PLAY held + FN + rocker",
       "body": "Add FN and click the rocker. Down is an octave lower; up is an octave higher.",
       "note": "",
@@ -9221,7 +9303,7 @@
       "id": "repeat-faders",
       "category": 5,
       "group": "Shape the repeat",
-      "title": "Shape the repeat with faders",
+      "title": "Beat repeat fader controls",
       "gesture": "Keep PLAY held + FN + F1–F4",
       "body": "F1 = start. F2 = end. F3 = position. F4 = size / zoom. Move deliberately to engage a fader.",
       "note": "F3 keeps width. F4 tightens around the center; top restores the region set by F1–F3. Re-gripping FN preserves that region.",
@@ -9396,7 +9478,7 @@
         },
         {
           "label": "Page 2 is open",
-          "detail": "The side lights identify Page 2. Example starts with the secondary at its midpoint.",
+          "detail": "The side lights identify Page 2.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -9416,7 +9498,7 @@
         },
         {
           "label": "Hold T3",
-          "detail": "Relative edits: down sharper; up softer.",
+          "detail": "Keep T3 held while moving F3.",
           "hold": [
             "T3"
           ],
@@ -9438,7 +9520,7 @@
         },
         {
           "label": "Change wah resonance",
-          "detail": "Relative edits: down sharper; up softer.",
+          "detail": "Lower F3 for sharper resonance.",
           "hold": [
             "T3"
           ],
@@ -9464,7 +9546,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "Relative edits: down sharper; up softer.",
+          "detail": "Raise F3 for softer resonance.",
           "hold": [
             "T3"
           ],
@@ -9570,7 +9652,7 @@
         },
         {
           "label": "Page 2 is open",
-          "detail": "The side lights identify Page 2. Example starts with the secondary at its midpoint.",
+          "detail": "The side lights identify Page 2.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -9590,7 +9672,7 @@
         },
         {
           "label": "Hold T4",
-          "detail": "Change the amount fed back into the echo.",
+          "detail": "Keep T4 held while moving F4.",
           "hold": [
             "T4"
           ],
@@ -9612,7 +9694,7 @@
         },
         {
           "label": "Change echo feedback",
-          "detail": "Change the amount fed back into the echo.",
+          "detail": "Move F4 to change echo feedback.",
           "hold": [
             "T4"
           ],
@@ -9638,7 +9720,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "Change the amount fed back into the echo.",
+          "detail": "Keep T4 held and raise F4 to adjust feedback.",
           "hold": [
             "T4"
           ],
@@ -9744,7 +9826,7 @@
         },
         {
           "label": "Page 3 is open",
-          "detail": "The side lights identify Page 3. Example starts with the secondary at its midpoint.",
+          "detail": "The side lights identify Page 3.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -9764,7 +9846,7 @@
         },
         {
           "label": "Hold T3",
-          "detail": "Move from softer to harder tremolo shapes.",
+          "detail": "Keep T3 held while moving F3.",
           "hold": [
             "T3"
           ],
@@ -9786,7 +9868,7 @@
         },
         {
           "label": "Change tremolo shape",
-          "detail": "Move from softer to harder tremolo shapes.",
+          "detail": "Move F3 to change the tremolo shape.",
           "hold": [
             "T3"
           ],
@@ -9812,7 +9894,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "Move from softer to harder tremolo shapes.",
+          "detail": "Keep T3 held and raise F3 to adjust the shape.",
           "hold": [
             "T3"
           ],
@@ -9918,7 +10000,7 @@
         },
         {
           "label": "Page 3 is open",
-          "detail": "The side lights identify Page 3. Example starts with the secondary at its midpoint.",
+          "detail": "The side lights identify Page 3.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -9938,7 +10020,7 @@
         },
         {
           "label": "Hold T3",
-          "detail": "Change the spread between the two channels. F4 does not change reverb while T3 is held.",
+          "detail": "Keep T3 held to adjust stereo spread.",
           "hold": [
             "T3"
           ],
@@ -9960,7 +10042,7 @@
         },
         {
           "label": "Change tremolo stereo spread",
-          "detail": "Change the spread between the two channels. F4 does not change reverb while T3 is held.",
+          "detail": "Move F4 to change the spread between channels.",
           "hold": [
             "T3"
           ],
@@ -9986,7 +10068,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "Change the spread between the two channels. F4 does not change reverb while T3 is held.",
+          "detail": "Keep T3 held and raise F4 to adjust the spread.",
           "hold": [
             "T3"
           ],
@@ -10092,7 +10174,7 @@
         },
         {
           "label": "Page 3 is open",
-          "detail": "The side lights identify Page 3. Example starts with the secondary at its midpoint.",
+          "detail": "The side lights identify Page 3.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -10112,7 +10194,7 @@
         },
         {
           "label": "Hold T4",
-          "detail": "Down is darker; up is brighter.",
+          "detail": "Keep T4 held while moving F4.",
           "hold": [
             "T4"
           ],
@@ -10134,7 +10216,7 @@
         },
         {
           "label": "Change reverb damping",
-          "detail": "Down is darker; up is brighter.",
+          "detail": "Lower F4 for darker reverb.",
           "hold": [
             "T4"
           ],
@@ -10160,7 +10242,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "Down is darker; up is brighter.",
+          "detail": "Raise F4 for brighter reverb.",
           "hold": [
             "T4"
           ],
@@ -10218,10 +10300,10 @@
       "category": 1,
       "group": "Everyday controls",
       "id": "track-lights",
-      "title": "Read the track lights",
+      "title": "Track lights",
       "gesture": "Dark · dim · blinking · solid",
       "body": "Dark means empty; dim means muted. Recording is solid. Playback pulses with the grid, or when each loop wraps.",
-      "note": "When stopped, an unmuted loaded track stays solid. Examples use 120 BPM and selected loop lengths. A refusal shrug can mean saving is still busy: wait for completion before deleting or recording again. Alternating T1+T3 / T2+T4 indicates a fault; stop testing and keep the device connected for diagnostics.",
+      "note": "When stopped, an unmuted loaded track stays solid. Examples use 120 BPM and selected loop lengths. A refusal shrug can mean saving is still busy: wait for completion before deleting or recording again. Alternating T1+T3 / T2+T4 indicates a fault; stop testing and keep the device connected for diagnostics. In USB drive mode, T2 + T3 stay lit. After eject: T1 checks, T2 plans, T3 imports, T4 saves. Long imports can take several minutes; keep USB connected until Tape Looper returns. Repeated all-four flashes in drive mode indicate an error, not import progress.",
       "steps": [
         {
           "label": "Empty",
@@ -10275,7 +10357,7 @@
         },
         {
           "label": "Playing without a grid",
-          "detail": "Example: loop lengths of 2, 3, 4 and 6 seconds pulse at their own wraps.",
+          "detail": "Each track pulses when its loop wraps.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -10320,14 +10402,14 @@
       "category": 1,
       "group": "Songs & settings",
       "id": "status-lights",
-      "title": "Read the side lights",
+      "title": "Side lights",
       "gesture": "Playing: level · FN held: song",
       "body": "During playback, the meter fills from the bottom. Hold FN to see the song: solid = bank, blinking = position.",
       "note": "If bank and position share a light, that light blinks. With a running grid the song blink follows the beat.",
       "steps": [
         {
           "label": "Audio level",
-          "detail": "Example signal: the meter fills bottom-up.",
+          "detail": "The meter fills from bottom to top.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -10339,7 +10421,7 @@
         },
         {
           "label": "Hold FN for the song",
-          "detail": "Example: bank 1, position 2.",
+          "detail": "Solid shows the bank; blinking shows the song.",
           "hold": [
             "FN"
           ],
@@ -10357,14 +10439,14 @@
       "category": 4,
       "group": "Page 7 / Take & timing",
       "id": "grid-record-lights",
-      "title": "Waiting or finishing on the grid",
-      "gesture": "Half-beat flashes",
-      "body": "An armed track flashes at half-beat rate while waiting for punch-in. The same quicker pulse marks a recording finishing its beat.",
-      "note": "The recording continues until its aligned stop; it is not stuck.",
+      "title": "Grid recording indicators",
+      "gesture": "Two flashes per beat",
+      "body": "An armed track flashes twice per beat while waiting for punch-in. The same pulse marks a recording finishing its beat.",
+      "note": "Recording continues until its aligned stop.",
       "steps": [
         {
           "label": "Waiting, then recording",
-          "detail": "T2 flashes at half-beat rate until the next punch-in, then stays solid while recording.",
+          "detail": "T2 flashes twice per beat until punch-in, then stays solid while recording.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -10383,7 +10465,7 @@
         },
         {
           "label": "Finishing, then looping",
-          "detail": "T2 flashes at half-beat rate until the next beat ends the take, then pulses with playback.",
+          "detail": "T2 flashes twice per beat until the aligned stop, then pulses with playback.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -10406,10 +10488,10 @@
       "id": "tape-copy",
       "category": 5,
       "group": "Bounce what you hear",
-      "title": "Bounce what you hear",
+      "title": "Tape copy / bounce",
       "gesture": "Hold PLAY → briefly tap destination",
       "body": "Record the playing mix onto a spare track. Hold PLAY and tap the destination; tap it again to finish. This is a tape copy.",
-      "note": "A loaded destination is replaced. Tape copy follows tape speed with its source. A grid may add count-out; fixed mode and chop can extend the stop to a full cycle.",
+      "note": "A loaded destination keeps its earlier take saved. Tape copy follows tape speed; grid, Fixed mode or chop can delay the stop to a cycle boundary.",
       "steps": [
         {
           "label": "Hold PLAY",
@@ -10434,7 +10516,7 @@
         },
         {
           "label": "Briefly tap T2",
-          "detail": "T2 is the destination in this example.",
+          "detail": "Start a copy of the playing mix on T2.",
           "hold": [
             "PLAY"
           ],
@@ -10504,7 +10586,7 @@
         },
         {
           "label": "Release",
-          "detail": "The copy is now a separate recording. Your source track is still there.",
+          "detail": "The copy is saved separately; the source stays saved.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -10546,7 +10628,7 @@
         },
         {
           "label": "Bring up the copy",
-          "detail": "Fader 2 controls your new recording. You can now reshape or layer it.",
+          "detail": "Raise F2 to bring the copy into the mix.",
           "hold": [],
           "tap": [],
           "faders": {
@@ -10572,10 +10654,10 @@
       "id": "print-repeat",
       "category": 5,
       "group": "Bounce what you hear",
-      "title": "Bounce a beat-repeat performance",
+      "title": "Beat repeat bounce",
       "gesture": "Hold PLAY → click ROCKER UP → tap destination",
       "body": "Hold PLAY and click the rocker up to catch a repeat. Keep PLAY held and tap a spare track to start the bounce. Release PLAY to let the song flow back in; tap the destination again to finish.",
-      "note": "Keep PLAY held to resize while recording. A loaded destination is replaced.",
+      "note": "Keep PLAY held to resize while recording. The destination’s earlier takes stay saved.",
       "steps": [
         {
           "label": "Hold PLAY and catch a repeat",
@@ -10702,10 +10784,10 @@
       "id": "sampler",
       "category": 5,
       "group": "Bounce what you hear",
-      "title": "Make a sampler print",
+      "title": "Sampler print",
       "gesture": "Hold PLAY → hold destination",
       "body": "Hold PLAY, then hold the destination track to record a sampler print. Release the track to finish.",
-      "note": "The heard speed is baked for playback at 1×. Use a spare destination: a loaded track is replaced.",
+      "note": "Speed is baked for playback at 1×. The destination’s earlier takes stay saved.",
       "steps": [
         {
           "label": "Hold PLAY",
@@ -10803,14 +10885,14 @@
       "id": "stop-page",
       "category": 5,
       "group": "Bounce what you hear",
-      "title": "Stop a bounce from a page",
+      "title": "Bounce controls in FX pages",
       "gesture": "PLAY + destination track",
       "body": "Use PLAY + the destination track again to stop a bounce while a page is open.",
       "note": "",
       "steps": [
         {
           "label": "Hold PLAY",
-          "detail": "With Page 2 open and Track 2 recording the copy, keep PLAY held.",
+          "detail": "Keep PLAY held on the FX page.",
           "hold": [
             "PLAY"
           ],
@@ -10883,14 +10965,14 @@
       "id": "flow-back",
       "category": 5,
       "group": "Bounce what you hear",
-      "title": "Let the song flow back in",
+      "title": "Bounce after beat repeat",
       "gesture": "After starting the copy, release PLAY",
       "body": "The repeat ends and the tape copy continues from the running tape position. Tap the destination again to stop.",
       "note": "",
       "steps": [
         {
           "label": "Your repeat is being copied",
-          "detail": "Example destination: T2.",
+          "detail": "T2 is recording the repeat.",
           "hold": [
             "PLAY"
           ],
@@ -10966,7 +11048,7 @@
       "id": "print-speed",
       "category": 5,
       "group": "Bounce what you hear",
-      "title": "Sweep speed into a take",
+      "title": "Recorded speed changes",
       "gesture": "During a bounce: release PLAY → rocker",
       "body": "Use the rocker while a tape copy or sampler print is recording. Your speed moves become part of the performance.",
       "note": "Tape copy records speed moves relative to starting speed. Sampler print bakes the performance for playback at 1×.",
@@ -11049,7 +11131,7 @@
       "id": "held-print",
       "category": 5,
       "group": "Bounce what you hear",
-      "title": "Perform inside a sampler print",
+      "title": "Sampler print controls",
       "gesture": "Keep the destination held · PLAY changes the rocker",
       "body": "Keep the destination held. With PLAY released, the rocker changes speed. With PLAY held, it controls beat repeat. Add FN for octave jumps.",
       "note": "Release the destination to end the print. Release PLAY too to end the repeat.",
@@ -11188,7 +11270,7 @@
       "id": "scissors386",
       "category": 2,
       "group": "Rocker modes",
-      "title": "Scissors / glue",
+      "title": "Cut / glue",
       "gesture": "Slot 7 · ROCKER DOWN marks, ROCKER DOWN cuts · ROCKER UP undoes",
       "body": "While playing, tap ROCKER DOWN at the start and again at the end of a section to skip it. With the rocker page open, hold the same TRACK for both marks to cut only that track. Bare ROCKER DOWN targets the loaded tracks.",
       "note": "Make up to eight cuts. ROCKER UP cancels a pending mark or undoes the last cut. Cuts remain when leaving the rocker page or slot. FN + double-tap PLAY restores the tape. Cuts are non-destructive session edits; changing songs, takes, recording or rebooting clears them. Use full forward loops, without trim, Heads, repeat or recording.",
@@ -11220,7 +11302,7 @@
         },
         {
           "label": "Select Scissors / glue",
-          "detail": "From Magnet in slot 6, press VOL+ to select slot 7.",
+          "detail": "Use VOL− / VOL+ to choose Scissors / glue.",
           "hold": [],
           "tap": [
             "VOL+"
@@ -11380,34 +11462,31 @@
       "id": "bluetooth-v4",
       "category": 1,
       "group": "Connect & wake",
-      "title": "Record from Bluetooth",
-      "gesture": "Tap FN twice, then hold the third press",
-      "body": "Tap FN twice, then hold FN on the third press for about one second to enable Bluetooth audio discovery. Pair SP-1 from your phone or computer, select it as the audio output, then record normally.",
+      "title": "Bluetooth Support",
+      "gesture": "Triple-tap FN and hold the last press until all four track lights start fading in and out, then release",
+      "body": "Triple-tap FN and hold the last press until all four track lights start fading in and out, then release to enable Bluetooth audio discovery. Pair SP-1 from your phone or computer, select it as the audio output, then record normally.",
       "note": "The gesture also works during playback and USB audio. USB and Bluetooth input mix together. This release focuses on Bluetooth input; outgoing audio to speakers or keyboards is deferred.",
       "steps": [
         {
           "label": "Enable Bluetooth audio",
-          "detail": "Tap FN twice, then hold its third press for about one second.",
+          "detail": "Triple-tap FN and hold the last press until all four track lights start fading, then release.",
           "hold": [],
           "tap": [],
           "faders": {},
           "rock": 0,
-          "view": "right",
+          "view": "comboHold",
           "lights": [],
           "pattern": null,
           "duration": 3,
           "context": {
-            "playing": true,
-            "loaded": [
-              1,
-              2
-            ],
-            "grid": true
+            "playing": false,
+            "loaded": [],
+            "grid": false
           }
         },
         {
           "label": "Pair from your audio source",
-          "detail": "All four track lights fade together while pairing. Choose SP-1 in Bluetooth settings. The lights sweep once when connected.",
+          "detail": "Choose SP-1 in Bluetooth settings. The lights sweep when connected.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -11417,17 +11496,14 @@
           "pattern": null,
           "duration": 3,
           "context": {
-            "playing": true,
-            "loaded": [
-              1,
-              2
-            ],
-            "grid": true
+            "playing": false,
+            "loaded": [],
+            "grid": false
           }
         },
         {
           "label": "Record the sound",
-          "detail": "Tap empty Track 3 and start Bluetooth audio. Its light turns solid when recording starts.",
+          "detail": "Tap empty T3 and start Bluetooth audio. T3 turns solid as recording starts.",
           "hold": [],
           "tap": [
             "T3"
@@ -11439,17 +11515,14 @@
           "pattern": null,
           "duration": 3,
           "context": {
-            "playing": true,
-            "loaded": [
-              1,
-              2
-            ],
-            "grid": true
+            "playing": false,
+            "loaded": [],
+            "grid": false
           }
         },
         {
           "label": "Finish the take",
-          "detail": "Tap Track 3 again to finish. The take joins the loop.",
+          "detail": "Tap T3 again. The take joins the loop.",
           "hold": [],
           "tap": [
             "T3"
@@ -11461,12 +11534,9 @@
           "pattern": null,
           "duration": 3,
           "context": {
-            "playing": true,
-            "loaded": [
-              1,
-              2
-            ],
-            "grid": true
+            "playing": false,
+            "loaded": [],
+            "grid": false
           }
         }
       ],
@@ -11476,10 +11546,10 @@
       "id": "rocker-v4",
       "category": 2,
       "group": "Rocker modes",
-      "title": "Choose a rocker mode",
+      "title": "Rocker modes",
       "gesture": "FN + both VOL · VOL− / VOL+ to choose",
       "body": "Hold FN and both volume buttons to open the rocker page. Release FN, then use VOL− / VOL+ to select a mode. Tap FN to close; the selected mode stays active.",
-      "note": "1 Pitch · 2 Wind · 3 Bender · 4 Battery · 5 Sandpaper · 6 Magnet · 7 Scissors / glue · 8 Manual tape head. Keep the rocker page open for per-track Magnet or Scissors gestures. Holding TRACK previews the normal track lights.",
+      "note": "1 Pitch / speed · 2 FF / RW · 3 Tape bending · 4 Battery drain · 5 Sandpaper · 6 Magnet erase · 7 Cut / glue · 8 Manual heads. Keep the rocker page open for per-track Magnet or Scissors gestures. Holding TRACK previews the normal track lights.",
       "steps": [
         {
           "label": "Open the rocker page",
@@ -11499,8 +11569,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
@@ -11521,8 +11590,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
@@ -11543,8 +11611,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
@@ -11556,14 +11623,14 @@
       "id": "wind-v4",
       "category": 2,
       "group": "Rocker modes",
-      "title": "Wind",
+      "title": "FF / RW",
       "gesture": "Slot 2 · hold ROCKER UP / ROCKER DOWN",
       "body": "Hold ROCKER UP to fast-forward or ROCKER DOWN to rewind. Release to let the tape settle back.",
       "note": "With the WIND page open, hold TRACK + ROCKER UP/DOWN: T1 0.5×, T2 1.5×, T3 3×, T4 4×. Release to return to playback speed. Double-tap TRACK to latch that winding speed for bare-rocker use, including after leaving the page.",
       "steps": [
         {
           "label": "Hold ROCKER DOWN, then release",
-          "detail": "Hold ROCKER UP to fast-forward or ROCKER DOWN to rewind. Release to let the tape settle back.",
+          "detail": "Hold ROCKER DOWN to rewind; release to let the tape settle back.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -11575,15 +11642,14 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
         },
         {
           "label": "Release or restore",
-          "detail": "Release the rocker. For a complete rocker reset, hold FN and double-tap PLAY.",
+          "detail": "Release the rocker. Hold FN and double-tap PLAY to reset.",
           "hold": [
             "FN"
           ],
@@ -11597,8 +11663,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
@@ -11610,14 +11675,14 @@
       "id": "bender-v4",
       "category": 2,
       "group": "Rocker modes",
-      "title": "Bender",
+      "title": "Tape bending",
       "gesture": "Slot 3 · hold ROCKER UP / ROCKER DOWN",
       "body": "Hold ROCKER DOWN to drag and stretch the tape. Hold ROCKER UP for repeated pulling surges. Release either direction for a spring-like recovery.",
       "note": "Longer ROCKER DOWN holds stretch further. This changes playback; it does not rewrite your recordings.",
       "steps": [
         {
           "label": "Hold ROCKER DOWN, then release",
-          "detail": "Hold ROCKER DOWN to drag and stretch the tape. Hold ROCKER UP for repeated pulling surges. Release either direction for a spring-like recovery.",
+          "detail": "Hold ROCKER DOWN to stretch the tape; release for a spring-like recovery.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -11629,15 +11694,14 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
         },
         {
           "label": "Release or restore",
-          "detail": "Release the rocker. For a complete rocker reset, hold FN and double-tap PLAY.",
+          "detail": "Release the rocker. Hold FN and double-tap PLAY to reset.",
           "hold": [
             "FN"
           ],
@@ -11651,8 +11715,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
@@ -11664,14 +11727,14 @@
       "id": "battery-v4",
       "category": 2,
       "group": "Rocker modes",
-      "title": "Battery",
+      "title": "Battery drain",
       "gesture": "Slot 4 · hold ROCKER DOWN / ROCKER UP",
       "body": "Hold ROCKER DOWN to increase battery-drain sag, wobble and stalls. Hold ROCKER UP to recover toward normal.",
       "note": "The wear stays when you release. FN + double-tap PLAY restores the tape.",
       "steps": [
         {
           "label": "Hold ROCKER DOWN, then release",
-          "detail": "Hold ROCKER DOWN to increase battery-drain sag, wobble and stalls. Hold ROCKER UP to recover toward normal.",
+          "detail": "Hold ROCKER DOWN to add sag, wobble and stalls.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -11683,15 +11746,14 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
         },
         {
           "label": "Release or restore",
-          "detail": "Release the rocker. For a complete rocker reset, hold FN and double-tap PLAY.",
+          "detail": "Release the rocker. Hold FN and double-tap PLAY to reset.",
           "hold": [
             "FN"
           ],
@@ -11705,8 +11767,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
@@ -11725,7 +11786,7 @@
       "steps": [
         {
           "label": "Hold ROCKER DOWN, then release",
-          "detail": "Hold ROCKER DOWN to add roughness, breakup and tape drag. Hold ROCKER UP to reduce the wear.",
+          "detail": "Hold ROCKER DOWN to add roughness, breakup and drag.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -11737,15 +11798,14 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
         },
         {
           "label": "Release or restore",
-          "detail": "Release the rocker. For a complete rocker reset, hold FN and double-tap PLAY.",
+          "detail": "Release the rocker. Hold FN and double-tap PLAY to reset.",
           "hold": [
             "FN"
           ],
@@ -11759,8 +11819,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
@@ -11772,17 +11831,15 @@
       "id": "magnet-v4",
       "category": 2,
       "group": "Rocker modes",
-      "title": "Magnet",
+      "title": "Magnet erase",
       "gesture": "Slot 6 · hold ROCKER DOWN to erase · ROCKER UP to undo",
       "body": "Hold ROCKER DOWN while playing to silence and mark the section passing under the head. Release to leave a gap without shortening the loop. Tap ROCKER UP to undo. With the rocker page open, hold TRACK to target only that track.",
       "note": "Unlike Scissors, Magnet keeps the loop’s length. FN + double-tap PLAY restores all Magnet gaps. Song changes and new recordings can clear the affected temporary gaps.",
       "steps": [
         {
           "label": "Hold ROCKER DOWN, then release",
-          "detail": "Hold ROCKER DOWN while playing to silence and mark the section passing under the head. Release to leave a gap without shortening the loop. Tap ROCKER UP to undo. With the rocker page open, hold TRACK to target only that track.",
-          "hold": [
-            "T1"
-          ],
+          "detail": "Hold ROCKER DOWN to erase a section; release to leave a gap.",
+          "hold": [],
           "tap": [],
           "faders": {},
           "rock": 1,
@@ -11793,15 +11850,14 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
         },
         {
           "label": "Release or restore",
-          "detail": "Release the rocker. For a complete rocker reset, hold FN and double-tap PLAY.",
+          "detail": "Release the rocker. Hold FN and double-tap PLAY to reset.",
           "hold": [
             "FN"
           ],
@@ -11815,8 +11871,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
@@ -11828,14 +11883,14 @@
       "id": "manual-head-v4",
       "category": 2,
       "group": "Rocker modes",
-      "title": "Manual tape head",
+      "title": "Manual heads",
       "gesture": "Slot 8 · hold ROCKER DOWN + move faders",
       "body": "Hold ROCKER UP to make contact with the running tape. Hold ROCKER DOWN for four-head contact; move F1–F4 to position the heads. Release to lift contact and silence the tape.",
       "note": "The transport keeps moving while contact is lifted. Leave this rocker mode to return to ordinary playback. This is separate from latching Heads with FN + triple-tap PLAY.",
       "steps": [
         {
           "label": "Hold ROCKER UP for tape contact",
-          "detail": "The transport keeps moving. Hold ROCKER UP to hear the tape.",
+          "detail": "Hold ROCKER UP to hear the moving tape.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -11847,8 +11902,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           },
@@ -11866,15 +11920,14 @@
             "4": 0.95
           },
           "rock": 1,
-          "view": "left",
+          "view": "comboRocker",
           "lights": [],
           "pattern": null,
           "duration": 3,
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           },
@@ -11894,8 +11947,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           },
@@ -11903,7 +11955,7 @@
         },
         {
           "label": "Leave Manual tape head",
-          "detail": "With the rocker page open, use VOL− to choose another slot and return to ordinary playback.",
+          "detail": "Open the rocker page and use VOL− to select another mode.",
           "hold": [],
           "tap": [
             "VOL−"
@@ -11917,8 +11969,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           },
@@ -11931,10 +11982,10 @@
       "id": "restore-tape-v4",
       "category": 2,
       "group": "Rocker modes",
-      "title": "Restore the tape",
+      "title": "Tape reset",
       "gesture": "Hold FN + double-tap PLAY",
       "body": "Restore normal rocker tape behavior: clear Scissors cuts and Magnet changes, release wind and reset speed.",
-      "note": "The four TRACK lights briefly turn solid. Recordings and effect-page settings stay intact.",
+      "note": "Solid track lights confirm. Recordings, FX settings and the selected rocker mode stay unchanged.",
       "steps": [
         {
           "label": "Hold FN",
@@ -11952,8 +12003,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
@@ -11974,8 +12024,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
@@ -11987,7 +12036,7 @@
       "id": "track-trim-v4",
       "category": 2,
       "group": "Track trim",
-      "title": "Trim a track’s length",
+      "title": "Track trim",
       "gesture": "Hold FN + PLAY · move that track’s fader",
       "body": "Hold FN and PLAY, then move F1–F4 to shorten or lengthen the matching track. Lower the fader to shorten; raise it to lengthen. Release both to keep the trim.",
       "note": "The first small move catches the current length without jumping. With a grid, lengths step through straight and dotted musical values. Other tracks keep playing; the original recording stays intact.",
@@ -12001,7 +12050,7 @@
       "steps": [
         {
           "label": "Hold FN + PLAY",
-          "detail": "Keep both buttons held. Each fader targets its own track.",
+          "detail": "Keep both held; each fader trims its own track.",
           "hold": [
             "FN",
             "PLAY"
@@ -12017,15 +12066,14 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
         },
         {
           "label": "Shorten Track 1",
-          "detail": "Keep FN + PLAY held and lower F1. Only Track 1 loops over a shorter piece.",
+          "detail": "Lower F1 to shorten track 1’s loop.",
           "hold": [
             "FN",
             "PLAY"
@@ -12043,15 +12091,14 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
         },
         {
           "label": "Keep the trim",
-          "detail": "Release both buttons. The shorter loop stays; faders return to level control with pickup.",
+          "detail": "Release both. The trim stays; cross the saved level to mix again.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -12064,8 +12111,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
@@ -12076,9 +12122,9 @@
       "id": "track-slide-v4",
       "category": 2,
       "group": "Track trim",
-      "title": "Slide the kept section",
+      "title": "Trim position",
       "gesture": "Hold PLAY · move the trimmed track’s fader",
-      "body": "After trimming a track, hold PLAY and move its fader to slide the kept section through the recording. Its length stays the same. Raise the fader toward the start; lower it toward the end.",
+      "body": "Choose which part of a trimmed recording plays, without changing its length. Hold PLAY and move the track’s fader: raise it toward the recording’s start; lower it toward the end.",
       "note": "The first small move catches the current position. With a grid, movement follows sixteenth-note steps. Release PLAY to keep the position; moving the fader spends the PLAY press, so it does not pause or restart playback.",
       "since": "4.0",
       "initialFaders": [
@@ -12090,7 +12136,7 @@
       "steps": [
         {
           "label": "Start with a trimmed track",
-          "detail": "Track 1 already has a shorter kept section; Track 2 continues normally.",
+          "detail": "Trim a track before moving its section.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -12103,15 +12149,14 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
         },
         {
           "label": "Hold PLAY and slide",
-          "detail": "Hold PLAY, then lower F1 to move the kept section later in Track 1.",
+          "detail": "Hold PLAY and lower F1 to move track 1’s section later.",
           "hold": [
             "PLAY"
           ],
@@ -12128,15 +12173,14 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
         },
         {
           "label": "Keep its position",
-          "detail": "Release PLAY. The section keeps its length and new position.",
+          "detail": "Release PLAY. The section keeps its length and position.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -12149,8 +12193,7 @@
           "context": {
             "playing": true,
             "loaded": [
-              1,
-              2
+              1
             ],
             "grid": true
           }
@@ -12164,7 +12207,7 @@
       "title": "Filter damping",
       "gesture": "Page 1: hold T1 and move F1",
       "body": "Hold T1 and move F1 to adjust filter damping without changing the main level.",
-      "note": "Release TRACK to return to the primary control; pick up its saved level.",
+      "note": "Move the fader before releasing TRACK to avoid its tap action. After release, cross the main value to regain control.",
       "steps": [
         {
           "label": "Hold FN + T1",
@@ -12213,7 +12256,7 @@
         },
         {
           "label": "Page 1 is open",
-          "detail": "The side lights identify Page 1. Example starts with the secondary at its midpoint.",
+          "detail": "The side lights identify Page 1.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -12234,7 +12277,7 @@
         },
         {
           "label": "Hold T1",
-          "detail": "Hold T1 and move F1 to adjust filter damping.",
+          "detail": "Keep T1 held while moving F1.",
           "hold": [
             "T1"
           ],
@@ -12257,7 +12300,7 @@
         },
         {
           "label": "Adjust filter damping",
-          "detail": "Hold T1 and move F1 to adjust filter damping.",
+          "detail": "Move F1 to change filter damping.",
           "hold": [
             "T1"
           ],
@@ -12283,7 +12326,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "Hold T1 and move F1 to adjust filter damping.",
+          "detail": "Keep T1 held and raise F1 to adjust damping.",
           "hold": [
             "T1"
           ],
@@ -12348,7 +12391,7 @@
       "title": "Chorus / flanger span",
       "gesture": "Page 1: hold T2 and move F2",
       "body": "Hold T2 and move F2 to adjust chorus / flanger span without changing the main level.",
-      "note": "Release TRACK to return to the primary control; pick up its saved level.",
+      "note": "Move the fader before releasing TRACK to avoid its tap action. After release, cross the main value to regain control.",
       "steps": [
         {
           "label": "Hold FN + T1",
@@ -12397,7 +12440,7 @@
         },
         {
           "label": "Page 1 is open",
-          "detail": "The side lights identify Page 1. Example starts with the secondary at its midpoint.",
+          "detail": "The side lights identify Page 1.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -12418,7 +12461,7 @@
         },
         {
           "label": "Hold T2",
-          "detail": "Hold T2 and move F2 to adjust chorus / flanger span.",
+          "detail": "Keep T2 held while moving F2.",
           "hold": [
             "T2"
           ],
@@ -12441,7 +12484,7 @@
         },
         {
           "label": "Adjust chorus / flanger span",
-          "detail": "Hold T2 and move F2 to adjust chorus / flanger span.",
+          "detail": "Move F2 to change chorus / flanger span.",
           "hold": [
             "T2"
           ],
@@ -12467,7 +12510,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "Hold T2 and move F2 to adjust chorus / flanger span.",
+          "detail": "Keep T2 held and raise F2 to adjust the span.",
           "hold": [
             "T2"
           ],
@@ -12532,7 +12575,7 @@
       "title": "Phaser feedback",
       "gesture": "Page 3: hold T1 and move F1",
       "body": "Hold T1 and move F1 to adjust phaser feedback without changing the main level.",
-      "note": "Release TRACK to return to the primary control; pick up its saved level.",
+      "note": "Move the fader before releasing TRACK to avoid its tap action. After release, cross the main value to regain control.",
       "steps": [
         {
           "label": "Hold FN + T3",
@@ -12581,7 +12624,7 @@
         },
         {
           "label": "Page 3 is open",
-          "detail": "The side lights identify Page 3. Example starts with the secondary at its midpoint.",
+          "detail": "The side lights identify Page 3.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -12602,7 +12645,7 @@
         },
         {
           "label": "Hold T1",
-          "detail": "Hold T1 and move F1 to adjust phaser feedback.",
+          "detail": "Keep T1 held while moving F1.",
           "hold": [
             "T1"
           ],
@@ -12625,7 +12668,7 @@
         },
         {
           "label": "Adjust phaser feedback",
-          "detail": "Hold T1 and move F1 to adjust phaser feedback.",
+          "detail": "Move F1 to change phaser feedback.",
           "hold": [
             "T1"
           ],
@@ -12651,7 +12694,7 @@
         },
         {
           "label": "Move back up",
-          "detail": "Hold T1 and move F1 to adjust phaser feedback.",
+          "detail": "Keep T1 held and raise F1 to adjust feedback.",
           "hold": [
             "T1"
           ],
@@ -12708,45 +12751,149 @@
         3,
         1
       ]
-    }
-  ],
-  "categories": [
-    {
-      "id": 1,
-      "title": "Start & record",
-      "short": "Start & record",
-      "subtitle": ""
     },
     {
-      "id": 2,
-      "title": "Shape the tape",
-      "short": "Shape the tape",
-      "subtitle": "Change speed, reshape a loop, or explore four heads."
+      "id": "beats-per-bar-v4",
+      "category": 4,
+      "group": "Page 7 / Take & timing",
+      "title": "Beats per bar",
+      "gesture": "Page 7 · F3 = 3 / 4 / 5 / 7",
+      "body": "Sets the bar length for the beat grid. Hold FN + T4, then release. Press VOL+ three times for Page 7. Move F3 through its saved position, then select 3, 4, 5 or 7 beats per bar, bottom to top. Tap FN to close.",
+      "note": "Saved per song; default 4. T3 flashes the selected number of beats.",
+      "initialFaders": [
+        0.8,
+        0.8,
+        0.8,
+        0.8
+      ],
+      "steps": [
+        {
+          "label": "Open Page 4",
+          "detail": "Hold FN + T4, then release both.",
+          "hold": [
+            "FN",
+            "T4"
+          ],
+          "tap": [],
+          "view": "comboHold",
+          "duration": 2,
+          "context": {
+            "playing": false,
+            "loaded": [
+              1
+            ],
+            "grid": false
+          }
+        },
+        {
+          "label": "Move to Page 5",
+          "detail": "Press VOL+. No FN needed.",
+          "hold": [],
+          "tap": [
+            "VOL+"
+          ],
+          "view": "top",
+          "duration": 2
+        },
+        {
+          "label": "Move to Page 6",
+          "detail": "Press VOL+ again.",
+          "hold": [],
+          "tap": [
+            "VOL+"
+          ],
+          "view": "top",
+          "duration": 2
+        },
+        {
+          "label": "Open Page 7",
+          "detail": "Press VOL+ once more for Take & timing.",
+          "hold": [],
+          "tap": [
+            "VOL+"
+          ],
+          "view": "top",
+          "duration": 2
+        },
+        {
+          "label": "Pick up the saved value",
+          "detail": "Move F3 through its saved position to take control.",
+          "hold": [],
+          "tap": [],
+          "faders": {
+            "3": 0.3764705882352941
+          },
+          "view": "faders",
+          "duration": 2
+        },
+        {
+          "label": "Choose 5 beats per bar",
+          "detail": "Raise F3 to select 5. Bottom to top: 3, 4, 5, 7; T3 counts the choice.",
+          "hold": [],
+          "tap": [],
+          "faders": {
+            "3": 0.6274509803921569
+          },
+          "view": "faders",
+          "duration": 2.5
+        },
+        {
+          "label": "Return to the tape",
+          "detail": "Tap FN to close. The song keeps its beats-per-bar setting.",
+          "hold": [],
+          "tap": [
+            "FN"
+          ],
+          "view": "comboHold",
+          "duration": 2
+        }
+      ]
     },
     {
-      "id": 3,
-      "title": "Effects",
-      "short": "Effects",
-      "subtitle": "Eight control pages. Every lane, gesture and route."
-    },
-    {
-      "id": 4,
-      "title": "Place & time",
-      "short": "Place & time",
-      "subtitle": "Stereo placement, take length, grid offset and nudge."
-    },
-    {
-      "id": 5,
-      "title": "Repeat & bounce",
-      "short": "Repeat & bounce",
-      "subtitle": "Catch a moment, then capture what you make of it."
+      "id": "escape-hatch-v4",
+      "category": 1,
+      "group": "Everyday controls",
+      "title": "Escape hatch",
+      "gesture": "Hold FN + T1 + T2 · 2 seconds",
+      "body": "Reset performance controls without deleting recordings. Hold all three until the four track lights glow solid, then release.",
+      "note": "Resets FX, speed, trim, timing and rocker settings; unmutes tracks and input. A waiting recording is cancelled; an active recording is saved.",
+      "steps": [
+        {
+          "label": "Hold FN + T1 + T2",
+          "detail": "Hold all three for two seconds; solid track lights confirm the reset.",
+          "hold": [
+            "FN",
+            "T1",
+            "T2"
+          ],
+          "tap": [],
+          "view": "comboHold",
+          "seconds": 3,
+          "duration": 1.5,
+          "context": {
+            "playing": true,
+            "loaded": [
+              1
+            ],
+            "grid": false
+          }
+        },
+        {
+          "label": "Release all three",
+          "detail": "Normal controls return. Your recordings stay saved.",
+          "hold": [],
+          "tap": [],
+          "view": "front",
+          "duration": 2
+        }
+      ]
     }
   ],
   "rockerModes": [
     {
       "slot": 1,
       "id": "speed",
-      "name": "Pitch",
+      "name": "Pitch / speed",
       "kind": "Set the speed",
       "summary": "Change the whole tape’s speed and pitch.",
       "up": "Click to increase speed. Double-click for the next semitone; hold to keep stepping.",
@@ -12760,7 +12907,7 @@
     {
       "slot": 2,
       "id": "wind-v4",
-      "name": "Wind",
+      "name": "FF / RW",
       "kind": "Hold to shuttle",
       "summary": "Fast-forward or rewind through the tape.",
       "up": "Hold to wind forward.",
@@ -12774,7 +12921,7 @@
     {
       "slot": 3,
       "id": "bender-v4",
-      "name": "Bender",
+      "name": "Tape bending",
       "kind": "Hold to bend",
       "summary": "Drag the tape or pull it in uneven surges.",
       "up": "Hold for repeated pulling surges.",
@@ -12788,7 +12935,7 @@
     {
       "slot": 4,
       "id": "battery-v4",
-      "name": "Battery",
+      "name": "Battery drain",
       "kind": "Build and remove wear",
       "summary": "Make the motor sag, wobble and stall.",
       "up": "Hold to recover toward normal.",
@@ -12816,7 +12963,7 @@
     {
       "slot": 6,
       "id": "magnet-v4",
-      "name": "Magnet",
+      "name": "Magnet erase",
       "kind": "Leave a gap",
       "summary": "Erase a passing section from playback without shortening the loop.",
       "up": "Tap to undo the latest matching erase.",
@@ -12830,7 +12977,7 @@
     {
       "slot": 7,
       "id": "scissors386",
-      "name": "Scissors / glue",
+      "name": "Cut / glue",
       "kind": "Remove a section",
       "summary": "Cut out a section and join the remaining tape.",
       "up": "Tap to cancel the first mark, or undo the last cut.",
@@ -12844,7 +12991,7 @@
     {
       "slot": 8,
       "id": "manual-head-v4",
-      "name": "Manual tape head",
+      "name": "Manual heads",
       "kind": "Make and lift contact",
       "summary": "Touch the moving tape with one contact or four heads.",
       "up": "Hold to hear the tape under ordinary contact.",
@@ -12855,5 +13002,11 @@
       "tip": "PLAY starts or stops the tape. This contact mode is separate from latching Heads with FN + triple-tap PLAY.",
       "shape": "heads"
     }
+  ],
+  "hiddenIds": [
+    "catch",
+    "repeat-faders",
+    "center-placement",
+    "reset-timing"
   ]
 }
