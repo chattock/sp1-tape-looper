@@ -1,6 +1,6 @@
 // Executable teaching scenarios. Prerequisites are set once; controls then drive
 // the same adapter used by direct interaction. No effects inferred from LED labels.
-import {Simulator} from './simulator.js?v=620';
+import {Simulator} from './simulator.js?v=gesture-audit-20261112';
 export function gestureSeconds(card,index){
  const step=card.steps[index];
  // The preset demo separates the armed LED from the grid punch-in.
@@ -64,7 +64,7 @@ export function prepareScenario(card){
  if(['release-repeat','move-repeat','repeat-octave','repeat-faders','flow-back'].includes(card.id)){s.repeat={size:.125,position:0,at:0};s.keys.set('PLAY',{at:0,used:true});}
  if(['stop-page','flow-back','print-speed','held-print'].includes(card.id)){s.startTake(1,card.id==='held-print'?'sampler':'copy');if(card.id==='held-print')s.keys.set('T2',{at:0,used:true});}
  if(card.id==='status-lights'){s.slot=1;s.tracks[0].state='playing';}
- if(card.id.startsWith('fx-')){const [,p,l]=card.id.split('-').map(Number);s.faders[l-1]=s.fx[p-1][l-1];if(p+':'+l in s.cycles)s.cycles[p+':'+l]=0;}
+ if(card.id.startsWith('fx-')){const [,p,l]=card.id.split('-').map(Number);s.faders[l-1]=s.fx[p-1][l-1];}
  if(['nudge','nudge-lights'].includes(card.id))s.faders[0]=.5;
  if(['head-source','nudge','reset-timing','nudge-lights'].includes(card.id))s.fixture='duet';
  s.rearm();return s;

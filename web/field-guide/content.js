@@ -12225,3 +12225,69 @@ finishGuideAudit(cards);
  };
  for(const card of cards)for(const [index,detail]of Object.entries(edits[card.id]||{}))card.steps[Number(index)-1].detail=detail;
 }
+
+// Gesture audit against the released v4 control handlers; keep page context explicit.
+{
+ const byId=id=>cards.find(c=>c.id===id);
+ Object.assign(byId('tap-rate'),{gesture:'On the FX page: hold FN + tap TRACK 2+ times',body:'Open the effect’s page. Hold FN and tap its TRACK button at least twice in time to set its rate.',note:'To clear the tapped rate, hold FN + PLAY and tap its TRACK button. Rate controls: P1 T2/T4; P2 T4; P3 T1/T2/T3; P4 T4.'});
+ Object.assign(byId('tap-rate').steps[0],{detail:'On Page 2, hold FN to tap echo’s rate.'});
+ Object.assign(byId('tap-rate').steps[1],{detail:'Keep FN held and tap T4 at least twice in time.'});
+ Object.assign(byId('tap-rate').steps[2],{label:'Clear tapped tempo',detail:'On the same page, hold FN + PLAY and tap T4 to clear its tapped rate.'});
+ Object.assign(byId('monitor'),{gesture:'Hold PLAY + VOL− + VOL+',body:'Hold PLAY and press both volume buttons to mute or restore live input. Works on any page.',note:'Muted input is also silent in recordings and cannot arm a new input take. Unmute before recording.'});
+ byId('monitor').steps[1].detail='Input is muted. Unmute before recording.';
+ Object.assign(byId('loop-mode'),{gesture:'Hold FN + PLAY · about 0.5 s, then release',body:'Hold FN + PLAY for about half a second, then release both to switch Fixed / Variable.'});
+ byId('loop-mode').steps[0].detail='Hold both for about half a second, then release to switch modes.';
+ byId('loop-mode').steps[2].detail='Hold FN + PLAY for about half a second, then release to switch back.';
+ Object.assign(byId('transport'),{body:'Tap PLAY to pause or resume. Hold PLAY for about half a second, then release to restart.'});
+ byId('transport').steps[2].detail='Hold for about half a second, then release to restart.';
+ byId('levels').body='In track mode, raise a fader to bring its track forward; lower it to turn that track down.';
+ byId('takes-v4').note='Close control pages and leave four-head mode before switching takes. Switch while playing or stopped. A New lane breathes when saved takes exist. Hold FN during playback to count takes.';
+ byId('reverse').body='In track mode, hold FN + the track button first, then tap PLAY before its page opens. Repeat to reverse back.';
+ byId('isolate').body='In track mode, hold FN + PLAY first, then press the track to hear alone. Release the track to restore the mix.';
+ byId('normal-speed').note='Also clears Magnet gaps and Scissors cuts. Recordings, FX settings and the selected rocker mode stay unchanged.';
+ byId('restore-tape-v4').note='Solid track lights confirm. Recordings, FX settings and the selected rocker mode stay unchanged.';
+ byId('routing').note='Routes Pages 1–4; EQ always affects the whole mix. During a beat repeat, VOL− / VOL+ move its window instead.';
+ byId('reset-fx').body='Hold FN and tap T1 + T4 together to reset all FX, flatten EQ and set routing to BOTH.';
+ byId('reset-fx').steps[0].detail='Keep FN held while resetting all FX.';
+ byId('reset-fx').steps[1].detail='Reset all FX, EQ and routing to defaults.';
+ byId('reset-timing').body='Hold FN + PLAY and press VOL− to reset the loop window, song/track trims and timing offsets. Take length returns to OFF; beats per bar returns to 4.';
+ byId('reset-timing').steps[3].detail='Offsets and trims reset; take length OFF; beats per bar 4.';
+ byId('reset-window').note='VOL− also resets song/track trims, timing offsets and take length, and restores 4 beats per bar. Per-track reverse stays. During a repeat, VOL− / VOL+ move its window.';
+ byId('center-placement').gesture='Page 6: tap TRACK · FN + T1 + T4 for all';
+ byId('center-placement').body='On Page 6, tap a track to center its placement. Hold FN and tap T1 + T4 together to center all four and reset FX.';
+ byId('round-grid').note='Near-whole tempos round within 0.4 BPM, from 50–200 BPM. A sweep confirms rounding; all-four flashes mean no change.';
+ byId('clear-grid').steps[0].detail='Tap FN, quickly press it again, then hold about one second to clear the grid.';
+ byId('clear-grid').note='Solid track lights confirm. Recordings and the song’s beats-per-bar setting stay unchanged.';
+ byId('first-loop').note='Without a grid, input sound starts recording; with a grid, recording follows its punch-in. Tap PLAY while armed to cancel and pause.';
+ byId('first-loop').steps[2].detail='Without a grid, input sound starts recording. T1 turns solid.';
+ byId('bluetooth-v4').steps[0].detail='Triple-tap FN and hold the last press until all four track lights start fading, then release.';
+ for(const id of ['filter-damping-v4','chorus-span-v4','phaser-feedback-v4'])byId(id).note='Move the fader before releasing TRACK to avoid its tap action. After release, cross the main value to regain control.';
+ byId('octave').note='No jump outside 0.25×–2×. Speed changes are locked during input recording; bounces allow them.';
+ byId('speed').note='Pitch / speed mode: 0.25×–2×. Input recording locks speed; bounces allow speed moves.';
+ byId('countdown').note='Fixed mode counts base loops; Variable counts grid bars. Up to four lights show the units left.';
+}
+{
+ const card=id=>cards.find(c=>c.id===id);
+ card('reset-timing').steps[0].detail='On Page 7: tap once to clear this track’s trim, again to center its timing, then again to clear grid offset.';
+ card('reset-timing').note='On Page 7, track taps clear that track’s trim first, then its nudge, then its page setting. FN + T1 + T4 resets FX instead.';
+ card('beats-per-bar-v4').note='Saved per song; default 4. T3 counts the beats. On Page 7, T3 restores 4 after clearing track 3’s trim and nudge.';
+ card('delete').steps[1].detail='The track light goes dark; other takes stay saved.';
+ card('tape-copy').note='A loaded destination keeps its earlier take saved. Tape copy follows tape speed; grid, Fixed mode or chop can delay the stop to a cycle boundary.';
+ card('print-repeat').note='Keep PLAY held to resize while recording. The destination’s earlier takes stay saved.';
+ card('sampler').note='Speed is baked for playback at 1×. The destination’s earlier takes stay saved.';
+ for(const [id,lane]of [['fx-1-2',2],['fx-1-4',4],['fx-2-4',4],['fx-3-1',1],['fx-3-2',2],['fx-3-3',3],['fx-4-4',4]]){
+  const c=card(id);c.note=c.note.replace(/Tap a rate with FN \+ T\d, at least twice\./,`Hold FN and tap T${lane} at least twice in time to set its rate.`);
+  if(['fx-2-4','fx-3-1','fx-3-2','fx-3-3','fx-4-4'].includes(id))c.note+=' A plain track tap clears its tapped rate.';
+ }
+ const echo=card('fx-2-4');echo.body='Tap T4 to cycle 1/16 → dotted 1/16 → 1/8. F4 sets the amount; lower it fully to turn echo off.';
+ for(const step of echo.steps)if(step.label==='Tap T4: dotted')step.label='Tap T4: dotted 1/16';
+ card('reset-window').steps[1].detail='Restore the whole loop forward; clear trims and timing offsets. Take length OFF; beats per bar 4.';
+}
+// Start the Tremolo lesson at the firmware's default quarter division.
+{
+ const steps=cards.find(c=>c.id==='fx-3-3').steps.filter(s=>s.tap?.includes('T3')&&!s.hold?.length);
+ for(const [i,step]of steps.entries()){
+  step.label='Tap T3: '+['beat','half','quarter'][i];step.count=i+1;
+  if(step.slowConfirmation)step.slowConfirmation={...step.slowConfirmation,length:(i+1)*.08};
+ }
+}

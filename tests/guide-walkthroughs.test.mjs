@@ -40,3 +40,47 @@ test('countdown keeps its full four-bar timing in two seven-second captions',()=
  const c=card('countdown');assert.equal(c.steps.length,2);assert.equal(c.steps.reduce((n,_,i)=>n+gestureSeconds(c,i),0),8.75);
  const s=new Scenario(c);s.begin(0);s.advance(gestureSeconds(c,0));assert(s.sim.recording);s.begin(1);s.advance(gestureSeconds(c,1));assert.equal(s.sim.recording,null);
 });
+
+import {Simulator} from '../web/field-guide/simulator.js';
+test('FX tempo is tapped with FN; FN + PLAY clears only that lane',()=>{
+ for(const [page,lane]of [[1,2],[1,4],[2,4],[3,1],[3,2],[3,3],[4,4]]){
+  const s=new Simulator(),key='T'+lane,id=page+':'+lane;s.page=page;
+  s.button('FN',true);s.button(key,true);s.tick(80);s.button(key,false);
+  s.tick(500);s.button(key,true);s.tick(580);s.button(key,false);s.button('FN',false);
+  assert.equal(s.rates[id],120,id);s.rates['other']=90;
+  s.button('FN',true);s.button('PLAY',true);s.button(key,true);
+  assert.equal(s.rates[id],undefined,id);assert.equal(s.rates.other,90);
+ }
+ const c=card('tap-rate');assert.match(c.steps[2].label,/Clear tapped tempo/);assert.deepEqual(c.steps[2].hold,['FN','PLAY']);assert.deepEqual(c.steps[2].tap,['T4']);
+});
+test('plain gate and chorus taps keep a tapped rate; timed division and wobble taps clear it',()=>{
+ for(const [page,lane,clears]of [[1,2,false],[1,4,false],[2,4,true],[3,1,true],[3,2,true],[3,3,true],[4,4,true]]){
+  const s=new Simulator(),id=page+':'+lane;s.page=page;s.rates[id]=120;s.pageTap(lane-1);assert.equal(s.rates[id],clears?undefined:120,id);
+ }
+});
+test('input mute refuses new input takes and cancels a waiting arm, while bounces remain available',()=>{
+ const s=new Simulator();s.startTake(0);assert.equal(s.tracks[0].state,'armed');
+ s.button('PLAY',true);s.button('VOL−',true);s.button('VOL+',true);
+ assert(s.monitorMuted);assert.equal(s.recording,null);assert.equal(s.tracks[0].state,'empty');
+ s.startTake(0);assert.equal(s.recording,null);s.startTake(1,'copy');assert.equal(s.recording.kind,'copy');
+ assert.doesNotMatch(card('monitor').steps[1].detail,/still captures/);
+});
+test('window reset clears trims, offsets, take length and bar length without deleting audio',()=>{
+ const s=new Simulator();s.tracks[0].state='playing';s.tracks[0].trim={head:1,tail:2};s.tracks[0].nudge=.7;s.current.offset=.2;s.current.preset=3;s.current.beatsPerBar=7;
+ s.button('FN',true);s.button('PLAY',true);s.button('VOL−',true);
+ assert.equal(s.current.offset,0);assert.equal(s.current.preset,0);assert.equal(s.current.beatsPerBar,4);assert.equal(s.tracks[0].trim,undefined);assert.equal(s.tracks[0].nudge,.5);assert.equal(s.tracks[0].state,'playing');
+});
+test('a bounce onto a loaded track preserves its earlier take',()=>{
+ const s=new Simulator();s.tracks[0].state='playing';s.tracks[0].audioId=123;s.startTake(0,'copy');s.tick(1000);s.finishTake(true);
+ assert.equal(s.tracks[0].takes.length,2);assert.equal(s.tracks[0].takes[0].audioId,123);
+ for(const id of ['tape-copy','print-repeat','sampler'])assert.doesNotMatch(card(id).note,/loaded.*replaced/);
+});
+test('every FX type/division caption and flash count matches the executed track tap',()=>{
+ const types={'1:2':['Chorus','Flanger'],'1:3':['Soft','Hard','Fold'],'1:4':['Gallop','Halves','Slow gear'],'2:1':['Crush','Lo-fi','Radio'],'2:4':['1/16','dotted 1/16','1/8'],'3:1':['beat','half','quarter'],'3:2':['beat','half','quarter'],'3:3':['beat','half','quarter'],'3:4':['Reverb','Freeze'],'4:3':['Cassette','Vinyl','Pink','Minidisc'],'4:4':['Wow + flutter','Wow','Flutter']};
+ for(const [id,names]of Object.entries(types)){
+  const c=card('fx-'+id.replace(':','-')),s=new Scenario(c);for(let i=0;i<c.steps.length;i++){
+   s.begin(i);s.advance(gestureSeconds(c,i));const step=c.steps[i];if(!step.label.startsWith('Tap T')||!step.label.includes(':'))continue;
+   const selected=s.sim.cycles[id];assert.equal(step.label.split(': ')[1].toLowerCase(),names[selected].toLowerCase(),c.id+' step '+(i+1));assert.equal(step.count,id==='4:4'?selected:selected+1,c.id+' flashes');
+  }
+ }
+});

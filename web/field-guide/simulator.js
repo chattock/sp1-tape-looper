@@ -113,7 +113,7 @@ export class Simulator{
  pageTap(i){
   if(this.recording&&this.page>=6)return;
   if(this.page===4&&i===3)delete this.rates['4:4'];
-  if(this.page<=4){const id=this.page+':'+(i+1);if(id in this.cycles){this.cycles[id]=(this.cycles[id]+1)%FX_CYCLES[id];this.flash={pattern:'lane-count',at:this.now,lane:i+1,count:id==='4:4'?this.cycles[id]:this.cycles[id]+1};if(['1:4','2:4','3:1','3:2','3:3','4:4'].includes(id))delete this.rates[id];}else {this.fx[this.page-1][i]=this.page===1&&i===0||this.page===4&&i===1?.5:0;this.secondary[this.page-1][i]=secondaryDefaults()[this.page-1][i];}}
+  if(this.page<=4){const id=this.page+':'+(i+1);if(id in this.cycles){this.cycles[id]=(this.cycles[id]+1)%FX_CYCLES[id];this.flash={pattern:'lane-count',at:this.now,lane:i+1,count:id==='4:4'?this.cycles[id]:this.cycles[id]+1};if(['2:4','3:1','3:2','3:3','4:4'].includes(id))delete this.rates[id];}else {this.fx[this.page-1][i]=this.page===1&&i===0||this.page===4&&i===1?.5:0;this.secondary[this.page-1][i]=secondaryDefaults()[this.page-1][i];}}
   if(this.page===5)this.fx[4][i]=.5;
   if(this.page===6){this.tracks[i].placement=.5;this.fx[5][i]=.5;}
   if(this.page===7){if(this.tracks[i].trim){delete this.tracks[i].trim;}else if(this.tracks[i].nudge!==.5)this.tracks[i].nudge=.5;else if(i===0)this.current.offset=0;else if(i===1)this.current.preset=0;else if(i===2)this.current.beatsPerBar=4;}
@@ -125,7 +125,7 @@ export class Simulator{
   if(this.has('FN')&&this.has('VOL+')&&this.has('VOL−')){this.page=0;this.rockerOpen=true;this.rockerAt=this.now;this.flash={pattern:'page-entry',at:this.now,page:(this.rockerMode%4)+1};this.consume('FN','VOL+','VOL−');this.say('Rocker '+(this.rockerMode+1));return;}
   if(this.rockerOpen&&!this.has('FN')){this.rockerMode=Math.max(0,Math.min(7,this.rockerMode+d));this.rockerAt=this.now;this.consume(key);this.say('Rocker '+(this.rockerMode+1));return;}
 
-  if(this.has('PLAY')&&this.has('VOL+')&&this.has('VOL−')){this.monitorMuted=!this.monitorMuted;this.flash={pattern:this.monitorMuted?'sweep-down':'sweep-up',at:this.now};this.consume('PLAY','VOL+','VOL−');this.say(this.monitorMuted?'Input monitor muted':'Input monitor on');return;}
+  if(this.has('PLAY')&&this.has('VOL+')&&this.has('VOL−')){this.monitorMuted=!this.monitorMuted;if(this.monitorMuted&&this.recording?.kind==='ordinary'&&this.tracks[this.recording.i].state==='armed')this.finishTake(true);this.flash={pattern:this.monitorMuted?'sweep-down':'sweep-up',at:this.now};this.consume('PLAY','VOL+','VOL−');this.say(this.monitorMuted?'Input monitor muted':'Input monitor on');return;}
   if(this.has('FN')&&this.has('PLAY')){if(up)this.window.position=0;else {this.window={start:0,end:1,position:0,size:1};this.current.offset=0;this.current.preset=0;this.current.beatsPerBar=4;this.tracks.forEach(t=>{t.nudge=.5;delete t.trim;});}this.consume('FN','PLAY',key);this.confirm();this.say('Window reset');return;}
   if(this.page&&!this.has('FN')&&!this.has('PLAY')){this.openPage(this.page+d,true);this.consume(key);return;}
   if(this.has('FN')){if(this.page)this.openPage(this.page+d,true);else {this.window.position=(this.window.position+d*this.window.size+1)%1;this.say('Loop window moved');}this.consume('FN',key);return;}
