@@ -107,3 +107,20 @@ test('releasing PLAY ends the routing double-tap chain',()=>{
  const s=new Simulator();s.button('PLAY',true);s.button('VOL−',true);s.tick(50);s.button('VOL−',false);s.button('PLAY',false);assert.equal(s.route,1);
  s.tick(150);s.button('PLAY',true);s.button('VOL+',true);s.tick(251);assert.equal(s.route,2);
 });
+
+test('guide teaches simple adjustment and keeps one canonical loop reset',async()=>{
+ const {related,hiddenIds}=await import('../web/field-guide/guide-layout.js');
+ assert(hiddenIds.has('center-placement'));assert(hiddenIds.has('reset-timing'));
+ assert(!Object.values(related).flat().includes('center-placement'));assert(!Object.values(related).flat().includes('reset-timing'));
+ assert.match(card('placement').body,/Return it to center/);assert.match(card('placement').body,/TRACK button for exact center/);assert(!/T1 \+ T4/.test(card('placement').body));
+ assert.equal(card('reset-window').title,'Reset loop controls');assert.equal(card('reset-window').steps.length,3);
+ assert(!/trim|nudge/.test(card('beats-per-bar-v4').note));assert.match(card('nudge').note,/Nudge is relative/);
+});
+test('simplified placement walkthrough really centers its track',()=>{
+ const c=card('placement'),s=new Scenario(c);for(let i=0;i<c.steps.length;i++){s.begin(i);s.advance(gestureSeconds(c,i));}assert.equal(s.sim.tracks[0].placement,.5);
+});
+test('canonical loop reset restores loops and timing while preserving audio and FX',()=>{
+ const c=card('reset-window'),s=new Scenario(c);s.begin(0);s.sim.fx[1][3]=.7;s.sim.route=1;s.sim.current.beatsPerBar=7;s.sim.current.preset=3;s.sim.current.offset=.2;s.sim.tracks[0].trim={head:1,tail:0};s.sim.tracks[0].nudge=.7;const audio=JSON.stringify(s.sim.tracks[0].takes);
+ for(let i=0;i<c.steps.length;i++){if(i)s.begin(i);s.advance(gestureSeconds(c,i));}
+ assert.equal(s.sim.current.beatsPerBar,4);assert.equal(s.sim.current.preset,0);assert.equal(s.sim.current.offset,0);assert.equal(s.sim.tracks[0].trim,undefined);assert.equal(s.sim.tracks[0].nudge,.5);assert.equal(s.sim.fx[1][3],.7);assert.equal(s.sim.route,1);assert.equal(JSON.stringify(s.sim.tracks[0].takes),audio);
+});

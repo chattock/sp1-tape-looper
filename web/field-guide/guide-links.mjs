@@ -2,7 +2,9 @@
 export function initGuideLinks(content,{reduced=false,onSection}={}){
  const embedded=parent!==window;
  const href=id=>embedded?'#guide/'+id:'#'+id;
+ const aliases={'card-center-placement':'card-placement','card-reset-timing':'card-reset-window'};
  function reveal(id){
+  id=aliases[id]||id;
   if(!/^[a-z0-9-]+$/.test(id))return;
   const target=document.getElementById(id);if(!target||!content.contains(target))return;
   const search=document.getElementById('guideSearch');if(search?.value){search.value='';search.dispatchEvent(new Event('input'));}

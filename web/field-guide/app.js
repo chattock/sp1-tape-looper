@@ -1,12 +1,12 @@
-import {initGuideLinks} from './guide-links.mjs?v=620';
+import {initGuideLinks} from './guide-links.mjs?v=reset-guide-20261112';
 import {fxMarkup,bindFx} from './fx-rack610.mjs?v=610';
 import {initGuideRail} from './guide-rail.mjs?v=620';
 import {rockerMarkup,bindRockers,selectRocker} from './rocker-guide.js?v=624-copy';
 import {stepSeconds} from './scenarios.js?v=gesture-check-20261112';
 import {track,trackOnce,configureAnalytics} from './telemetry.js?v=610';
 import {Device} from './device.js?v=gesture-check-20261112';
-import {categories,cards} from './content.js?v=gesture-check-20261112';
-import {related,nestedIds,hiddenIds,groupIntros,introduction,whatsNew} from './guide-layout.js?v=walkthrough6-20261112';
+import {categories,cards} from './content.js?v=reset-guide-20261112';
+import {related,nestedIds,hiddenIds,groupIntros,introduction,whatsNew} from './guide-layout.js?v=reset-guide-20261112';
 configureAnalytics(cards,categories);
 const $=s=>document.querySelector(s),playIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5v17l14-8.5z"/></svg>';
 let watchedMs=0,lastWatchTick=0;

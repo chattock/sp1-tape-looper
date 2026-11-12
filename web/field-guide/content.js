@@ -12304,3 +12304,20 @@ finishGuideAudit(cards);
  c('grid-record-lights').steps[0].detail='T2 flashes twice per beat until punch-in, then stays solid while recording.';
  c('grid-record-lights').steps[1].detail='T2 flashes twice per beat until the aligned stop, then pulses with playback.';
 }
+
+// Teach ordinary adjustment first; keep one broad loop reset and optional details.
+{
+ const c=id=>cards.find(card=>card.id===id);
+ Object.assign(c('placement'),{gesture:'Page 6 · F1–F4 = track placement',body:'Lower a fader to move left; raise it to move right. Return it to center, or tap its TRACK button for exact center.',note:'A mono take pans; a stereo take leans. Center restores the original balance and its light goes dark. Cross the saved position to take control.'});
+ c('placement').steps.push({label:'Tap T1 to center',detail:'Track 1 returns to its original balance.',hold:[],tap:['T1'],faders:{},page:6,view:'tracks',duration:1.25});
+ c('offset').body='On Page 7, move F1 up for later or down for earlier, by up to about half a beat. Return F1 to center for zero offset.';
+ c('beats-per-bar-v4').note='Saved per song; default 4. T3 flashes the selected number of beats.';
+ c('nudge').note='Nudge is relative; centering the fader alone does not reset it. On Page 7, TRACK taps clear its trim, then nudge, then its page setting; already-clear settings are skipped. Works without a grid; recording tracks cannot be nudged.';
+ Object.assign(c('reset-window'),{title:'Reset loop controls',gesture:'Hold FN + PLAY · press VOL−',body:'Hold FN + PLAY and press VOL− to restore full loops and default timing.',note:'Clears loop-window edits, song/track trims and timing offsets. Take length returns to OFF; beats per bar to 4. Recordings, FX and per-track reverse stay unchanged.'});
+ c('reset-window').steps=c('reset-window').steps.slice(0,3);
+ c('reset-window').steps[0].detail='Keep both held while restoring the loop controls.';
+ c('reset-window').steps[1].label='Press VOL− to reset';
+ c('reset-window').steps[1].detail='Full loops return; trims and timing offsets clear. Take length OFF; beats per bar 4.';
+ c('reset-window').steps[2].detail='Release both. Recordings and FX stay unchanged.';
+ c('move-window').note='To move the window home without changing its size or direction, hold FN + PLAY and press VOL+. With a page open, FN + VOL− / VOL+ moves between pages.';
+}
