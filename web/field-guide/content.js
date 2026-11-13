@@ -6,16 +6,16 @@ export const categories = [
     "subtitle": ""
   },
   {
-    "id": 2,
-    "title": "Shape the tape",
-    "short": "Shape the tape",
-    "subtitle": "Change speed, reshape a loop, or explore four heads."
-  },
-  {
     "id": 3,
     "title": "Effects",
     "short": "Effects",
     "subtitle": "Eight control pages. Every lane, gesture and route."
+  },
+  {
+    "id": 2,
+    "title": "Shape the tape",
+    "short": "Shape the tape",
+    "subtitle": "Change speed, reshape a loop, or explore four heads."
   },
   {
     "id": 4,
@@ -624,8 +624,8 @@ export const cards = [
     "group": "Everyday controls",
     "title": "Unlimited takes",
     "gesture": "TRACK + ROCKER DOWN = saved takes · TRACK + ROCKER UP = New",
-    "body": "Hold a track and click ROCKER DOWN to cycle its recorded takes. ROCKER UP selects an empty New lane. Record normally there; your earlier takes stay saved. Each song and track has its own lane. Takes are limited by available storage.",
-    "note": "Switch while playing or stopped. A New lane breathes when it has saved takes. Hold FN during playback to count the total takes on each track; the counts repeat together.",
+    "body": "Hold a track and click ROCKER DOWN to cycle its recorded takes. ROCKER UP selects an empty New lane. Record normally there. Your earlier takes stay saved. Each song and track has its own lane.",
+    "note": "Switch while playing or stopped. A New lane breathes when it has saved takes. Hold FN during playback to count the total takes on each track. The counts repeat together.",
     "steps": [
       {
         "label": "Choose New",
@@ -725,11 +725,11 @@ export const cards = [
     "title": "Overdub",
     "gesture": "Hold TRACK · release · tap TRACK",
     "body": "Hold a loaded track for 0.6 seconds to prepare overdub. Release, then tap it within 10 seconds to arm. Tap again to finish.",
-    "note": "Overdub replaces this take after saving; other takes stay intact. To keep this version, choose New before recording. Tap FN to cancel preparation. Muted input cannot start ordinary recording.",
+    "note": "Overdub replaces this take after saving. Other takes stay intact. To keep this version, choose New before recording. Tap FN to cancel preparation. Muted input cannot start ordinary recording.",
     "steps": [
       {
         "label": "Hold the loaded track",
-        "detail": "Hold for 0.6 seconds. This prepares overdub; it does not start recording.",
+        "detail": "Hold for 0.6 seconds. This prepares overdub. It does not start recording.",
         "hold": [
           "T1"
         ],
@@ -825,12 +825,12 @@ export const cards = [
     "category": 1,
     "group": "Everyday controls",
     "title": "Take deletion",
-    "gesture": "Double-tap; hold the second press",
-    "body": "Double-tap the track, holding the second press until deletion is acknowledged. This removes the selected take; other takes remain.",
+    "gesture": "Double-tap. Hold the second press",
+    "body": "Double-tap the track, holding the second press until deletion is acknowledged. This removes the selected take. Other takes remain.",
     "note": "If the track is still saving, wait for saving to finish and try again. TRACK + ROCKER DOWN finds the remaining takes.",
     "steps": [
       {
-        "label": "Double-tap T1; hold the second press",
+        "label": "Double-tap T1. Hold the second press",
         "detail": "The track light goes dark when the take is deleted.",
         "hold": [],
         "tap": [],
@@ -939,7 +939,7 @@ export const cards = [
       },
       {
         "label": "Read the song lights",
-        "detail": "With playback stopped, the side lights show the song: solid is the bank; blinking is its position.",
+        "detail": "With playback stopped, the side lights show the song: solid is the bank. Blinking is its position.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -963,7 +963,7 @@ export const cards = [
     "category": 1,
     "group": "Songs & settings",
     "title": "Fixed & variable loops",
-    "gesture": "Briefly hold FN + PLAY; release",
+    "gesture": "Briefly hold FN + PLAY. Release",
     "body": "Briefly hold FN + PLAY, then release both to switch loop length mode.",
     "note": "Fixed rounds each take to a whole multiple of the base loop, keeping tracks aligned. Variable preserves each recorded length, so tracks can cycle independently. The side lights confirm your choice.",
     "steps": [
@@ -1528,7 +1528,7 @@ export const cards = [
     "title": "Loop window controls",
     "gesture": "FN + F1 / F2 / F3 / F4",
     "body": "F1 = start. F2 = end. F3 = position. F4 = size / zoom.",
-    "note": "Edits start from the audible window. F4 down tightens; top restores the region set by F1–F3. Re-gripping FN preserves that region.",
+    "note": "Edits start from the audible window. F4 down tightens. Top restores the region set by F1–F3. Re-gripping FN preserves that region.",
     "steps": [
       {
         "label": "Hold FN",
@@ -1747,7 +1747,7 @@ export const cards = [
     "title": "Loop window reset",
     "gesture": "FN + PLAY + VOL− / VOL+",
     "body": "Hold FN + PLAY, then press VOL− for the whole loop, forwards. Press VOL+ instead to move the window home, keeping its size and direction.",
-    "note": "Use outside a repeat. Reset clears window reverse; per-track reverse stays. During repeat, the volume buttons move its window.",
+    "note": "Use outside a repeat. Reset clears window reverse. Per-track reverse stays. During repeat, the volume buttons move its window.",
     "steps": [
       {
         "label": "Hold FN + PLAY",
@@ -2050,7 +2050,7 @@ export const cards = [
     "group": "Four heads, one loop",
     "title": "Four-head mode",
     "gesture": "Hold FN + triple-tap PLAY",
-    "body": "Hold FN and triple-tap PLAY while a loop plays. Hold FN and move a fader to position its head; release FN to mix head levels.",
+    "body": "Hold FN and triple-tap PLAY while a loop plays. Hold FN and move a fader to position its head. Release FN to mix head levels.",
     "note": "Faders set head levels, track taps mute, and FN + faders set head positions.",
     "steps": [
       {
@@ -2194,7 +2194,7 @@ export const cards = [
     "steps": [
       {
         "label": "Hold FN",
-        "detail": "Two different recorded tracks are loaded; four-head mode is already on. FN + F2 sets its position.",
+        "detail": "Two different recorded tracks are loaded. Four-head mode is already on. FN + F2 sets its position.",
         "hold": [
           "FN"
         ],
@@ -2339,11 +2339,11 @@ export const cards = [
     "title": "Beat grid",
     "gesture": "Tap FN 4+ times",
     "body": "From normal track mode, tap FN at least four times in time. Start on the downbeat.",
-    "note": "Fresh taps align recording to beats. The saved grid follows the loop; tape speed changes its tempo.",
+    "note": "Fresh taps align recording to beats. The saved grid follows the loop. Tape speed changes its tempo.",
     "steps": [
       {
         "label": "Tap FN in time",
-        "detail": "Start on the downbeat; at least four taps.",
+        "detail": "Start on the downbeat. At least four taps.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -2407,7 +2407,7 @@ export const cards = [
     "title": "Whole-BPM rounding",
     "gesture": "Tap FN 4+ times → hold FN · ~1 s",
     "body": "Tap FN at least four times in time, then press and hold FN about one second to round the tapped tempo to the nearest whole BPM. For example: 119.8 to 120 BPM.",
-    "note": "Sweep = rounding succeeded. Shrug = no rounding applied; the tempo stays unchanged.",
+    "note": "Sweep = rounding succeeded. Shrug = no rounding applied. The tempo stays unchanged.",
     "steps": [
       {
         "label": "Tap a new tempo",
@@ -2619,7 +2619,7 @@ export const cards = [
     "title": "FX page navigation",
     "gesture": "Hold FN + T4 → release → hold FN + tap VOL+",
     "body": "Hold FN + T4 until Page 4 opens, then release both. Hold FN again and tap VOL+ to advance, or VOL− to go back. Release FN to stay on that page.",
-    "note": "From Page 4: one click = Page 5; two = Page 6; three = Page 7; four = Page 8. Tap FN to close.",
+    "note": "From Page 4: one click = Page 5. Two = Page 6. Three = Page 7. Four = Page 8. Tap FN to close.",
     "steps": [
       {
         "label": "Open Page 4",
@@ -2663,7 +2663,7 @@ export const cards = [
         }
       },
       {
-        "label": "Hold FN; click VOL+",
+        "label": "Hold FN. Click VOL+",
         "detail": "One click advances to Page 5.",
         "hold": [
           "FN"
@@ -3208,7 +3208,7 @@ export const cards = [
     "title": "Drive",
     "gesture": "F3 · T3 cycles type",
     "body": "Tap T3 to cycle soft → hard → fold. F3 sets the amount. Lower F3 fully to turn it off.",
-    "note": "Fader down gives clean audio; raising it restores the selected drive type.",
+    "note": "Fader down gives clean audio. Raising it restores the selected drive type.",
     "steps": [
       {
         "label": "Hold FN + T1",
@@ -3486,7 +3486,7 @@ export const cards = [
     "group": "Page 1 / FX 1",
     "title": "Gate",
     "gesture": "F4 · T4 cycles pattern",
-    "body": "Tap T4 to cycle gallop → halves. F4 steps through rhythmic subdivisions; bottom turns the gate off.",
+    "body": "Tap T4 to cycle gallop → halves. F4 steps through rhythmic subdivisions. Bottom turns the gate off.",
     "note": "Tap a rate with FN + T4, at least twice.",
     "steps": [
       {
@@ -5130,7 +5130,7 @@ export const cards = [
     "title": "Tremolo",
     "gesture": "F3 · T3 cycles division",
     "body": "Tap T3 to cycle beat → half → quarter. F3 sets the amount. Lower F3 fully to turn it off.",
-    "note": "Hold T3 and move F3 for shape; hold T3 and move F4 for stereo spread. Tap a rate with FN + T3.",
+    "note": "Hold T3 and move F3 for shape. Hold T3 and move F4 for stereo spread. Tap a rate with FN + T3.",
     "steps": [
       {
         "label": "Hold FN + T3",
@@ -5966,7 +5966,7 @@ export const cards = [
     "group": "Page 4 / Tape",
     "title": "Noise",
     "gesture": "F3 · T3 off",
-    "body": "F3 up adds hiss; down adds vinyl crackle. Center is off. Tap T3 to turn it off.",
+    "body": "F3 up adds hiss. Down adds vinyl crackle. Center is off. Tap T3 to turn it off.",
     "note": "",
     "steps": [
       {
@@ -6339,7 +6339,7 @@ export const cards = [
     "title": "FX tap tempo",
     "gesture": "Hold FN + tap the lane 2+ times",
     "body": "On its page, hold FN and tap the rate-enabled lane at least twice.",
-    "note": "Clear a tapped rate on its page with FN + PLAY + that track. Supported lanes: P1 T2/T4; P2 T4; P3 T1/T2/T3; P4 T4.",
+    "note": "Clear a tapped rate on its page with FN + PLAY + that track. Supported lanes: P1 T2/T4. P2 T4. P3 T1/T2/T3. P4 T4.",
     "steps": [
       {
         "label": "Hold FN",
@@ -6438,7 +6438,7 @@ export const cards = [
     "group": "Secondary controls",
     "title": "Secondary FX controls",
     "gesture": "Hold track + move fader",
-    "body": "P2: T3 + F3 = wah resonance; T4 + F4 = echo feedback. P3: T3 + F3 = tremolo shape; T3 + F4 = stereo spread; T4 + F4 = reverb damping.",
+    "body": "P2: T3 + F3 = wah resonance. T4 + F4 = echo feedback. P3: T3 + F3 = tremolo shape. T3 + F4 = stereo spread. T4 + F4 = reverb damping.",
     "note": "Move before releasing the track button to avoid its tap action. After release, cross the main value again before changing it.",
     "steps": [
       {
@@ -6551,8 +6551,8 @@ export const cards = [
     "group": "Page 5 / Global EQ",
     "title": "Master EQ",
     "gesture": "F1 100 Hz · F2 350 Hz · F3 1.6 kHz · F4 4 kHz",
-    "body": "Down cuts; up boosts. Center or a track-button tap returns that band to flat.",
-    "note": "F1 and F4 are low/high shelves. EQ always affects the whole mix; lights show cut/boost amount.",
+    "body": "Down cuts. Up boosts. Center or a track-button tap returns that band to flat.",
+    "note": "F1 and F4 are low/high shelves. EQ always affects the whole mix. Lights show cut/boost amount.",
     "steps": [
       {
         "label": "Hold FN + T4",
@@ -6596,7 +6596,7 @@ export const cards = [
         }
       },
       {
-        "label": "Hold FN; tap VOL+",
+        "label": "Hold FN. Tap VOL+",
         "detail": "Advance to Page 5.",
         "hold": [
           "FN"
@@ -6640,7 +6640,7 @@ export const cards = [
       },
       {
         "label": "Find fader 2",
-        "detail": "Center is flat; up boosts.",
+        "detail": "Center is flat. Up boosts.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -6660,7 +6660,7 @@ export const cards = [
       },
       {
         "label": "Cut the 350 Hz band",
-        "detail": "Center is flat; up boosts.",
+        "detail": "Center is flat. Up boosts.",
         "hold": [],
         "tap": [],
         "faders": {
@@ -6684,7 +6684,7 @@ export const cards = [
       },
       {
         "label": "Move back up",
-        "detail": "Center is flat; up boosts.",
+        "detail": "Center is flat. Up boosts.",
         "hold": [],
         "tap": [],
         "faders": {
@@ -6962,7 +6962,7 @@ export const cards = [
       },
       {
         "label": "BOTH",
-        "detail": "Three confirmation flashes; ordinary takes stay dry. Shown slowed down.",
+        "detail": "Three confirmation flashes. Ordinary takes stay dry. Shown slowed down.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -6999,7 +6999,7 @@ export const cards = [
     "steps": [
       {
         "label": "Hold PLAY + both VOL",
-        "detail": "Only live input is playing; there are no recorded tracks. Toggle the live input monitor.",
+        "detail": "Only live input is playing. There are no recorded tracks. Toggle the live input monitor.",
         "hold": [
           "PLAY"
         ],
@@ -7086,7 +7086,7 @@ export const cards = [
     "title": "FX reset",
     "gesture": "On an FX page: FN + T1 + T4",
     "body": "Restore the effects to their defaults, flatten EQ and set routing to BOTH.",
-    "note": "On Page 6 this chord resets placement; on Page 7 it resets timing instead.",
+    "note": "On Page 6 this chord resets placement. On Page 7 it resets timing instead.",
     "steps": [
       {
         "label": "On an FX page, hold FN",
@@ -7137,7 +7137,7 @@ export const cards = [
       },
       {
         "label": "Release",
-        "detail": "EQ is flat; routing is BOTH.",
+        "detail": "EQ is flat. Routing is BOTH.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -7164,7 +7164,7 @@ export const cards = [
     "title": "Stereo track placement",
     "gesture": "Faders 1–4 = tracks 1–4",
     "body": "Down moves left. Up moves right. Center keeps the original balance.",
-    "note": "A mono take pans; a stereo take leans. Lights are dark at center and brighter farther to either side.",
+    "note": "A mono take pans. A stereo take leans. Lights are dark at center and brighter farther to either side.",
     "steps": [
       {
         "label": "Hold FN + T4",
@@ -7208,7 +7208,7 @@ export const cards = [
         }
       },
       {
-        "label": "Hold FN; tap VOL+",
+        "label": "Hold FN. Tap VOL+",
         "detail": "Advance to Page 5.",
         "hold": [
           "FN"
@@ -7231,7 +7231,7 @@ export const cards = [
         }
       },
       {
-        "label": "Hold FN; tap VOL+",
+        "label": "Hold FN. Tap VOL+",
         "detail": "Advance to Page 6.",
         "hold": [
           "FN"
@@ -7275,7 +7275,7 @@ export const cards = [
       },
       {
         "label": "Find fader 1",
-        "detail": "Down = left; up = right.",
+        "detail": "Down = left. Up = right.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -7295,7 +7295,7 @@ export const cards = [
       },
       {
         "label": "Move track 1 left",
-        "detail": "Down = left; up = right.",
+        "detail": "Down = left. Up = right.",
         "hold": [],
         "tap": [],
         "faders": {
@@ -7319,7 +7319,7 @@ export const cards = [
       },
       {
         "label": "Move back up",
-        "detail": "Down = left; up = right.",
+        "detail": "Down = left. Up = right.",
         "hold": [],
         "tap": [],
         "faders": {
@@ -7491,7 +7491,7 @@ export const cards = [
     "group": "Page 7 / Take & timing",
     "title": "Grid offset",
     "gesture": "F1 = grid offset",
-    "body": "Center is no offset. Up moves later; down moves earlier, by up to about half a beat.",
+    "body": "Center is no offset. Up moves later. Down moves earlier, by up to about half a beat.",
     "note": "Beat lights and future grid-aligned punches follow the offset.",
     "steps": [
       {
@@ -7536,7 +7536,7 @@ export const cards = [
         }
       },
       {
-        "label": "Hold FN; tap VOL+",
+        "label": "Hold FN. Tap VOL+",
         "detail": "Advance to Page 5.",
         "hold": [
           "FN"
@@ -7559,7 +7559,7 @@ export const cards = [
         }
       },
       {
-        "label": "Hold FN; tap VOL+",
+        "label": "Hold FN. Tap VOL+",
         "detail": "Advance to Page 6.",
         "hold": [
           "FN"
@@ -7582,7 +7582,7 @@ export const cards = [
         }
       },
       {
-        "label": "Hold FN; tap VOL+",
+        "label": "Hold FN. Tap VOL+",
         "detail": "Advance to Page 7.",
         "hold": [
           "FN"
@@ -7626,7 +7626,7 @@ export const cards = [
       },
       {
         "label": "Find fader 1",
-        "detail": "Up later; down earlier.",
+        "detail": "Up later. Down earlier.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -7646,7 +7646,7 @@ export const cards = [
       },
       {
         "label": "Move the grid",
-        "detail": "Up later; down earlier.",
+        "detail": "Up later. Down earlier.",
         "hold": [],
         "tap": [],
         "faders": {
@@ -7668,7 +7668,7 @@ export const cards = [
       },
       {
         "label": "Move back up",
-        "detail": "Up later; down earlier.",
+        "detail": "Up later. Down earlier.",
         "hold": [],
         "tap": [],
         "faders": {
@@ -7987,11 +7987,11 @@ export const cards = [
     "title": "Recording countdown",
     "gesture": "Open Page 7 during a preset take",
     "body": "Up to four track lights show the units remaining. The last unit blinks.",
-    "note": "The countdown is capped at four lights; an eight-unit take stays at four until only three units remain.",
+    "note": "The countdown is capped at four lights. An eight-unit take stays at four until only three units remain.",
     "steps": [
       {
         "label": "Count down to the end of the take",
-        "detail": "Four bars remain. The last bar blinks; after recording stops, the grid chase returns.",
+        "detail": "Four bars remain. The last bar blinks. After recording stops, the grid chase returns.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -8017,7 +8017,7 @@ export const cards = [
     "group": "Page 7 / Nudge a loop",
     "title": "Track timing offset",
     "gesture": "Hold a track button + move its fader",
-    "body": "On Page 7, hold a track button and move its fader. Up moves the track later; down moves it earlier. The edit is relative to the fader position when you held the button.",
+    "body": "On Page 7, hold a track button and move its fader. Up moves the track later. Down moves it earlier. The edit is relative to the fader position when you held the button.",
     "note": "Nudge works without a grid. A recording track cannot be nudged. In heads mode, nudging the source moves all its heads.",
     "steps": [
       {
@@ -8116,7 +8116,7 @@ export const cards = [
       },
       {
         "label": "Release the track",
-        "detail": "You stay on Page 7. F1 returns to grid offset; F2 to take length.",
+        "detail": "You stay on Page 7. F1 returns to grid offset. F2 to take length.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -8271,7 +8271,7 @@ export const cards = [
       },
       {
         "label": "Release",
-        "detail": "Offset 0; length OFF; all nudges centered.",
+        "detail": "Offset 0. Length OFF. All nudges centered.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -8328,7 +8328,7 @@ export const cards = [
         "duration": 1
       },
       {
-        "label": "Hold FN; tap VOL+",
+        "label": "Hold FN. Tap VOL+",
         "detail": "Advance to Page 5.",
         "hold": [
           "FN"
@@ -8344,7 +8344,7 @@ export const cards = [
         "duration": 1.2
       },
       {
-        "label": "Hold FN; tap VOL+",
+        "label": "Hold FN. Tap VOL+",
         "detail": "Advance to Page 6.",
         "hold": [
           "FN"
@@ -8360,7 +8360,7 @@ export const cards = [
         "duration": 1.2
       },
       {
-        "label": "Hold FN; tap VOL+",
+        "label": "Hold FN. Tap VOL+",
         "detail": "Advance to Page 7.",
         "hold": [
           "FN"
@@ -8376,7 +8376,7 @@ export const cards = [
         "duration": 1.2
       },
       {
-        "label": "Hold FN; tap VOL+",
+        "label": "Hold FN. Tap VOL+",
         "detail": "Advance to Page 8.",
         "hold": [
           "FN"
@@ -8426,7 +8426,7 @@ export const cards = [
       },
       {
         "label": "Blinking: stereo",
-        "detail": "Example: T1 stereo blinks; T2–T4 mono stay solid.",
+        "detail": "Example: T1 stereo blinks. T2–T4 mono stay solid.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -8604,7 +8604,7 @@ export const cards = [
     "group": "Catch & resize",
     "title": "Beat repeat length",
     "gesture": "Hold PLAY → click ROCKER UP → resize",
-    "body": "Hold PLAY and click the rocker up to catch a beat. ROCKER UP halves the repeat; ROCKER DOWN doubles it. Hold the rocker to keep stepping. Release PLAY to return to the song.",
+    "body": "Hold PLAY and click the rocker up to catch a beat. ROCKER UP halves the repeat. ROCKER DOWN doubles it. Hold the rocker to keep stepping. Release PLAY to return to the song.",
     "note": "Release the rocker but keep PLAY held to repeat at the same length.",
     "steps": [
       {
@@ -8759,7 +8759,7 @@ export const cards = [
     "title": "Beat repeat within a chop",
     "gesture": "PLAY + rocker inside your chop",
     "body": "The repeat only uses your chopped audio. It cannot reach outside the audible cycle.",
-    "note": "If a requested beat would fill the chop: ROCKER UP starts with a quarter of it; ROCKER DOWN with half, down to the minimum size.",
+    "note": "If a requested beat would fill the chop: ROCKER UP starts with a quarter of it. ROCKER DOWN with half, down to the minimum size.",
     "steps": [
       {
         "label": "With a chop playing, hold PLAY",
@@ -9052,11 +9052,11 @@ export const cards = [
     "group": "Shape the repeat",
     "title": "Beat repeat octave jumps",
     "gesture": "Keep PLAY held + FN + rocker",
-    "body": "Add FN and click the rocker. Down is an octave lower; up is an octave higher.",
+    "body": "Add FN and click the rocker. Down is an octave lower. Up is an octave higher.",
     "note": "",
     "steps": [
       {
-        "label": "Keep PLAY held; add FN",
+        "label": "Keep PLAY held. Add FN",
         "detail": "",
         "hold": [
           "PLAY",
@@ -9079,7 +9079,7 @@ export const cards = [
       },
       {
         "label": "Click the rocker",
-        "detail": "Down halves the tape speed; the repeat stays active.",
+        "detail": "Down halves the tape speed. The repeat stays active.",
         "hold": [
           "PLAY",
           "FN"
@@ -9101,7 +9101,7 @@ export const cards = [
         "rockDirection": "DOWN"
       },
       {
-        "label": "Lift FN; keep PLAY held",
+        "label": "Lift FN. Keep PLAY held",
         "detail": "The rocker resizes the repeat again.",
         "hold": [
           "PLAY"
@@ -9130,10 +9130,10 @@ export const cards = [
     "title": "Beat repeat fader controls",
     "gesture": "Keep PLAY held + FN + F1–F4",
     "body": "F1 = start. F2 = end. F3 = position. F4 = size / zoom. Move deliberately to engage a fader.",
-    "note": "F3 keeps width. F4 tightens around the center; top restores the region set by F1–F3. Re-gripping FN preserves that region.",
+    "note": "F3 keeps width. F4 tightens around the center. Top restores the region set by F1–F3. Re-gripping FN preserves that region.",
     "steps": [
       {
-        "label": "Keep PLAY held; add FN",
+        "label": "Keep PLAY held. Add FN",
         "detail": "",
         "hold": [
           "PLAY",
@@ -9228,7 +9228,7 @@ export const cards = [
         }
       },
       {
-        "label": "Lift FN; keep PLAY held",
+        "label": "Lift FN. Keep PLAY held",
         "detail": "The rocker now resizes again.",
         "hold": [
           "PLAY"
@@ -9257,7 +9257,7 @@ export const cards = [
     "title": "Wah resonance",
     "gesture": "Page 2: hold T3 and move F3",
     "body": "While holding T3, move F3 down for a sharper peak or up for a softer peak.",
-    "note": "Move before releasing the track button; releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
+    "note": "Move before releasing the track button. Releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
     "steps": [
       {
         "label": "Hold FN + T2",
@@ -9322,7 +9322,7 @@ export const cards = [
       },
       {
         "label": "Hold T3",
-        "detail": "Relative edits: down sharper; up softer.",
+        "detail": "Relative edits: down sharper. Up softer.",
         "hold": [
           "T3"
         ],
@@ -9344,7 +9344,7 @@ export const cards = [
       },
       {
         "label": "Change wah resonance",
-        "detail": "Relative edits: down sharper; up softer.",
+        "detail": "Relative edits: down sharper. Up softer.",
         "hold": [
           "T3"
         ],
@@ -9370,7 +9370,7 @@ export const cards = [
       },
       {
         "label": "Move back up",
-        "detail": "Relative edits: down sharper; up softer.",
+        "detail": "Relative edits: down sharper. Up softer.",
         "hold": [
           "T3"
         ],
@@ -9431,7 +9431,7 @@ export const cards = [
     "title": "Echo feedback",
     "gesture": "Page 2: hold T4 and move F4",
     "body": "Change the amount fed back into the echo.",
-    "note": "Move before releasing the track button; releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
+    "note": "Move before releasing the track button. Releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
     "steps": [
       {
         "label": "Hold FN + T2",
@@ -9605,7 +9605,7 @@ export const cards = [
     "title": "Tremolo shape",
     "gesture": "Page 3: hold T3 and move F3",
     "body": "Move from softer to harder tremolo shapes.",
-    "note": "Move before releasing the track button; releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
+    "note": "Move before releasing the track button. Releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
     "steps": [
       {
         "label": "Hold FN + T3",
@@ -9779,7 +9779,7 @@ export const cards = [
     "title": "Tremolo stereo spread",
     "gesture": "Page 3: hold T3 and move F4",
     "body": "Change the spread between the two channels. F4 does not change reverb while T3 is held.",
-    "note": "Move before releasing the track button; releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
+    "note": "Move before releasing the track button. Releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
     "steps": [
       {
         "label": "Hold FN + T3",
@@ -9952,8 +9952,8 @@ export const cards = [
     "group": "Secondary controls",
     "title": "Reverb damping",
     "gesture": "Page 3: hold T4 and move F4",
-    "body": "Down is darker; up is brighter.",
-    "note": "Move before releasing the track button; releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
+    "body": "Down is darker. Up is brighter.",
+    "note": "Move before releasing the track button. Releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
     "steps": [
       {
         "label": "Hold FN + T3",
@@ -10018,7 +10018,7 @@ export const cards = [
       },
       {
         "label": "Hold T4",
-        "detail": "Down is darker; up is brighter.",
+        "detail": "Down is darker. Up is brighter.",
         "hold": [
           "T4"
         ],
@@ -10040,7 +10040,7 @@ export const cards = [
       },
       {
         "label": "Change reverb damping",
-        "detail": "Down is darker; up is brighter.",
+        "detail": "Down is darker. Up is brighter.",
         "hold": [
           "T4"
         ],
@@ -10066,7 +10066,7 @@ export const cards = [
       },
       {
         "label": "Move back up",
-        "detail": "Down is darker; up is brighter.",
+        "detail": "Down is darker. Up is brighter.",
         "hold": [
           "T4"
         ],
@@ -10126,8 +10126,8 @@ export const cards = [
     "id": "track-lights",
     "title": "Track lights",
     "gesture": "Dark · dim · blinking · solid",
-    "body": "Dark means empty; dim means muted. Recording is solid. Playback pulses with the grid, or when each loop wraps.",
-    "note": "When stopped, an unmuted loaded track stays solid. Examples use 120 BPM and selected loop lengths. A refusal shrug can mean saving is still busy: wait for completion before deleting or recording again. Alternating T1+T3 / T2+T4 indicates a fault; stop testing and keep the device connected for diagnostics. In USB drive mode, T2 + T3 stay lit. After eject: T1 checks, T2 plans, T3 imports, T4 saves. Long imports can take several minutes; keep USB connected until Tape Looper returns. Repeated all-four flashes in drive mode indicate an error, not import progress.",
+    "body": "Dark means empty. Dim means muted. Recording is solid. Playback pulses with the grid, or when each loop wraps.",
+    "note": "When stopped, an unmuted loaded track stays solid. Examples use 120 BPM and selected loop lengths. A refusal shrug can mean saving is still busy: wait for completion before deleting or recording again. Alternating T1+T3 / T2+T4 indicates a fault. Stop testing and keep the device connected for diagnostics. When entering USB drive mode, lights chase while files are prepared. Wait for SP1 MUSIC to appear. T2 + T3 stay lit when ready. After eject: T1 checks, T2 plans, T3 imports, T4 saves. Long imports can take several minutes. Keep USB connected until Tape Looper returns.",
     "steps": [
       {
         "label": "Empty",
@@ -10155,7 +10155,7 @@ export const cards = [
       },
       {
         "label": "Armed",
-        "detail": "Waiting for sound; short beat pulses.",
+        "detail": "Waiting for sound. Short beat pulses.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -10266,7 +10266,7 @@ export const cards = [
     "title": "Grid recording indicators",
     "gesture": "Half-beat flashes",
     "body": "An armed track flashes at half-beat rate while waiting for punch-in. The same quicker pulse marks a recording finishing its beat.",
-    "note": "The recording continues until its aligned stop; it is not stuck.",
+    "note": "The recording continues until its aligned stop. It is not stuck.",
     "steps": [
       {
         "label": "Waiting, then recording",
@@ -10314,8 +10314,8 @@ export const cards = [
     "group": "Bounce what you hear",
     "title": "Tape copy / bounce",
     "gesture": "Hold PLAY → briefly tap destination",
-    "body": "Record the playing mix onto a spare track. Hold PLAY and tap the destination; tap it again to finish. This is a tape copy.",
-    "note": "A loaded destination is replaced. Tape copy follows tape speed with its source. A grid may add count-out; fixed mode and chop can extend the stop to a full cycle.",
+    "body": "Record the playing mix onto a spare track. Hold PLAY and tap the destination. Tap it again to finish. This is a tape copy.",
+    "note": "A loaded destination is replaced. Tape copy follows tape speed with its source. A grid may add count-out. Fixed mode and chop can extend the stop to a full cycle.",
     "steps": [
       {
         "label": "Hold PLAY",
@@ -10480,7 +10480,7 @@ export const cards = [
     "group": "Bounce what you hear",
     "title": "Beat repeat bounce",
     "gesture": "Hold PLAY → click ROCKER UP → tap destination",
-    "body": "Hold PLAY and click the rocker up to catch a repeat. Keep PLAY held and tap a spare track to start the bounce. Release PLAY to let the song flow back in; tap the destination again to finish.",
+    "body": "Hold PLAY and click the rocker up to catch a repeat. Keep PLAY held and tap a spare track to start the bounce. Release PLAY to let the song flow back in. Tap the destination again to finish.",
     "note": "Keep PLAY held to resize while recording. A loaded destination is replaced.",
     "steps": [
       {
@@ -10558,7 +10558,7 @@ export const cards = [
       },
       {
         "label": "Release PLAY",
-        "detail": "The song flows back in; the copy keeps recording.",
+        "detail": "The song flows back in. The copy keeps recording.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -10822,7 +10822,7 @@ export const cards = [
       },
       {
         "label": "Release PLAY",
-        "detail": "The song flows back in; the copy keeps recording.",
+        "detail": "The song flows back in. The copy keeps recording.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -11041,7 +11041,7 @@ export const cards = [
       },
       {
         "label": "Add FN for an octave",
-        "detail": "Down halves the tape speed; the repeat stays active.",
+        "detail": "Down halves the tape speed. The repeat stays active.",
         "hold": [
           "T2",
           "PLAY",
@@ -11097,7 +11097,7 @@ export const cards = [
     "title": "Cut / glue",
     "gesture": "Slot 7 · ROCKER DOWN marks, ROCKER DOWN cuts · ROCKER UP undoes",
     "body": "While playing, tap ROCKER DOWN at the start and again at the end of a section to skip it. With the rocker page open, hold the same TRACK for both marks to cut only that track. Bare ROCKER DOWN targets the loaded tracks.",
-    "note": "Make up to eight cuts. ROCKER UP cancels a pending mark or undoes the last cut. Cuts remain when leaving the rocker page or slot. FN + double-tap PLAY restores the tape. Cuts are non-destructive session edits; changing songs, takes, recording or rebooting clears them. Use full forward loops, without trim, Heads, repeat or recording.",
+    "note": "Make up to eight cuts. ROCKER UP cancels a pending mark or undoes the last cut. Cuts remain when leaving the rocker page or slot. FN + double-tap PLAY restores the tape. Cuts are non-destructive session edits. Changing songs, takes, recording or rebooting clears them. Use full forward loops, without trim, Heads, repeat or recording.",
     "steps": [
       {
         "label": "Open the rocker page",
@@ -11289,7 +11289,7 @@ export const cards = [
     "title": "Bluetooth Support",
     "gesture": "Triple-tap FN and hold the last press until all four track lights start fading in and out, then release",
     "body": "Triple-tap FN and hold the last press until all four track lights start fading in and out, then release to enable Bluetooth audio discovery. Pair SP-1 from your phone or computer, select it as the audio output, then record normally.",
-    "note": "The gesture also works during playback and USB audio. USB and Bluetooth input mix together. This release focuses on Bluetooth input; outgoing audio to speakers or keyboards is deferred.",
+    "note": "The gesture also works during playback and USB audio. USB and Bluetooth input mix together. This release focuses on Bluetooth input. Outgoing audio to speakers or keyboards is deferred.",
     "steps": [
       {
         "label": "Enable Bluetooth audio",
@@ -11372,7 +11372,7 @@ export const cards = [
     "group": "Rocker modes",
     "title": "Rocker modes",
     "gesture": "FN + both VOL · VOL− / VOL+ to choose",
-    "body": "Hold FN and both volume buttons to open the rocker page. Release FN, then use VOL− / VOL+ to select a mode. Tap FN to close; the selected mode stays active.",
+    "body": "Hold FN and both volume buttons to open the rocker page. Release FN, then use VOL− / VOL+ to select a mode. Tap FN to close. The selected mode stays active.",
     "note": "1 Pitch / speed · 2 FF / RW · 3 Tape bending · 4 Battery drain · 5 Sandpaper · 6 Magnet erase · 7 Cut / glue · 8 Manual heads. Keep the rocker page open for per-track Magnet or Scissors gestures. Holding TRACK previews the normal track lights.",
     "steps": [
       {
@@ -11401,7 +11401,7 @@ export const cards = [
       },
       {
         "label": "Choose a mode",
-        "detail": "Release FN. VOL+ moves forward; VOL− moves back.",
+        "detail": "Release FN. VOL+ moves forward. VOL− moves back.",
         "hold": [],
         "tap": [
           "VOL+"
@@ -11507,7 +11507,7 @@ export const cards = [
     "title": "Tape bending",
     "gesture": "Slot 3 · hold ROCKER UP / ROCKER DOWN",
     "body": "Hold ROCKER DOWN to drag and stretch the tape. Hold ROCKER UP for repeated pulling surges. Release either direction for a spring-like recovery.",
-    "note": "Longer ROCKER DOWN holds stretch further. This changes playback; it does not rewrite your recordings.",
+    "note": "Longer ROCKER DOWN holds stretch further. This changes playback. It does not rewrite your recordings.",
     "steps": [
       {
         "label": "Hold ROCKER DOWN, then release",
@@ -11722,7 +11722,7 @@ export const cards = [
     "group": "Rocker modes",
     "title": "Manual heads",
     "gesture": "Slot 8 · hold ROCKER DOWN + move faders",
-    "body": "Hold ROCKER UP to make contact with the running tape. Hold ROCKER DOWN for four-head contact; move F1–F4 to position the heads. Release to lift contact and silence the tape.",
+    "body": "Hold ROCKER UP to make contact with the running tape. Hold ROCKER DOWN for four-head contact. Move F1–F4 to position the heads. Release to lift contact and silence the tape.",
     "note": "The transport keeps moving while contact is lifted. Leave this rocker mode to return to ordinary playback. This is separate from latching Heads with FN + triple-tap PLAY.",
     "steps": [
       {
@@ -11881,8 +11881,8 @@ export const cards = [
     "group": "Track trim",
     "title": "Track trim",
     "gesture": "Hold FN + PLAY · move that track’s fader",
-    "body": "Hold FN and PLAY, then move F1–F4 to shorten or lengthen the matching track. Lower the fader to shorten; raise it to lengthen. Release both to keep the trim.",
-    "note": "The first small move catches the current length without jumping. With a grid, lengths step through straight and dotted musical values. Other tracks keep playing; the original recording stays intact.",
+    "body": "Hold FN and PLAY, then move F1–F4 to shorten or lengthen the matching track. Lower the fader to shorten. Raise it to lengthen. Release both to keep the trim.",
+    "note": "The first small move catches the current length without jumping. With a grid, lengths step through straight and dotted musical values. Other tracks keep playing. The original recording stays intact.",
     "since": "4.0",
     "initialFaders": [
       0.85,
@@ -11943,7 +11943,7 @@ export const cards = [
       },
       {
         "label": "Keep the trim",
-        "detail": "Release both buttons. The shorter loop stays; faders return to level control with pickup.",
+        "detail": "Release both buttons. The shorter loop stays. Faders return to level control with pickup.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -11970,8 +11970,8 @@ export const cards = [
     "group": "Track trim",
     "title": "Trim position",
     "gesture": "Hold PLAY · move the trimmed track’s fader",
-    "body": "Choose which part of a trimmed recording plays, without changing its length. Hold PLAY and move the track’s fader: raise it toward the recording’s start; lower it toward the end.",
-    "note": "The first small move catches the current position. With a grid, movement follows sixteenth-note steps. Release PLAY to keep the position; moving the fader spends the PLAY press, so it does not pause or restart playback.",
+    "body": "Choose which part of a trimmed recording plays, without changing its length. Hold PLAY and move the track’s fader: raise it toward the recording’s start. Lower it toward the end.",
+    "note": "The first small move catches the current position. With a grid, movement follows sixteenth-note steps. Release PLAY to keep the position. Moving the fader spends the PLAY press, so it does not pause or restart playback.",
     "since": "4.0",
     "initialFaders": [
       0.8,
@@ -12056,7 +12056,7 @@ export const cards = [
     "title": "Restore a track’s full length",
     "gesture": "On Page 7 · tap the track",
     "body": "Open Page 7 and tap a trimmed track to restore its full recording. Other track trims stay set.",
-    "note": "Page 7: hold FN + T4 to open Page 4, release, then hold FN and tap VOL+ three times. A trimmed track’s tap clears its trim first; later taps can reset its nudge or that lane’s timing setting.",
+    "note": "Page 7: hold FN + T4 to open Page 4, release, then hold FN and tap VOL+ three times. A trimmed track’s tap clears its trim first. Later taps can reset its nudge or that lane’s timing setting.",
     "since": "4.0",
     "steps": [
       {
@@ -12085,7 +12085,7 @@ export const cards = [
       },
       {
         "label": "Restore Track 1",
-        "detail": "Release FN, then tap T1. Its full recording plays again; Track 2 keeps its trim.",
+        "detail": "Release FN, then tap T1. Its full recording plays again. Track 2 keeps its trim.",
         "hold": [],
         "tap": [
           "T1"
@@ -12283,6 +12283,7 @@ finishGuideAudit(cards);
  for(const step of echo.steps)if(step.label==='Tap T4: dotted')step.label='Tap T4: dotted 1/16';
  card('reset-window').steps[1].detail='Restore the whole loop forward; clear trims and timing offsets. Take length OFF; beats per bar 4.';
 }
+
 // Start the Tremolo lesson at the firmware's default quarter division.
 {
  const steps=cards.find(c=>c.id==='fx-3-3').steps.filter(s=>s.tap?.includes('T3')&&!s.hold?.length);

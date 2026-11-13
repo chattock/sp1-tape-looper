@@ -33,6 +33,8 @@ def clean(value):
         '→': ' > ', '×': 'x', '−': '-', '–': '-', '—': '-', '’': "'", '‘': "'",
         '“': '"', '”': '"', '…': '...', '↔': ' / ', '·': ' / ', '\u00a0': ' ',
     }))
+    text = re.sub(r'; +([a-zA-Z])', lambda match: '. ' + match[1].upper(), text)
+    text = text.replace(';', ',')
     # Keep every rocker direction explicit without duplicating an existing prefix.
     text = re.sub(r'(?<!ROCKER )\b(UP|DOWN)\b', r'ROCKER \1', text)
     return html.escape(text).replace('\n', '<br/>')
@@ -109,7 +111,7 @@ story += [
           'Connect SP-1 and follow Setup to install firmware and prepare the filesystem and Bluetooth. Verified steps are skipped.',
           'Solderless is also available from Setup. Keep USB connected; follow the backup and storage choices shown there.'),
     block('Your library', '4 banks x 4 songs / 4 tracks per song',
-          'Each track has unlimited takes, limited by available storage. One take per track is selected for playback.',
+          'One take per track is selected for playback.',
           'Each take can hold approximately eight minutes. The Library converts compatible audio and lets you choose a shorter clip from a long file.'),
     block('USB Library', 'Stop/save > hold T2 + T3 for 3 seconds > release',
           'Wait for SP1 MUSIC to appear. T2 + T3 stay lit when the drive is ready. Open it in Finder / File Explorer, or choose it in the site\'s Library.',
@@ -118,13 +120,13 @@ story += [
           'After eject: T1 checks, T2 plans, T3 imports, T4 saves. Large files or batches can take several minutes. Wait for Tape Looper to return.',
           'A completed file copy can still need device import processing. Repeated alarm lights indicate an error; collect diagnostics before reflashing.'),
     block('Find a control', 'Six chapters',
-          '01 Start & record\n02 Shape the tape\n03 Effects\n04 Place & time\n05 Repeat & bounce\n06 Rocker modes',
+          '01 Start & record\n02 Effects\n03 Shape the tape\n04 Place & time\n05 Repeat & bounce\n06 Rocker modes',
           'Use PDF bookmarks to jump between chapters. Interactive help: tapelooper.club/#guide. Live Companion: tapelooper.club/#live.'),
 ]
 hidden = set(x['hiddenIds']) | {'speed', 'normal-speed'}
 full_ids = []
-for cat in x['categories']:
-    story += [CondPageBreak(180), Spacer(1, 12), p(f"0{cat['id']} / {cat['title']}", 'section')]
+for section_number, cat in enumerate(x['categories'], 1):
+    story += [CondPageBreak(180), Spacer(1, 12), p(f"0{section_number} / {cat['title']}", 'section')]
     last = None
     selected = [card for card in x['cards'] if card['category'] == cat['id'] and card['id'] not in hidden
                 and (card.get('group') != 'Rocker modes' or card['id'] == 'restore-tape-v4')]

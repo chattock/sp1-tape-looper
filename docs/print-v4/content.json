@@ -1,5 +1,5 @@
 {
-  "revision": "2026-11-12",
+  "revision": "2026-11-13",
   "firmware": "4.0",
   "categories": [
     {
@@ -9,16 +9,16 @@
       "subtitle": ""
     },
     {
-      "id": 2,
-      "title": "Shape the tape",
-      "short": "Shape the tape",
-      "subtitle": "Change speed, reshape a loop, or explore four heads."
-    },
-    {
       "id": 3,
       "title": "Effects",
       "short": "Effects",
       "subtitle": "Eight control pages. Every lane, gesture and route."
+    },
+    {
+      "id": 2,
+      "title": "Shape the tape",
+      "short": "Shape the tape",
+      "subtitle": "Change speed, reshape a loop, or explore four heads."
     },
     {
       "id": 4,
@@ -627,7 +627,7 @@
       "group": "Everyday controls",
       "title": "Unlimited takes",
       "gesture": "TRACK + ROCKER DOWN = saved takes · TRACK + ROCKER UP = New",
-      "body": "Hold a track and click ROCKER DOWN to cycle its recorded takes. ROCKER UP selects an empty New lane. Record normally there; your earlier takes stay saved. Each song and track has its own lane. Takes are limited by available storage.",
+      "body": "Hold a track and click ROCKER DOWN to cycle its recorded takes. ROCKER UP selects an empty New lane. Record normally there. Your earlier takes stay saved. Each song and track has its own lane.",
       "note": "Close control pages and leave four-head mode before switching takes. Switch while playing or stopped. A New lane breathes when saved takes exist. Hold FN during playback to count takes.",
       "steps": [
         {
@@ -820,12 +820,12 @@
       "category": 1,
       "group": "Everyday controls",
       "title": "Take deletion",
-      "gesture": "Double-tap; hold the second press",
-      "body": "Double-tap the track, holding the second press until deletion is acknowledged. This removes the selected take; other takes remain.",
+      "gesture": "Double-tap. Hold the second press",
+      "body": "Double-tap the track, holding the second press until deletion is acknowledged. This removes the selected take. Other takes remain.",
       "note": "If the track is still saving, wait for saving to finish and try again. TRACK + ROCKER DOWN finds the remaining takes.",
       "steps": [
         {
-          "label": "Double-tap T1; hold the second press",
+          "label": "Double-tap T1. Hold the second press",
           "detail": "The track light goes dark when the take is deleted.",
           "hold": [],
           "tap": [],
@@ -1523,7 +1523,7 @@
       "title": "Loop window controls",
       "gesture": "FN + F1 / F2 / F3 / F4",
       "body": "F1 = start. F2 = end. F3 = position. F4 = size / zoom.",
-      "note": "Edits start from the audible window. F4 down tightens; top restores the region set by F1–F3. Re-gripping FN preserves that region.",
+      "note": "Edits start from the audible window. F4 down tightens. Top restores the region set by F1–F3. Re-gripping FN preserves that region.",
       "steps": [
         {
           "label": "Hold FN",
@@ -1980,7 +1980,7 @@
       "group": "Four heads, one loop",
       "title": "Four-head mode",
       "gesture": "Hold FN + triple-tap PLAY",
-      "body": "Hold FN and triple-tap PLAY while a loop plays. Hold FN and move a fader to position its head; release FN to mix head levels.",
+      "body": "Hold FN and triple-tap PLAY while a loop plays. Hold FN and move a fader to position its head. Release FN to mix head levels.",
       "note": "Faders set head levels, track taps mute, and FN + faders set head positions.",
       "steps": [
         {
@@ -2269,11 +2269,11 @@
       "title": "Beat grid",
       "gesture": "Tap FN 4+ times",
       "body": "From normal track mode, tap FN at least four times in time. Start on the downbeat.",
-      "note": "Fresh taps align recording to beats. The saved grid follows the loop; tape speed changes its tempo.",
+      "note": "Fresh taps align recording to beats. The saved grid follows the loop. Tape speed changes its tempo.",
       "steps": [
         {
           "label": "Tap FN in time",
-          "detail": "Start on the downbeat; at least four taps.",
+          "detail": "Start on the downbeat. At least four taps.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -3107,7 +3107,7 @@
       "title": "Distortion",
       "gesture": "F3 · T3 type",
       "body": "Tap T3 to cycle soft → hard → fold. F3 sets the amount. Lower F3 fully to turn it off.",
-      "note": "Fader down gives clean audio; raising it restores the selected drive type.",
+      "note": "Fader down gives clean audio. Raising it restores the selected drive type.",
       "steps": [
         {
           "label": "Hold FN + T1",
@@ -6712,8 +6712,8 @@
       "group": "Page 5 / Global EQ",
       "title": "Master EQ",
       "gesture": "F1 100 Hz · F2 350 Hz · F3 1.6 kHz · F4 4 kHz",
-      "body": "Down cuts; up boosts. Center or a track-button tap returns that band to flat.",
-      "note": "F1 and F4 are low/high shelves. EQ always affects the whole mix; lights show cut/boost amount.",
+      "body": "Down cuts. Up boosts. Center or a track-button tap returns that band to flat.",
+      "note": "F1 and F4 are low/high shelves. EQ always affects the whole mix. Lights show cut/boost amount.",
       "steps": [
         {
           "label": "Hold FN + T4",
@@ -6757,9 +6757,11 @@
           }
         },
         {
-          "label": "Press VOL+",
+          "label": "Hold FN. Tap VOL+",
           "detail": "Advance to Page 5.",
-          "hold": [],
+          "hold": [
+            "FN"
+          ],
           "tap": [
             "VOL+"
           ],
@@ -7121,7 +7123,7 @@
         },
         {
           "label": "BOTH",
-          "detail": "Three confirmation flashes; ordinary takes stay dry.",
+          "detail": "Three confirmation flashes. Ordinary takes stay dry.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -7296,7 +7298,7 @@
         },
         {
           "label": "Release",
-          "detail": "EQ is flat; routing is BOTH.",
+          "detail": "EQ is flat. Routing is BOTH.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -7367,9 +7369,11 @@
           }
         },
         {
-          "label": "Press VOL+",
+          "label": "Hold FN. Tap VOL+",
           "detail": "Advance to Page 5.",
-          "hold": [],
+          "hold": [
+            "FN"
+          ],
           "tap": [
             "VOL+"
           ],
@@ -7388,9 +7392,11 @@
           }
         },
         {
-          "label": "Press VOL+",
+          "label": "Hold FN. Tap VOL+",
           "detail": "Advance to Page 6.",
-          "hold": [],
+          "hold": [
+            "FN"
+          ],
           "tap": [
             "VOL+"
           ],
@@ -7703,9 +7709,11 @@
           }
         },
         {
-          "label": "Press VOL+",
+          "label": "Hold FN. Tap VOL+",
           "detail": "Advance to Page 5.",
-          "hold": [],
+          "hold": [
+            "FN"
+          ],
           "tap": [
             "VOL+"
           ],
@@ -7724,9 +7732,11 @@
           }
         },
         {
-          "label": "Press VOL+",
+          "label": "Hold FN. Tap VOL+",
           "detail": "Advance to Page 6.",
-          "hold": [],
+          "hold": [
+            "FN"
+          ],
           "tap": [
             "VOL+"
           ],
@@ -7745,9 +7755,11 @@
           }
         },
         {
-          "label": "Press VOL+",
+          "label": "Hold FN. Tap VOL+",
           "detail": "Advance to Page 7.",
-          "hold": [],
+          "hold": [
+            "FN"
+          ],
           "tap": [
             "VOL+"
           ],
@@ -8201,7 +8213,7 @@
       "group": "Page 7 / Nudge a loop",
       "title": "Track timing offset",
       "gesture": "Hold a track button + move its fader",
-      "body": "On Page 7, hold a track button and move its fader. Up moves the track later; down moves it earlier. The edit is relative to the fader position when you held the button.",
+      "body": "On Page 7, hold a track button and move its fader. Up moves the track later. Down moves it earlier. The edit is relative to the fader position when you held the button.",
       "note": "Nudge is relative; centering the fader alone does not reset it. On Page 7, TRACK taps clear its trim, then nudge, then its page setting; already-clear settings are skipped. Works without a grid; recording tracks cannot be nudged.",
       "steps": [
         {
@@ -8300,7 +8312,7 @@
         },
         {
           "label": "Release the track",
-          "detail": "You stay on Page 7. F1 returns to grid offset; F2 to take length.",
+          "detail": "You stay on Page 7. F1 returns to grid offset. F2 to take length.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -8512,9 +8524,11 @@
           "duration": 1
         },
         {
-          "label": "Press VOL+",
+          "label": "Hold FN. Tap VOL+",
           "detail": "Advance to Page 5.",
-          "hold": [],
+          "hold": [
+            "FN"
+          ],
           "tap": [
             "VOL+"
           ],
@@ -8526,9 +8540,11 @@
           "duration": 1.2
         },
         {
-          "label": "Press VOL+",
+          "label": "Hold FN. Tap VOL+",
           "detail": "Advance to Page 6.",
-          "hold": [],
+          "hold": [
+            "FN"
+          ],
           "tap": [
             "VOL+"
           ],
@@ -8540,9 +8556,11 @@
           "duration": 1.2
         },
         {
-          "label": "Press VOL+",
+          "label": "Hold FN. Tap VOL+",
           "detail": "Advance to Page 7.",
-          "hold": [],
+          "hold": [
+            "FN"
+          ],
           "tap": [
             "VOL+"
           ],
@@ -8554,9 +8572,11 @@
           "duration": 1.2
         },
         {
-          "label": "Press VOL+",
+          "label": "Hold FN. Tap VOL+",
           "detail": "Advance to Page 8.",
-          "hold": [],
+          "hold": [
+            "FN"
+          ],
           "tap": [
             "VOL+"
           ],
@@ -8780,7 +8800,7 @@
       "group": "Catch & resize",
       "title": "Beat repeat length",
       "gesture": "Hold PLAY → click ROCKER UP → resize",
-      "body": "Hold PLAY and click the rocker up to catch a beat. ROCKER UP halves the repeat; ROCKER DOWN doubles it. Hold the rocker to keep stepping. Release PLAY to return to the song.",
+      "body": "Hold PLAY and click the rocker up to catch a beat. ROCKER UP halves the repeat. ROCKER DOWN doubles it. Hold the rocker to keep stepping. Release PLAY to return to the song.",
       "note": "Release the rocker but keep PLAY held to repeat at the same length.",
       "steps": [
         {
@@ -8935,7 +8955,7 @@
       "title": "Beat repeat within a chop",
       "gesture": "PLAY + rocker inside your chop",
       "body": "The repeat only uses your chopped audio. It cannot reach outside the audible cycle.",
-      "note": "If a requested beat would fill the chop: ROCKER UP starts with a quarter of it; ROCKER DOWN with half, down to the minimum size.",
+      "note": "If a requested beat would fill the chop: ROCKER UP starts with a quarter of it. ROCKER DOWN with half, down to the minimum size.",
       "steps": [
         {
           "label": "With a chop playing, hold PLAY",
@@ -9228,11 +9248,11 @@
       "group": "Shape the repeat",
       "title": "Beat repeat octave jumps",
       "gesture": "Keep PLAY held + FN + rocker",
-      "body": "Add FN and click the rocker. Down is an octave lower; up is an octave higher.",
+      "body": "Add FN and click the rocker. Down is an octave lower. Up is an octave higher.",
       "note": "",
       "steps": [
         {
-          "label": "Keep PLAY held; add FN",
+          "label": "Keep PLAY held. Add FN",
           "detail": "",
           "hold": [
             "PLAY",
@@ -9255,7 +9275,7 @@
         },
         {
           "label": "Click ROCKER DOWN",
-          "detail": "Down halves the tape speed; the repeat stays active.",
+          "detail": "Down halves the tape speed. The repeat stays active.",
           "hold": [
             "PLAY",
             "FN"
@@ -9277,7 +9297,7 @@
           "rockDirection": "DOWN"
         },
         {
-          "label": "Lift FN; keep PLAY held",
+          "label": "Lift FN. Keep PLAY held",
           "detail": "The rocker resizes the repeat again.",
           "hold": [
             "PLAY"
@@ -9306,10 +9326,10 @@
       "title": "Beat repeat fader controls",
       "gesture": "Keep PLAY held + FN + F1–F4",
       "body": "F1 = start. F2 = end. F3 = position. F4 = size / zoom. Move deliberately to engage a fader.",
-      "note": "F3 keeps width. F4 tightens around the center; top restores the region set by F1–F3. Re-gripping FN preserves that region.",
+      "note": "F3 keeps width. F4 tightens around the center. Top restores the region set by F1–F3. Re-gripping FN preserves that region.",
       "steps": [
         {
-          "label": "Keep PLAY held; add FN",
+          "label": "Keep PLAY held. Add FN",
           "detail": "",
           "hold": [
             "PLAY",
@@ -9404,7 +9424,7 @@
           }
         },
         {
-          "label": "Lift FN; keep PLAY held",
+          "label": "Lift FN. Keep PLAY held",
           "detail": "The rocker now resizes again.",
           "hold": [
             "PLAY"
@@ -9433,7 +9453,7 @@
       "title": "Wah resonance",
       "gesture": "Page 2: hold T3 and move F3",
       "body": "While holding T3, move F3 down for a sharper peak or up for a softer peak.",
-      "note": "Move before releasing the track button; releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
+      "note": "Move before releasing the track button. Releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
       "steps": [
         {
           "label": "Hold FN + T2",
@@ -9607,7 +9627,7 @@
       "title": "Echo feedback",
       "gesture": "Page 2: hold T4 and move F4",
       "body": "Change the amount fed back into the echo.",
-      "note": "Move before releasing the track button; releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
+      "note": "Move before releasing the track button. Releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
       "steps": [
         {
           "label": "Hold FN + T2",
@@ -9781,7 +9801,7 @@
       "title": "Tremolo shape",
       "gesture": "Page 3: hold T3 and move F3",
       "body": "Move from softer to harder tremolo shapes.",
-      "note": "Move before releasing the track button; releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
+      "note": "Move before releasing the track button. Releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
       "steps": [
         {
           "label": "Hold FN + T3",
@@ -9955,7 +9975,7 @@
       "title": "Tremolo stereo spread",
       "gesture": "Page 3: hold T3 and move F4",
       "body": "Change the spread between the two channels. F4 does not change reverb while T3 is held.",
-      "note": "Move before releasing the track button; releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
+      "note": "Move before releasing the track button. Releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
       "steps": [
         {
           "label": "Hold FN + T3",
@@ -10128,8 +10148,8 @@
       "group": "Secondary controls",
       "title": "Reverb damping",
       "gesture": "Page 3: hold T4 and move F4",
-      "body": "Down is darker; up is brighter.",
-      "note": "Move before releasing the track button; releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
+      "body": "Down is darker. Up is brighter.",
+      "note": "Move before releasing the track button. Releasing without movement triggers its usual tap action. Then cross the main value to regain control.",
       "steps": [
         {
           "label": "Hold FN + T3",
@@ -10302,8 +10322,8 @@
       "id": "track-lights",
       "title": "Track lights",
       "gesture": "Dark · dim · blinking · solid",
-      "body": "Dark means empty; dim means muted. Recording is solid. Playback pulses with the grid, or when each loop wraps.",
-      "note": "When stopped, an unmuted loaded track stays solid. Examples use 120 BPM and selected loop lengths. A refusal shrug can mean saving is still busy: wait for completion before deleting or recording again. Alternating T1+T3 / T2+T4 indicates a fault; stop testing and keep the device connected for diagnostics. In USB drive mode, T2 + T3 stay lit. After eject: T1 checks, T2 plans, T3 imports, T4 saves. Long imports can take several minutes; keep USB connected until Tape Looper returns. Repeated all-four flashes in drive mode indicate an error, not import progress.",
+      "body": "Dark means empty. Dim means muted. Recording is solid. Playback pulses with the grid, or when each loop wraps.",
+      "note": "When stopped, an unmuted loaded track stays solid. Examples use 120 BPM and selected loop lengths. A refusal shrug can mean saving is still busy: wait for completion before deleting or recording again. Alternating T1+T3 / T2+T4 indicates a fault. Stop testing and keep the device connected for diagnostics. In USB drive mode, T2 + T3 stay lit. After eject: T1 checks, T2 plans, T3 imports, T4 saves. Long imports can take several minutes. Keep USB connected until Tape Looper returns. Repeated all-four flashes in drive mode indicate an error, not import progress.",
       "steps": [
         {
           "label": "Empty",
@@ -10331,7 +10351,7 @@
         },
         {
           "label": "Armed",
-          "detail": "Waiting for sound; short beat pulses.",
+          "detail": "Waiting for sound. Short beat pulses.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -10490,7 +10510,7 @@
       "group": "Bounce what you hear",
       "title": "Tape copy / bounce",
       "gesture": "Hold PLAY → briefly tap destination",
-      "body": "Record the playing mix onto a spare track. Hold PLAY and tap the destination; tap it again to finish. This is a tape copy.",
+      "body": "Record the playing mix onto a spare track. Hold PLAY and tap the destination. Tap it again to finish. This is a tape copy.",
       "note": "A loaded destination keeps its earlier take saved. Tape copy follows tape speed; grid, Fixed mode or chop can delay the stop to a cycle boundary.",
       "steps": [
         {
@@ -10656,7 +10676,7 @@
       "group": "Bounce what you hear",
       "title": "Beat repeat bounce",
       "gesture": "Hold PLAY → click ROCKER UP → tap destination",
-      "body": "Hold PLAY and click the rocker up to catch a repeat. Keep PLAY held and tap a spare track to start the bounce. Release PLAY to let the song flow back in; tap the destination again to finish.",
+      "body": "Hold PLAY and click the rocker up to catch a repeat. Keep PLAY held and tap a spare track to start the bounce. Release PLAY to let the song flow back in. Tap the destination again to finish.",
       "note": "Keep PLAY held to resize while recording. The destination’s earlier takes stay saved.",
       "steps": [
         {
@@ -10734,7 +10754,7 @@
         },
         {
           "label": "Release PLAY",
-          "detail": "The song flows back in; the copy keeps recording.",
+          "detail": "The song flows back in. The copy keeps recording.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -10998,7 +11018,7 @@
         },
         {
           "label": "Release PLAY",
-          "detail": "The song flows back in; the copy keeps recording.",
+          "detail": "The song flows back in. The copy keeps recording.",
           "hold": [],
           "tap": [],
           "faders": {},
@@ -11217,7 +11237,7 @@
         },
         {
           "label": "Add FN for an octave",
-          "detail": "Down halves the tape speed; the repeat stays active.",
+          "detail": "Down halves the tape speed. The repeat stays active.",
           "hold": [
             "T2",
             "PLAY",
@@ -11273,7 +11293,7 @@
       "title": "Cut / glue",
       "gesture": "Slot 7 · ROCKER DOWN marks, ROCKER DOWN cuts · ROCKER UP undoes",
       "body": "While playing, tap ROCKER DOWN at the start and again at the end of a section to skip it. With the rocker page open, hold the same TRACK for both marks to cut only that track. Bare ROCKER DOWN targets the loaded tracks.",
-      "note": "Make up to eight cuts. ROCKER UP cancels a pending mark or undoes the last cut. Cuts remain when leaving the rocker page or slot. FN + double-tap PLAY restores the tape. Cuts are non-destructive session edits; changing songs, takes, recording or rebooting clears them. Use full forward loops, without trim, Heads, repeat or recording.",
+      "note": "Make up to eight cuts. ROCKER UP cancels a pending mark or undoes the last cut. Cuts remain when leaving the rocker page or slot. FN + double-tap PLAY restores the tape. Cuts are non-destructive session edits. Changing songs, takes, recording or rebooting clears them. Use full forward loops, without trim, Heads, repeat or recording.",
       "steps": [
         {
           "label": "Open the rocker page",
@@ -11465,7 +11485,7 @@
       "title": "Bluetooth Support",
       "gesture": "Triple-tap FN and hold the last press until all four track lights start fading in and out, then release",
       "body": "Triple-tap FN and hold the last press until all four track lights start fading in and out, then release to enable Bluetooth audio discovery. Pair SP-1 from your phone or computer, select it as the audio output, then record normally.",
-      "note": "The gesture also works during playback and USB audio. USB and Bluetooth input mix together. This release focuses on Bluetooth input; outgoing audio to speakers or keyboards is deferred.",
+      "note": "The gesture also works during playback and USB audio. USB and Bluetooth input mix together. This release focuses on Bluetooth input. Outgoing audio to speakers or keyboards is deferred.",
       "steps": [
         {
           "label": "Enable Bluetooth audio",
@@ -11548,7 +11568,7 @@
       "group": "Rocker modes",
       "title": "Rocker modes",
       "gesture": "FN + both VOL · VOL− / VOL+ to choose",
-      "body": "Hold FN and both volume buttons to open the rocker page. Release FN, then use VOL− / VOL+ to select a mode. Tap FN to close; the selected mode stays active.",
+      "body": "Hold FN and both volume buttons to open the rocker page. Release FN, then use VOL− / VOL+ to select a mode. Tap FN to close. The selected mode stays active.",
       "note": "1 Pitch / speed · 2 FF / RW · 3 Tape bending · 4 Battery drain · 5 Sandpaper · 6 Magnet erase · 7 Cut / glue · 8 Manual heads. Keep the rocker page open for per-track Magnet or Scissors gestures. Holding TRACK previews the normal track lights.",
       "steps": [
         {
@@ -11576,7 +11596,7 @@
         },
         {
           "label": "Choose a mode",
-          "detail": "Release FN. VOL+ moves forward; VOL− moves back.",
+          "detail": "Release FN. VOL+ moves forward. VOL− moves back.",
           "hold": [],
           "tap": [
             "VOL+"
@@ -11678,7 +11698,7 @@
       "title": "Tape bending",
       "gesture": "Slot 3 · hold ROCKER UP / ROCKER DOWN",
       "body": "Hold ROCKER DOWN to drag and stretch the tape. Hold ROCKER UP for repeated pulling surges. Release either direction for a spring-like recovery.",
-      "note": "Longer ROCKER DOWN holds stretch further. This changes playback; it does not rewrite your recordings.",
+      "note": "Longer ROCKER DOWN holds stretch further. This changes playback. It does not rewrite your recordings.",
       "steps": [
         {
           "label": "Hold ROCKER DOWN, then release",
@@ -11885,7 +11905,7 @@
       "group": "Rocker modes",
       "title": "Manual heads",
       "gesture": "Slot 8 · hold ROCKER DOWN + move faders",
-      "body": "Hold ROCKER UP to make contact with the running tape. Hold ROCKER DOWN for four-head contact; move F1–F4 to position the heads. Release to lift contact and silence the tape.",
+      "body": "Hold ROCKER UP to make contact with the running tape. Hold ROCKER DOWN for four-head contact. Move F1–F4 to position the heads. Release to lift contact and silence the tape.",
       "note": "The transport keeps moving while contact is lifted. Leave this rocker mode to return to ordinary playback. This is separate from latching Heads with FN + triple-tap PLAY.",
       "steps": [
         {
@@ -12038,8 +12058,8 @@
       "group": "Track trim",
       "title": "Track trim",
       "gesture": "Hold FN + PLAY · move that track’s fader",
-      "body": "Hold FN and PLAY, then move F1–F4 to shorten or lengthen the matching track. Lower the fader to shorten; raise it to lengthen. Release both to keep the trim.",
-      "note": "The first small move catches the current length without jumping. With a grid, lengths step through straight and dotted musical values. Other tracks keep playing; the original recording stays intact.",
+      "body": "Hold FN and PLAY, then move F1–F4 to shorten or lengthen the matching track. Lower the fader to shorten. Raise it to lengthen. Release both to keep the trim.",
+      "note": "The first small move catches the current length without jumping. With a grid, lengths step through straight and dotted musical values. Other tracks keep playing. The original recording stays intact.",
       "since": "4.0",
       "initialFaders": [
         0.85,
@@ -12124,8 +12144,8 @@
       "group": "Track trim",
       "title": "Trim position",
       "gesture": "Hold PLAY · move the trimmed track’s fader",
-      "body": "Choose which part of a trimmed recording plays, without changing its length. Hold PLAY and move the track’s fader: raise it toward the recording’s start; lower it toward the end.",
-      "note": "The first small move catches the current position. With a grid, movement follows sixteenth-note steps. Release PLAY to keep the position; moving the fader spends the PLAY press, so it does not pause or restart playback.",
+      "body": "Choose which part of a trimmed recording plays, without changing its length. Hold PLAY and move the track’s fader: raise it toward the recording’s start. Lower it toward the end.",
+      "note": "The first small move catches the current position. With a grid, movement follows sixteenth-note steps. Release PLAY to keep the position. Moving the fader spends the PLAY press, so it does not pause or restart playback.",
       "since": "4.0",
       "initialFaders": [
         0.8,
@@ -12896,8 +12916,8 @@
       "name": "Pitch / speed",
       "kind": "Set the speed",
       "summary": "Change the whole tape’s speed and pitch.",
-      "up": "Click to increase speed. Double-click for the next semitone; hold to keep stepping.",
-      "down": "Click to decrease speed. Double-click for the previous semitone; hold to keep stepping.",
+      "up": "Click to increase speed. Double-click for the next semitone. Hold to keep stepping.",
+      "down": "Click to decrease speed. Double-click for the previous semitone. Hold to keep stepping.",
       "release": "The new speed stays set.",
       "target": "Whole tape.",
       "reset": "FN + double-tap PLAY returns to normal speed.",
@@ -12925,7 +12945,7 @@
       "kind": "Hold to bend",
       "summary": "Drag the tape or pull it in uneven surges.",
       "up": "Hold for repeated pulling surges.",
-      "down": "Hold to drag and stretch the tape; longer holds stretch further.",
+      "down": "Hold to drag and stretch the tape. Longer holds stretch further.",
       "release": "The tape springs back toward the set speed.",
       "target": "Whole tape.",
       "reset": "Release the rocker, or FN + double-tap PLAY to restore the tape.",
@@ -12957,7 +12977,7 @@
       "release": "The amount of wear stays.",
       "target": "Whole tape.",
       "reset": "Hold ROCKER UP to clean it up gradually. FN + double-tap PLAY restores the tape.",
-      "tip": "Battery changes the motor’s behavior; Sandpaper adds a rougher, damaged-tape texture.",
+      "tip": "Battery changes the motor’s behavior. Sandpaper adds a rougher, damaged-tape texture.",
       "shape": "sand"
     },
     {
@@ -12968,7 +12988,7 @@
       "summary": "Erase a passing section from playback without shortening the loop.",
       "up": "Tap to undo the latest matching erase.",
       "down": "Hold while the section passes, then release to leave a silent gap.",
-      "release": "The gap stays; the rest of the loop keeps its timing.",
+      "release": "The gap stays. The rest of the loop keeps its timing.",
       "target": "Bare rocker targets loaded tracks. With the rocker page open, hold TRACK to target only that track.",
       "reset": "ROCKER UP undoes a recent erase. FN + double-tap PLAY clears all Magnet gaps.",
       "tip": "The original audio is unchanged. A Magnet gap keeps its place in time.",
@@ -12984,7 +13004,7 @@
       "down": "Tap at the start, then tap again at the end of the section.",
       "release": "Each completed cut stays, including after leaving the rocker page or slot.",
       "target": "Bare taps target loaded tracks. Keep the rocker page open and hold the same TRACK for both marks to cut only that track.",
-      "reset": "ROCKER UP undoes; FN + double-tap PLAY restores all cuts.",
+      "reset": "ROCKER UP undoes. FN + double-tap PLAY restores all cuts.",
       "tip": "Up to eight cuts. Use a full forward loop with playback running, without trim, repeat, Heads or recording. Song/take changes, recording or reboot clear the cuts.",
       "shape": "cut"
     },
@@ -12996,8 +13016,8 @@
       "summary": "Touch the moving tape with one contact or four heads.",
       "up": "Hold to hear the tape under ordinary contact.",
       "down": "Hold for four-head contact. Move F1–F4 to position the heads.",
-      "release": "Contact lifts and the tape becomes silent; transport keeps moving.",
-      "target": "The active tape source; ROCKER DOWN exposes four playback heads.",
+      "release": "Contact lifts and the tape becomes silent. Transport keeps moving.",
+      "target": "The active tape source. ROCKER DOWN exposes four playback heads.",
       "reset": "Leave this slot to return to ordinary playback.",
       "tip": "PLAY starts or stops the tape. This contact mode is separate from latching Heads with FN + triple-tap PLAY.",
       "shape": "heads"
