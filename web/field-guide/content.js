@@ -3484,7 +3484,7 @@ export const cards = [
     "id": "fx-1-4",
     "category": 3,
     "group": "Page 1 / FX 1",
-    "title": "Gate",
+    "title": "Gate / Slow gear",
     "gesture": "F4 · T4 cycles pattern",
     "body": "Tap T4 to cycle gallop → halves. F4 steps through rhythmic subdivisions. Bottom turns the gate off.",
     "note": "Tap a rate with FN + T4, at least twice.",

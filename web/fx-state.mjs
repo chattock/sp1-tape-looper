@@ -3,7 +3,7 @@ export const FX=[
  {name:'Filter',tap:'bypass + reset damping',secondary:'Filter damping'},
  {name:'Chorus / Flanger',key:'chorusType',types:['Chorus','Flanger'],tap:'type',secondary:'Span',period:5},
  {name:'Distortion',key:'distortionType',types:['Soft','Hard','Fold','Off'],tap:'type'},
- {name:'Gate',key:'gatePattern',types:['Gallop','Halves','Slow gear'],tap:'pattern',period:0},
+ {name:'Gate / Slow gear',key:'gatePattern',types:['Gallop','Halves','Slow gear'],tap:'pattern',period:0},
  {name:'Crush / Lo-fi / Radio',key:'crushType',types:['Crush','Lo-fi','Radio'],tap:'type'},
  {name:'Ring mod',tap:'off'},
  {name:'Auto-wah',tap:'off + reset damping',secondary:'Wah damping'},

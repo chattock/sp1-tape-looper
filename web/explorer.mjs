@@ -33,7 +33,7 @@ function showPickup(node,s,i,waiting,value){
  node.title=hint;node.setAttribute('aria-valuetext',hint);
 }
 export const pages=[
- ['Filter · modulation',['Filter','Chorus','Distortion','Gate'],['T1 · bypass','T2 · dry','T3 · type','T4 · pattern']],
+ ['Filter · modulation',['Filter','Chorus','Distortion','Gate / Slow gear'],['T1 · bypass','T2 · dry','T3 · type','T4 · pattern']],
  ['Texture · delay',['Bitcrush','Ring mod','Auto-wah','Echo'],['T1 · off','T2 · off','T3 · off','T4 · division']],
  ['Motion · space',['Phaser','Sweep','Tremolo','Reverb'],['T1 · division','T2 · division','T3 · division','T4 · dry']],
  ['Tape character',['Tape drive','Tone','Noise','Wobble'],['T1 · off','T2 · flat','T3 · noise source','T4 · wobble type']],
