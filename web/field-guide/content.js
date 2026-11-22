@@ -7022,7 +7022,7 @@ export const cards = [
         }
       },
       {
-        "label": "Side lights: top → bottom",
+        "label": "Side lights: bottom → top",
         "detail": "Input monitor off: live input is muted in your headphones. Recording still captures it. Shown slowed down.",
         "hold": [],
         "tap": [],
@@ -7048,7 +7048,7 @@ export const cards = [
         "seconds": 5.0
       },
       {
-        "label": "Side lights: bottom → top",
+        "label": "Side lights: top → bottom",
         "detail": "Input monitor on: hear live input in your headphones. Shown slowed down.",
         "hold": [
           "PLAY"
