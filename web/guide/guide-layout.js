@@ -32,7 +32,7 @@ export const groupIntros={
 export function introduction(playIcon){
  const play=(id,title,desc,n,attrs='')=>`<button class="start-lesson" data-start="${id}" ${attrs}><span class="start-number">${n}</span><span><strong>${title}</strong><small>${desc}</small></span><span class="start-play" aria-hidden="true">${playIcon}</span></button>`;
  return `<section class="guide-intro" id="start-here" data-section="0" aria-labelledby="intro-title">
- <p class="eyebrow">FIELD GUIDE</p><h1 id="intro-title">Overview</h1>
+ <p class="eyebrow">GUIDE</p><h1 id="intro-title">Overview</h1>
  <p class="intro-lead">Make a loop from incoming audio. Shape it with speed, chops and effects. Bounce the result onto another track and keep going.</p>
  <div class="orientation"><h2>Three ways to work.</h2><p>The same controls do different jobs depending on where you are.</p>
  <div class="context-grid"><div><h3>Track mode</h3><p>Four separate recordings. The faders mix their levels.</p><p class="context-entry">This is where you start.</p></div><div><h3>Four-head mode</h3><p>Four playheads reading one recording at different positions.</p><p class="context-entry">With a loop playing, hold FN and triple-tap PLAY to enter or return to tracks.</p><button class="context-show" data-context="heads" aria-label="Show me four-head mode">Show me <span aria-hidden="true">${playIcon}</span></button></div><div><h3>Control pages</h3><p>Effects, EQ, stereo placement, timing and format.</p><p class="context-entry">Hold FN + a track button to open a page. Tap FN to close.</p><button class="context-show" data-context="open-page" aria-label="Show me control pages">Show me <span aria-hidden="true">${playIcon}</span></button></div></div>
