@@ -7022,8 +7022,8 @@ export const cards = [
         }
       },
       {
-        "label": "4→3→2→1: muted",
-        "detail": "Recording still captures input. Shown slowed down.",
+        "label": "Track lights: right → left",
+        "detail": "Input monitor off: live input is muted in your headphones. Recording still captures it. Shown slowed down.",
         "hold": [],
         "tap": [],
         "faders": {},
@@ -7048,8 +7048,8 @@ export const cards = [
         "seconds": 5.0
       },
       {
-        "label": "1→2→3→4: live",
-        "detail": "Repeat PLAY + both volume buttons to restore monitoring. Shown slowed down.",
+        "label": "Track lights: left → right",
+        "detail": "Input monitor on: hear live input in your headphones. Shown slowed down.",
         "hold": [
           "PLAY"
         ],
