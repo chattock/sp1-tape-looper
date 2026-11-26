@@ -209,10 +209,10 @@ html[data-theme=dark] .news-content .new-effects a{color:var(--blue)}
 .news-effects-static .new-effects p{margin-top:0}
 @media(max-width:640px){.news-static-heading{padding:22px 22px 14px}}
 
-/* Small copy confirmation beside each shareable heading. */
-.section-permalink{display:inline-flex;align-items:center;gap:.16em;line-height:1}
+/* Preserve the original permalink until copying succeeds. */
+.section-permalink .link-feedback{display:none;align-items:center;gap:.16em;vertical-align:middle}
 .section-permalink svg{width:.85em;height:.85em;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
-.section-permalink .link-check{opacity:0;width:.7em}
-.section-permalink.copied{opacity:1;color:var(--blue,#2365cf)}
-.section-permalink.copied .link-check{opacity:1}
+.section-permalink .link-check{width:.7em}
+.section-permalink.copied .link-hash{display:none}
+.section-permalink.copied .link-feedback{display:inline-flex}
 .guide-link-status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}

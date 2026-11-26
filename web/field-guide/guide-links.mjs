@@ -39,7 +39,7 @@ export function initGuideLinks(content,{reduced=false,onSection}={}){
   }else if(!section.id.startsWith('new-'))destinations.set(name,section.id);
   const link=document.createElement('a');link.className='section-permalink';link.dataset.guideLink=name;
   link.setAttribute('aria-label','Copy link to '+title);link.title='Copy link';
-  link.innerHTML='<svg class="link-copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M10 5V2H2v8h3"/></svg><svg class="link-check" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>';
+  link.innerHTML='<span class="link-hash" aria-hidden="true">#</span><span class="link-feedback" aria-hidden="true"><svg class="link-copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M10 5V2H2v8h3"/></svg><svg class="link-check" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg></span>';
   heading.append(link);
  }
  for(const a of content.querySelectorAll('[data-guide-link]')){a.href=href(a.dataset.guideLink);if(embedded)a.target='_top';}
